@@ -30,3 +30,4 @@ TempFiles/*
 
 # 但允许保留 TempFiles 目录
 !TempFiles/.gitkeep
+补丁包安装/
