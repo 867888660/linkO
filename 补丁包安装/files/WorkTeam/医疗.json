@@ -1,0 +1,67 @@
+{
+  "version": 10,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "医疗_pdf读取.json",
+        "type": "file"
+      },
+      "name": "1"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "Xlsx医疗筛选.json",
+        "type": "file"
+      },
+      "name": "2"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "判断随访.json",
+        "type": "file"
+      },
+      "name": "3"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "缺_医疗_pdf读取.json",
+        "type": "file"
+      },
+      "name": "4"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "信息发送.json",
+        "type": "file"
+      },
+      "name": "5"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "2和1_医疗_pdf读取.json",
+        "type": "file"
+      },
+      "name": "6"
+    }
+  ],
+  "messages": [],
+  "limits": []
+}

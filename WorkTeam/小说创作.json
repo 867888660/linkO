@@ -1,0 +1,490 @@
+{
+  "version": 15,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#db0000",
+      "item": {
+        "folder": "小说",
+        "name": "短片剧本.json",
+        "type": "file"
+      },
+      "name": "1"
+    },
+    {
+      "IsVisible": false,
+      "color": "#febebe",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "服装设计.json",
+        "type": "file"
+      },
+      "name": "2"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "小说",
+        "name": "短片原文.json",
+        "type": "file"
+      },
+      "name": "3"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00a2c2",
+      "item": {
+        "folder": "小说",
+        "name": "文案转读稿.json",
+        "type": "file"
+      },
+      "name": "4"
+    },
+    {
+      "IsVisible": true,
+      "color": "#990000",
+      "item": {
+        "folder": "小说",
+        "name": "分割推送.json",
+        "type": "file"
+      },
+      "name": "5"
+    },
+    {
+      "IsVisible": false,
+      "color": "#9aa1fe",
+      "item": {
+        "folder": "小说",
+        "name": "音频.json",
+        "type": "file"
+      },
+      "name": "6"
+    },
+    {
+      "IsVisible": false,
+      "color": "#cc7700",
+      "item": {
+        "folder": "小说",
+        "name": "音频聚合.json",
+        "type": "file"
+      },
+      "name": "7"
+    },
+    {
+      "IsVisible": true,
+      "color": "#a800e6",
+      "item": {
+        "folder": "小说",
+        "name": "srt转prompt.json",
+        "type": "file"
+      },
+      "name": "8"
+    },
+    {
+      "IsVisible": true,
+      "color": "#d68800",
+      "item": {
+        "folder": "小说",
+        "name": "Comfyui生成.json",
+        "type": "file"
+      },
+      "name": "9"
+    },
+    {
+      "IsVisible": true,
+      "color": "#9752ff",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "Mp3ToMp4.json",
+        "type": "file"
+      },
+      "name": "10"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00bbfa",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "分视频聚合.json",
+        "type": "file"
+      },
+      "name": "11"
+    },
+    {
+      "IsVisible": true,
+      "color": "#f0c1c1",
+      "item": {
+        "folder": "小说",
+        "name": "VideoAddSrt.json",
+        "type": "file"
+      },
+      "name": "12"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00a34f",
+      "item": {
+        "folder": "小说",
+        "name": "所有视频整合.json",
+        "type": "file"
+      },
+      "name": "13"
+    },
+    {
+      "IsVisible": true,
+      "color": "#cddb00",
+      "item": {
+        "folder": "小说",
+        "name": "添加音频.json",
+        "type": "file"
+      },
+      "name": "AddVoice"
+    },
+    {
+      "IsVisible": true,
+      "color": "#a9cafe",
+      "item": {
+        "folder": "小说",
+        "name": "配音.json",
+        "type": "file"
+      },
+      "name": "Voice"
+    }
+  ],
+  "messages": [
+    {
+      "IsLimit": false,
+      "Received": [
+        "2"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt",
+      "from": "1",
+      "timestamp": "2025-01-16T07:50:01.570339",
+      "to": "2",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "3"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt",
+      "from": "1",
+      "timestamp": "2025-01-16T07:49:51.551345",
+      "to": "3",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "4"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt",
+      "from": "3",
+      "timestamp": "2025-01-16T08:05:37.280564",
+      "to": "4",
+      "type": "sent"
+    },
+    {
+      "IsLimit": true,
+      "Received": [],
+      "content": "@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\分割小说.txt",
+      "from": "4",
+      "timestamp": "2025-01-16T08:11:04.035024",
+      "to": "User",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "5"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt",
+      "from": "4",
+      "timestamp": "2025-01-16T08:11:04.056704",
+      "to": "5",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\n\n数字序号：1",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:46.732975",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\n\n数字序号：2",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:50.209052",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\n\n数字序号：3",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:53.210420",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\n\n数字序号：4",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:56.199727",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\n\n数字序号：5",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:59.206933",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\n\n数字序号：6",
+      "from": "5",
+      "timestamp": "2025-01-16T08:12:02.211785",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\n\n数字序号：7",
+      "from": "5",
+      "timestamp": "2025-01-16T08:12:05.205572",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\n\n数字序号：8",
+      "from": "5",
+      "timestamp": "2025-01-16T08:12:08.206312",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "6"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\n\n数字序号：0",
+      "from": "5",
+      "timestamp": "2025-01-16T08:11:43.744724",
+      "to": "6",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\n\n数字序号：1\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:26:39.053053",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\n\n数字序号：2\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:31:47.628508",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\n\n数字序号：3\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:37:02.501094",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\n\n数字序号：4\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:41:41.766650",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\n\n数字序号：5\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:46:35.880620",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\n\n数字序号：6\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:49:26.780140",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\n\n数字序号：7\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:52:26.683138",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\n\n数字序号：8\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:55:23.822514",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "7"
+      ],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\n\n数字序号：0\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\\音频",
+      "from": "6",
+      "timestamp": "2025-01-16T08:59:53.856563",
+      "to": "7",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\n\n数字序号：1\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\1\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:52:16.769832",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\n\n数字序号：2\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\2\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:53:00.420726",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\n\n数字序号：3\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\3\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:53:47.155407",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\n\n数字序号：4\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\4\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:54:26.116224",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\n\n数字序号：5\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\5\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:55:08.916501",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\n\n数字序号：6\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\6\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:55:31.333925",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\n\n数字序号：7\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\7\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:56:02.245624",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\n\n数字序号：8\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\8\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:56:24.996735",
+      "to": "8",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "文件夹路径：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\n\n剧本：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_剧本.txt\n\n场景信息：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_场景信息.txt\n\n人设服装：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物设计.txt\n\n写作要求：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_写作要求.txt\n\n小说名字：《星际镖师的真实日志》\n\n人物列表：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_人物列表.txt\n小说原文：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\《星际镖师的真实日志》_原文.txt\n最终讲稿：@TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\\\最终讲稿.txt\n\n文稿路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0/文稿.txt\n\n数字文件夹路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\n\n数字序号：0\n音频路径：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\\音频\n完整音频：C:\\Users\\YMXD\\Desktop\\linkO\\linkel\\TempFiles\\\\福尔摩斯短片\\\\《星际镖师的真实日志》\\0\\完整音频\\完整音频.mp3",
+      "from": "7",
+      "timestamp": "2025-01-17T02:57:05.079603",
+      "to": "8",
+      "type": "sent"
+    }
+  ],
+  "limits": []
+}

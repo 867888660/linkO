@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <title>消息聊天</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='Message.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <select id="fileSelect"></select>
+            <button id="RefreshButton">刷新</button>
+        </div>
+        <div class="chat-box" id="chatBox"></div>
+    </div>
+    <script>
+        const projectName = "{{ project_name }}";
+        document.addEventListener('DOMContentLoaded', function() {
+            // 加载相应的JSON文件
+            fetch(`/get_data?file=${projectName}.json`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    setTimeout(() => {
+                        SetProjsetName(projectName);
+                        displayMessages(data); // 调用JS文件中的函数
+                    }, 100);
+                    
+                    
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        });
+    </script>
+    <script src="{{ url_for('static', filename='Message.js') }}"></script>
+</body>
+</html>

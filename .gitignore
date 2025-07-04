@@ -1,0 +1,32 @@
+# 依赖目录
+node_modules/
+venv/
+wheelhouse/
+
+# IDE 缓存
+.vscode/
+__pycache__/
+
+# 构建输出
+*.log
+*.tmp
+*.zip
+*.exe
+*.whl
+patch-installer/dist/
+saved_images/
+# 大型二进制
+*.jpg
+*.png
+*.pdf
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# 忽略 TempFiles 目录下所有内容
+TempFiles/*
+
+# 但允许保留 TempFiles 目录
+!TempFiles/.gitkeep

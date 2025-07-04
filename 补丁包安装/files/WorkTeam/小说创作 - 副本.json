@@ -1,0 +1,157 @@
+{
+  "version": 25,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#db0000",
+      "item": {
+        "folder": "小说",
+        "name": "短片剧本.json",
+        "type": "file"
+      },
+      "name": "1"
+    },
+    {
+      "IsVisible": true,
+      "color": "#febebe",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "服装设计.json",
+        "type": "file"
+      },
+      "name": "2"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "小说",
+        "name": "短片原文.json",
+        "type": "file"
+      },
+      "name": "3"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00a2c2",
+      "item": {
+        "folder": "小说",
+        "name": "文案转读稿.json",
+        "type": "file"
+      },
+      "name": "4"
+    },
+    {
+      "IsVisible": true,
+      "color": "#990000",
+      "item": {
+        "folder": "小说",
+        "name": "分割推送.json",
+        "type": "file"
+      },
+      "name": "5"
+    },
+    {
+      "IsVisible": true,
+      "color": "#9aa1fe",
+      "item": {
+        "folder": "小说",
+        "name": "音频.json",
+        "type": "file"
+      },
+      "name": "6"
+    },
+    {
+      "IsVisible": true,
+      "color": "#cc7700",
+      "item": {
+        "folder": "小说",
+        "name": "音频聚合.json",
+        "type": "file"
+      },
+      "name": "7"
+    },
+    {
+      "IsVisible": true,
+      "color": "#a800e6",
+      "item": {
+        "folder": "小说",
+        "name": "srt转prompt.json",
+        "type": "file"
+      },
+      "name": "8"
+    },
+    {
+      "IsVisible": true,
+      "color": "#d68800",
+      "item": {
+        "folder": "小说",
+        "name": "Comfyui生成.json",
+        "type": "file"
+      },
+      "name": "9"
+    },
+    {
+      "IsVisible": true,
+      "color": "#9752ff",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "Mp3ToMp4.json",
+        "type": "file"
+      },
+      "name": "10"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00bbfa",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "分视频聚合.json",
+        "type": "file"
+      },
+      "name": "11"
+    },
+    {
+      "IsVisible": true,
+      "color": "#f0c1c1",
+      "item": {
+        "folder": "小说",
+        "name": "VideoAddSrt.json",
+        "type": "file"
+      },
+      "name": "12"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00a34f",
+      "item": {
+        "folder": "小说",
+        "name": "所有视频整合.json",
+        "type": "file"
+      },
+      "name": "13"
+    },
+    {
+      "IsVisible": true,
+      "color": "#cddb00",
+      "item": {
+        "folder": "小说",
+        "name": "添加音频.json",
+        "type": "file"
+      },
+      "name": "AddVoice"
+    },
+    {
+      "IsVisible": true,
+      "color": "#a9cafe",
+      "item": {
+        "folder": "小说",
+        "name": "配音.json",
+        "type": "file"
+      },
+      "name": "Voice"
+    }
+  ],
+  "messages": [],
+  "limits": []
+}

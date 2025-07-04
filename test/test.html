@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        .container {
+            height: 100px; /* 修改为你的尺寸 */
+            width: 100px; /* 修改为你的尺寸 */
+            position: absolute; /* 从 fixed 改为 absolute */
+            overflow: hidden;
+            border-radius: 10px;
+            background-color: #f00; /* 只是为了看得清楚，可以根据你的设计调整 */
+        }
+    </style>
+    <title>Document</title>
+</head>
+<body>
+    <script>
+        document.addEventListener('click', function(event) {
+            var x = event.clientX; // 获取鼠标位置的X坐标
+            var y = event.clientY; // 获取鼠标位置的Y坐标
+
+            var newElement = document.createElement('div'); // 创建新的div元素
+            newElement.classList.add('container'); // 添加类名，使其拥有上面定义的样式
+            newElement.style.left = x + 'px'; // 设置元素的左边距为鼠标位置
+            newElement.style.top = y + 'px'; // 设置元素的顶边距为鼠标位置
+
+            document.body.appendChild(newElement); // 将新元素添加到文档的body中
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+[
+  [
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.fiba.basketball/player/Yang-Hansen"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "未能从FIBA官网获取到杨瀚森的身体数据，建议尝试其他体育数据平台或新闻来源查询。"
+        }
+      ],
+      "Inputs": []
+    }
+  ]
+]

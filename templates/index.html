@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='Script/index.css') }}">
+    <title>New Projects</title>
+    <style>
+        :root {
+        --c-bg-dark: #1a1a1a;
+        --c-bg-light: #f8f9fa;
+        --c-text-light: #ffffff;
+        --c-text-dark: #2c2c2c;
+        --c-border: #e2e2e2;
+        --c-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        --border-r: 8px;
+        --trans-fast: 0.2s ease;
+        --trans-med: 0.3s ease-in-out;
+        }
+        .new-context-menu {
+            width: 100px;
+            display: flex;
+            flex-direction: column;
+        }
+        .new-context-menu .title {
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .new-context-menu .menu-item {
+            height: 25px;
+            line-height: 25px;
+            color: #000;
+            background: rgba(40, 163, 243, 0);
+            padding: 5px;
+        }
+        .new-context-menu .menu-item:hover {
+            color: #fff;
+            background: #28a3f3;
+        }
+    
+        /* =========================================================
+        * 1. 顶部「VS Code‑风」工具栏
+        *    – 通栏黑底，按钮白字悬停浅灰
+        * =======================================================*/
+        .toolbar{
+        position:fixed;
+        top:0; left:0; right:0;       /* 占满整行 */
+        height:32px;
+        display:flex;
+        align-items:center;
+        gap:12px;
+        padding:0 16px;
+        background:#1e1e1e;           /* VS Code 主背景 */
+        border-bottom:1px solid #000; /* 微弱分隔线 */
+        box-shadow:var(--c-shadow);
+        z-index:100;
+        }
+        .toolbar button{
+        border:none;
+        background:transparent;
+        color:#fff;
+        font:12px/1 "Segoe UI",sans-serif;
+        height:24px;                  /* 与 VS Code 顶栏按钮高度接近 */
+        padding:0 12px;
+        border-radius:4px;
+        cursor:pointer;
+        transition:background var(--trans-fast);
+        }
+        .toolbar button:hover{
+        background:rgba(255,255,255,.12);
+        }
+        .toolbar [disabled]{
+        opacity:.4;                   /* 略淡处理即可 */
+        pointer-events:none;
+        }
+    </style>
+</head>
+
+<body>
+<style>
+/* ===== Reset ===== */
+/* ===== 基础重置 ===== */
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body,#mountNode{width:100%;height:100%;}
+
+/* ===== 统一变量（暗灰系）===== */
+:root{
+  --bg-body : #4d4d4d;       /* 整体底色 */
+  --bg-card : #606060;       /* 卡片底色 */
+  --grid    : rgba(0,0,0,.12); /* 网格线 */
+  --text    : #e9e9e9;       /* 文字 */
+  --radius  : 32px;          /* 圆角，适当减小 */
+  --shadow  : 0 6px 20px rgba(0,0,0,.35);
+}
+
+/* ===== 顶层背景：用伪元素隔离，避免全局重绘 ===== */
+body{
+  background:var(--bg-body);
+  color:var(--text);
+  font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,
+        Helvetica,Arial,"PingFang SC","Noto Sans","Microsoft YaHei",sans-serif;
+}
+
+body::before{
+  background-image:
+    repeating-linear-gradient(45deg,
+         rgba(255,255,255,.015) 0 2px,transparent 2px 4px);
+  background-size:40px 40px;
+}
+
+/* 2️⃣ 在 #graph-container 最上层添加噪声 */
+#graph-container{
+  /* …原有 background 定义放到最底部… */
+
+  background-image:
+    /* ★ 新增：颗粒噪声，透明度随意调高一点 ★ */
+    radial-gradient(circle at 1px 1px,
+         rgba(255,255,255,.05) 1px,transparent 0),
+
+    /* ★ 继续叠斜纹 + 网格 + 实色底 ★ */
+    repeating-linear-gradient(45deg,
+         rgba(255,255,255,.02) 0 2px,transparent 2px 4px),
+    linear-gradient(to right,var(--grid) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--grid) 1px,transparent 1px),
+    var(--bg-card);
+
+  /* 颗粒尺寸更小，显得更细腻 */
+  background-size:60px 60px,
+                   4px 4px,
+                   48px 48px,
+                   48px 48px,
+                   auto;
+}
+
+
+/* ===== 最外层容器 ===== */
+#mountNode{
+  display:flex;align-items:center;justify-content:center;
+  padding:1.6rem;
+  /* 淡入动画（与前者保持一致） */
+  animation:fade-in .4s ease-out;
+}
+
+/* ===== 绘图卡片 ===== */
+#graph-container{
+  flex:1;height:100%;
+  border-radius:var(--radius);
+  box-shadow:var(--shadow);
+  overflow:hidden;             /* 裁切圆角 */
+  background:
+    /* 斜纹，比 body 再淡一点，层次分离 */
+    repeating-linear-gradient(45deg,rgba(255,255,255,.02) 0 2px,transparent 2px 4px),
+    var(--bg-card);
+  background-image:
+    repeating-linear-gradient(45deg,rgba(255,255,255,.02) 0 2px,transparent 2px 4px),
+    linear-gradient(to right,var(--grid) 1px,transparent 1px),
+    linear-gradient(to bottom,var(--grid) 1px,transparent 1px),
+    var(--bg-card);
+  background-size:4px 4px,48px 48px,48px 48px,auto;
+}
+
+/* 可选：若仍想要轻微悬停放大，可解注释
+#graph-container{
+  transition:transform .25s ease-out;
+}
+#graph-container:hover{transform:scale(1.004);}
+*/
+
+/* ===== 入场动画 ===== */
+@keyframes fade-in{
+  from{opacity:0;transform:scale(.98);}
+  to  {opacity:1;transform:scale(1);}
+}
+</style>
+
+</div>    <!-- Main Container Start -->
+<!-- =============== 背景与图形容器 =============== -->
+  <div id="mountNode">
+    <div id="graph-container"></div>
+  </div>
+ <!-- =============== 固定功能元素 =============== -->
+  <div class="fixed-element">
+    <!-- 顶部工具栏 -->
+    <div class="toolbar">
+      <button id="NodeButton">组件</button>
+      <button id="WorkFlowButton">工作流</button>
+      <button id="saveButton">保存</button>
+      <button id="runButton">运行</button>
+      <button id="exportButton">导出</button>
+      <button id="recoderButton">记录</button>
+    </div>
+
+    <!-- 左侧分类/节点面板 -->
+    <div id="LeftSideWindow_side-window" class="LeftSideWindow_side-window">
+      <div id="LeftSideWindow_KIND-container" class="LeftSideWindow_kind-container"></div>
+    </div>
+
+    <!-- 右侧运行结果面板 -->
+    <div id="side-window" class="side-window">
+      <div class="side-header">
+        <div class="left-buttons">
+          <button id="run-button">运行</button>
+          <button id="close-button">关闭</button>
+        </div>
+        <button id="maximize-button" title="全屏切换">⛶</button>
+      </div>
+
+      <div class="status-area">
+        <div id="loading-indicator" style="display: none;">
+          <div class="loader"></div>
+          <span>运行中...</span>
+        </div>
+        <div id="result-indicator" style="display: none;">
+          <span id="result-message"></span>
+        </div>
+      </div>
+
+      <div id="content-area"></div>
+    </div>
+
+    <!-- 底部消息提示 -->
+    <div id="message-container" style="position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--c-bg-dark); color: var(--c-text-light); padding: 6px 12px; border-radius: var(--border-r); box-shadow: var(--c-shadow); display: none; pointer-events: auto;">
+      <p id="message-text" style="margin: 0; font-size: 14px;"></p>
+    </div>
+  </div>
+<script src="{{ url_for('static', filename='Script/G6.js') }}" ></script>
+<script src="{{ url_for('static', filename='Script/index.js') }}"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+
+</body>
+
+
+</html>

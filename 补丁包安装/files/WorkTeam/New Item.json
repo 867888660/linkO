@@ -1,0 +1,27 @@
+{
+  "version": 8,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "MCp_测试.json",
+        "type": "file"
+      },
+      "name": "Agent 1"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "自动Ai",
+        "name": "ai自动插入node.json",
+        "type": "file"
+      },
+      "name": "1"
+    }
+  ],
+  "messages": [],
+  "limits": []
+}

@@ -1,0 +1,48 @@
+{
+  "version": 8,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#990000",
+      "item": {
+        "folder": "辩论",
+        "name": "ai辩手_正方.json",
+        "type": "file"
+      },
+      "name": "正方辩手"
+    },
+    {
+      "IsVisible": true,
+      "color": "#1d6600",
+      "item": {
+        "folder": "辩论",
+        "name": "ai辩手_反方.json",
+        "type": "file"
+      },
+      "name": "反方辩手"
+    }
+  ],
+  "messages": [
+    {
+      "IsLimit": false,
+      "Received": [
+        "正方辩手"
+      ],
+      "content": "请论述Ai的利与弊正方为利",
+      "from": "User",
+      "timestamp": "2024-11-29T07:21:43.401Z",
+      "to": "正方辩手",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "尊敬的评委、对方辩友、各位观众：\n\n作为正方辩手，我将从三个维度阐述AI的利处。首先，AI极大提升了生产效率，在医疗诊断领域准确率已达95%以上，每年挽救数百万生命。其次，AI推动科技创新，AlphaFold破解了困扰生物学界50年的蛋白质折叠难题。最后，AI创造了新兴就业机会，世界经济论坛预测到2025年将新增9700万个AI相关岗位。AI不是取代人类，而是在拓展人类能力的边界。我们应当拥抱这个充满可能性的智能时代。谢谢。",
+      "from": "正方辩手",
+      "timestamp": "2025-05-28T07:53:53.807580",
+      "to": "2",
+      "type": "sent"
+    }
+  ],
+  "limits": []
+}

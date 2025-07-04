@@ -1,0 +1,204 @@
+{
+  "version": 32,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "自动Ai",
+        "name": "ai自动插入.json",
+        "type": "file"
+      },
+      "name": "1"
+    },
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "自动Ai",
+        "name": "插入函数介绍.json",
+        "type": "file"
+      },
+      "name": "2"
+    },
+    {
+      "IsVisible": true,
+      "color": "#00ffd5",
+      "item": {
+        "folder": "自动Ai",
+        "name": "AiLLm1.json",
+        "type": "file"
+      },
+      "name": "3"
+    },
+    {
+      "IsVisible": true,
+      "color": "#c4c700",
+      "item": {
+        "folder": "自动Ai",
+        "name": "AiLLm2.json",
+        "type": "file"
+      },
+      "name": "4"
+    },
+    {
+      "IsVisible": true,
+      "color": "#fe3434",
+      "item": {
+        "folder": "自动Ai",
+        "name": "Ai主持人.json",
+        "type": "file"
+      },
+      "name": "0"
+    }
+  ],
+  "messages": [
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "帮我设计一个控制机器人移动的workflow\n##新话题##",
+      "from": "User",
+      "timestamp": "2025-06-15T02:46:34.295Z",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "3"
+      ],
+      "content": "帮我设计一个控制机器人移动的workflow\n##新话题##",
+      "from": "0",
+      "timestamp": "2025-06-15T02:46:36.121453",
+      "to": "3",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "question:我看到您想设计一个机器人移动控制的workflow。为了更好地帮助您，我需要了解一些基本信息：\n\n1. 您使用的是什么类型的机器人？\nA) 轮式机器人（如小车、AGV）\nB) 履带式机器人\nC) 步行机器人（双足/四足）\nD) 机械臂\nE) 其他类型\n\n2. 您希望实现什么样的移动控制？\nA) 基础的前进后退左右转弯\nB) 路径规划和自主导航\nC) 手动遥控\nD) 基于AI视觉的智能移动\nE) 其他需求\nshould_end:false",
+      "from": "3",
+      "timestamp": "2025-06-15T02:47:12.150071",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "question:我看到您想设计一个机器人移动控制的workflow。为了更好地帮助您，我需要了解一些基本信息：\n\n1. 您使用的是什么类型的机器人？\nA) 轮式机器人（如小车、AGV）\nB) 履带式机器人\nC) 步行机器人（双足/四足）\nD) 机械臂\nE) 其他类型\n\n2. 您希望实现什么样的移动控制？\nA) 基础的前进后退左右转弯\nB) 路径规划和自主导航\nC) 手动遥控\nD) 基于AI视觉的智能移动\nE) 其他需求\nshould_end:false",
+      "from": "0",
+      "timestamp": "2025-06-15T02:47:14.057864",
+      "to": "User",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "A) 轮式机器人（如小车、AGV）  #）llm规划",
+      "from": "User",
+      "timestamp": "2025-06-15T02:48:21.067Z",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "3"
+      ],
+      "content": "A) 轮式机器人（如小车、AGV）  #）llm规划",
+      "from": "0",
+      "timestamp": "2025-06-15T02:48:23.106023",
+      "to": "3",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "question:很好！轮式机器人配合LLM规划是个很有前景的方案。我需要进一步了解您的具体需求：\n\n1. 您的硬件平台是什么？\nA) ESP32/Arduino系列\nB) 树莓派\nC) 其他开发板\n\n2. 您希望LLM在机器人控制中扮演什么角色？\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\nD) 其他用途\n\n3. 您的机器人需要哪些传感器输入？\nA) 仅基础控制，无需传感器\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nD) 多种传感器融合\nshould_end:false",
+      "from": "3",
+      "timestamp": "2025-06-15T02:49:04.855679",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "question:很好！轮式机器人配合LLM规划是个很有前景的方案。我需要进一步了解您的具体需求：\n\n1. 您的硬件平台是什么？\nA) ESP32/Arduino系列\nB) 树莓派\nC) 其他开发板\n\n2. 您希望LLM在机器人控制中扮演什么角色？\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\nD) 其他用途\n\n3. 您的机器人需要哪些传感器输入？\nA) 仅基础控制，无需传感器\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nD) 多种传感器融合\nshould_end:false",
+      "from": "0",
+      "timestamp": "2025-06-15T02:49:07.060883",
+      "to": "User",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "ESP32/Arduino系列\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\n\n\nB) 超声波/红外避障传感器\nC) 摄像头视觉",
+      "from": "User",
+      "timestamp": "2025-06-15T02:49:41.327Z",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "3"
+      ],
+      "content": "ESP32/Arduino系列\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\n\n\nB) 超声波/红外避障传感器\nC) 摄像头视觉",
+      "from": "0",
+      "timestamp": "2025-06-15T02:49:43.093312",
+      "to": "3",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "0"
+      ],
+      "content": "question:非常清楚了！您需要的是一个基于ESP32的智能轮式机器人控制系统，集成了语音/文字指令解析、环境感知路径规划、传感器数据实时分析等多项AI功能，并配备超声波/红外避障和视觉传感器。这是一个相当完整的智能机器人方案。我现在可以开始为您设计这个workflow了。\nshould_end:true",
+      "from": "3",
+      "timestamp": "2025-06-15T02:50:32.550965",
+      "to": "0",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "question:非常清楚了！您需要的是一个基于ESP32的智能轮式机器人控制系统，集成了语音/文字指令解析、环境感知路径规划、传感器数据实时分析等多项AI功能，并配备超声波/红外避障和视觉传感器。这是一个相当完整的智能机器人方案。我现在可以开始为您设计这个workflow了。\nshould_end:true",
+      "from": "0",
+      "timestamp": "2025-06-15T02:50:34.070249",
+      "to": "User",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "4"
+      ],
+      "content": "这是rag信息：\n1\n[Input] Path=C:/Users/YMXD/Desktop/linkO/linkel/Nodes/jsonlist.jsonl\n[Input] Select_item='All', Rank=5, Min_Score=0.0\n[Filter] Select_item='All' → 不做筛选，使用全部条目\n[Rank] Query='机器人移动控制' Top 5 → 保留 5 条\n[Rank] Query='workflow设计' Top 5 → 保留 5 条\n\n=== 结果 ===\n=== Query: 机器人移动控制 ===\n1. id=Esp32_connect.py  score=0.4654\n   组件功能（简述代码整体功能）\\\\n这是一个ESP32嵌入式开发节点，用于生成ESP32微控制器的WiFi连接和HTTP通信代码模板。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n接收WiFi连接参数和服务器地址，自动生成包含W…\n2. id=minico.py  score=0.4631\n   组件功能（基于GPT-4模型的多模态大语言模型节点，支持文本和图片输入）\\n\\n代码功能摘要（通过HTTP请求调用ChatGPT API，处理文本和图片输入，支持JSON格式化输出和原始文本输出两种模式）\\n\\n参数：\\n```yaml\\n…\n3. id=wenxin-4.py  score=0.4575\n   组件功能（简述代码整体功能）\\\\n这是一个LLM (Large Language Model) API调用节点，用于与ChatAnyWhere API进行交互，支持文本和图像输入，并根据配置返回处理结果。\\\\n\\\\n代码功能摘要（概括核心算…\n4. id=AliOcr.py  score=0.4509\n   组件功能（简述代码整体功能）\\\\n这是一个使用阿里云OCR API进行手写体识别的程序，能够读取图片文件并识别其中的手写文字内容。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n程序首先验证输入文件的存在性和格式有效性，然后使用…\n5. id=QvQ_Vl_Max.py  score=0.4493\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n\n=== Query: workflow设计 ===\n1. id=Comfyui_Generate.py  score=0.5419\n   组件功能（简述代码整体功能）\\\\n这是一个调用ComfyUI API生成AI图片的组件。通过读取工作流配置文件，设置提示词和图片名称，向ComfyUI服务发送请求来生成AI图片。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n核…\n2. id=QwQ_Plus.py  score=0.5298\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n3. id=Add_Node.py  score=0.5182\n   **组件功能：**  \\n该代码实现了一个节点插入器的功能，能够向一个工作流JSON文件中插入新的节点，并确保节点ID和标签的唯一性。插入的过程包括检查重复的节点ID和标签，确保每个节点的唯一性，最终将更新后的数据保存回文件。\\n\\n**代…\n4. id=QvQ_Vl_Max.py  score=0.5179\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n5. id=wenxin-4cc.py  score=0.5116\n   组件功能（简述代码整体功能）\\\\n这是一个基于Claude API的语言模型调用节点，用于发送请求到Claude模型并处理返回结果，支持JSON和原文两种输出格式。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n通过HTTPS连…\n\n[Input] Path=C:/Users/YMXD/Desktop/linkO/linkel/Nodes/jsonlist.jsonl\n[Input] Select_item='All', Rank=5, Min_Score=0.0\n[Filter] Select_item='All' → 不做筛选，使用全部条目\n[Rank] Query='轮式机器人移动控制' Top 5 → 保留 5 条\n[Rank] Query='workflow设计' Top 5 → 保留 5 条\n\n=== 结果 ===\n=== Query: 轮式机器人移动控制 ===\n1. id=QvQ_Vl_Max.py  score=0.4392\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n2. id=minico.py  score=0.4266\n   组件功能（基于GPT-4模型的多模态大语言模型节点，支持文本和图片输入）\\n\\n代码功能摘要（通过HTTP请求调用ChatGPT API，处理文本和图片输入，支持JSON格式化输出和原始文本输出两种模式）\\n\\n参数：\\n```yaml\\n…\n3. id=Esp32_connect.py  score=0.4233\n   组件功能（简述代码整体功能）\\\\n这是一个ESP32嵌入式开发节点，用于生成ESP32微控制器的WiFi连接和HTTP通信代码模板。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n接收WiFi连接参数和服务器地址，自动生成包含W…\n4. id=QwQ_Plus.py  score=0.4185\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n5. id=oneo.py  score=0.4169\n   组件功能（简述代码整体功能）\\n这是一个调用大语言模型(LLM)接口的节点程序，通过HTTP请求调用OpenAI API获取AI回复并处理返回结果。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n核心功能是构建HTTP请求调用Open…\n\n=== Query: workflow设计 ===\n1. id=Comfyui_Generate.py  score=0.5419\n   组件功能（简述代码整体功能）\\\\n这是一个调用ComfyUI API生成AI图片的组件。通过读取工作流配置文件，设置提示词和图片名称，向ComfyUI服务发送请求来生成AI图片。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n核…\n2. id=QwQ_Plus.py  score=0.5298\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n3. id=Add_Node.py  score=0.5182\n   **组件功能：**  \\n该代码实现了一个节点插入器的功能，能够向一个工作流JSON文件中插入新的节点，并确保节点ID和标签的唯一性。插入的过程包括检查重复的节点ID和标签，确保每个节点的唯一性，最终将更新后的数据保存回文件。\\n\\n**代…\n4. id=QvQ_Vl_Max.py  score=0.5179\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n5. id=wenxin-4cc.py  score=0.5116\n   组件功能（简述代码整体功能）\\\\n这是一个基于Claude API的语言模型调用节点，用于发送请求到Claude模型并处理返回结果，支持JSON和原文两种输出格式。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n通过HTTPS连…\n\n[Input] Path=C:/Users/YMXD/Desktop/linkO/linkel/Nodes/jsonlist.jsonl\n[Input] Select_item='All', Rank=5, Min_Score=0.0\n[Filter] Select_item='All' → 不做筛选，使用全部条目\n[Rank] Query='' Top 5 → 保留 5 条\n[Rank] Query='ESP32轮式机器人控制' Top 5 → 保留 5 条\n[Rank] Query=' ' Top 5 → 保留 5 条\n[Rank] Query='LLM路径规划' Top 5 → 保留 5 条\n[Rank] Query=' ' Top 5 → 保留 5 条\n[Rank] Query='超声波避障' Top 5 → 保留 5 条\n[Rank] Query=' ' Top 5 → 保留 5 条\n[Rank] Query='摄像头视觉' Top 5 → 保留 5 条\n[Rank] Query='' Top 5 → 保留 5 条\n\n=== 结果 ===\n=== Query:  ===\n1. id=reader.py  score=0.5670\n   Unknown…\n2. id=QwQ_Plus.py  score=0.5431\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n3. id=DeepSeekR1.py  score=0.5403\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n4. id=QvQ_Vl_Max.py  score=0.5370\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n5. id=QwQ32B.py  score=0.5318\n   组件功能（简述代码整体功能）\\\\n这是一个调用大语言模型的组件，主要用于处理文本和图像输入，并返回AI生成的回答。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件通过OpenAI兼容接口调用DeepSeek API，支持多…\n\n=== Query: ESP32轮式机器人控制 ===\n1. id=Esp32_connect.py  score=0.5822\n   组件功能（简述代码整体功能）\\\\n这是一个ESP32嵌入式开发节点，用于生成ESP32微控制器的WiFi连接和HTTP通信代码模板。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n接收WiFi连接参数和服务器地址，自动生成包含W…\n2. id=reader.py  score=0.4236\n   Unknown…\n3. id=minico.py  score=0.4173\n   组件功能（基于GPT-4模型的多模态大语言模型节点，支持文本和图片输入）\\n\\n代码功能摘要（通过HTTP请求调用ChatGPT API，处理文本和图片输入，支持JSON格式化输出和原始文本输出两种模式）\\n\\n参数：\\n```yaml\\n…\n4. id=QwQ_Plus.py  score=0.4103\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n5. id=QvQ_Vl_Max.py  score=0.4086\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n\n=== Query:   ===\n1. id=reader.py  score=0.6953\n   Unknown…\n2. id=DeepSeekR1.py  score=0.5588\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n3. id=QwQ_Plus.py  score=0.5509\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n4. id=txttrriger.py  score=0.5473\n   这是一个文本分割处理节点，用于读取文件并按指定分隔符将内容分割成多个片段进行批量处理。\\\\n\\\\n该节点实现了智能文件读取和灵活的文本分割功能，支持多种编码格式和自定义分割模式，将单个文件内容转换为可逐一处理的文本片段数组。\\\\n\\\\n``…\n5. id=QwQ32B.py  score=0.5432\n   组件功能（简述代码整体功能）\\\\n这是一个调用大语言模型的组件，主要用于处理文本和图像输入，并返回AI生成的回答。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件通过OpenAI兼容接口调用DeepSeek API，支持多…\n\n=== Query: LLM路径规划 ===\n1. id=DeepSeekR1.py  score=0.5074\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n2. id=wenxin-4.py  score=0.4823\n   组件功能（简述代码整体功能）\\\\n这是一个LLM (Large Language Model) API调用节点，用于与ChatAnyWhere API进行交互，支持文本和图像输入，并根据配置返回处理结果。\\\\n\\\\n代码功能摘要（概括核心算…\n3. id=QvQ_Vl_Max.py  score=0.4750\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n4. id=Floder_Array.py  score=0.4678\n   组件功能：这是一个文件夹解析器组件，用于扫描指定文件夹路径下的所有文件，并将文件信息按目录分组整理输出。\\\\n\\\\n代码功能摘要：使用os.walk()递归遍历文件夹，将相同目录下的文件归类到字典中，提取文件名（不含扩展名）和完整路径，最终…\n5. id=QwQ_Plus.py  score=0.4603\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n\n=== Query:   ===\n1. id=reader.py  score=0.6953\n   Unknown…\n2. id=DeepSeekR1.py  score=0.5588\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n3. id=QwQ_Plus.py  score=0.5509\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n4. id=txttrriger.py  score=0.5473\n   这是一个文本分割处理节点，用于读取文件并按指定分隔符将内容分割成多个片段进行批量处理。\\\\n\\\\n该节点实现了智能文件读取和灵活的文本分割功能，支持多种编码格式和自定义分割模式，将单个文件内容转换为可逐一处理的文本片段数组。\\\\n\\\\n``…\n5. id=QwQ32B.py  score=0.5432\n   组件功能（简述代码整体功能）\\\\n这是一个调用大语言模型的组件，主要用于处理文本和图像输入，并返回AI生成的回答。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件通过OpenAI兼容接口调用DeepSeek API，支持多…\n\n=== Query: 超声波避障 ===\n1. id=reader.py  score=0.4150\n   Unknown…\n2. id=chatts.py  score=0.3875\n   组件功能：这是一个AI语音生成组件，通过调用Gradio API将文本转换为语音，支持参考音频的声音特征克隆功能。\\\\n\\\\n代码功能摘要：该组件通过Gradio客户端连接到TTS（文本转语音）API，使用参考音频文件和对应文本来克隆声音特…\n3. id=PicBounding.py  score=0.3736\n   组件功能（简述代码整体功能）\\\\n这是一个图像边界框标注组件，用于在图像上绘制文本检测结果的边界框和对应文字。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件接收图片路径和包含文字位置信息的JSON数据，解析JSON中的p…\n4. id=VideoAddBgm.py  score=0.3734\n   组件功能（简述代码整体功能）\\\\n这是一个视频音频合并处理组件，用于将外部音频文件与视频文件进行合并，支持音频循环播放、音量调节、插入时间控制等功能。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n使用 MoviePy 库加载视…\n5. id=Rag.py  score=0.3734\n   组件功能（简述代码整体功能）\\n这是一个基于语义向量的文本搜索组件，通过阿里云DashScope的text-embedding-v3模型对JSONL格式的文本数据进行语义相似度搜索和排序。支持多个查询词，使用**分隔。\\n\\n代码功能摘要（…\n\n=== Query:   ===\n1. id=reader.py  score=0.6953\n   Unknown…\n2. id=DeepSeekR1.py  score=0.5588\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n3. id=QwQ_Plus.py  score=0.5509\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n4. id=txttrriger.py  score=0.5473\n   这是一个文本分割处理节点，用于读取文件并按指定分隔符将内容分割成多个片段进行批量处理。\\\\n\\\\n该节点实现了智能文件读取和灵活的文本分割功能，支持多种编码格式和自定义分割模式，将单个文件内容转换为可逐一处理的文本片段数组。\\\\n\\\\n``…\n5. id=QwQ32B.py  score=0.5432\n   组件功能（简述代码整体功能）\\\\n这是一个调用大语言模型的组件，主要用于处理文本和图像输入，并返回AI生成的回答。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件通过OpenAI兼容接口调用DeepSeek API，支持多…\n\n=== Query: 摄像头视觉 ===\n1. id=Mp4AddPic.py  score=0.5483\n   组件功能：这是一个在MP4视频中添加图片叠加层的视频处理节点，能够在指定时间段内将图片居中显示在视频上。\\\\n\\\\n代码功能摘要：使用FFmpeg工具对视频和图片进行缩放处理，将图片作为叠加层添加到视频的指定时间段内，支持多种时间格式输入和…\n2. id=PicBounding.py  score=0.5344\n   组件功能（简述代码整体功能）\\\\n这是一个图像边界框标注组件，用于在图像上绘制文本检测结果的边界框和对应文字。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件接收图片路径和包含文字位置信息的JSON数据，解析JSON中的p…\n3. id=Moviepy.py  score=0.5333\n   组件功能（简述代码整体功能）\\\\n这是一个视频处理节点，主要用于创建或更新视频文件并管理其对应的字幕文件。支持向现有视频追加音频内容，同时自动维护字幕的时间轴同步。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n核心算法包括视频文件…\n4. id=VideoConnect.py  score=0.5266\n   组件功能（简述代码整体功能）\\\\n这是一个视频处理和合并节点，用于将多个分散在不同数字文件夹中的视频文件按顺序合并成一个完整的视频文件，并在合并过程中对每个视频进行1.1倍速处理。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n…\n5. id=MoviepyVoiceadd.py  score=0.5088\n   组件功能（简述代码整体功能）\\\\n这是一个音视频合成和字幕生成节点，能够将多个音频文件合成为一个视频，并自动生成同步的SRT字幕文件，支持追加模式向现有视频添加新内容。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n核心算法包括…\n\n=== Query:  ===\n1. id=reader.py  score=0.5670\n   Unknown…\n2. id=QwQ_Plus.py  score=0.5431\n   组件功能（简述代码整体功能）\\\\n这是一个LLM（大语言模型）节点组件，用于调用阿里云Dashscope API进行AI对话，支持文本和图像多模态输入，并能够展示AI的思考过程和最终答案。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤…\n3. id=DeepSeekR1.py  score=0.5403\n   组件功能：这是一个LLM(Large Language Model)节点处理程序，用于调用DeepSeek AI接口进行文本和图像处理。\\\\n\\\\n代码功能摘要：程序通过OpenAI客户端调用DeepSeek API的deepseek-re…\n4. id=QvQ_Vl_Max.py  score=0.5370\n   组件功能：这是一个多模态LLM节点，通过阿里云DashScope API调用qvq-max模型，支持文本和图像输入，生成AI响应并支持流式输出。\\\\n\\\\n代码功能摘要：核心功能包括图像转base64编码、构建多模态消息、调用流式API、分…\n5. id=QwQ32B.py  score=0.5318\n   组件功能（简述代码整体功能）\\\\n这是一个调用大语言模型的组件，主要用于处理文本和图像输入，并返回AI生成的回答。\\\\n\\\\n代码功能摘要（概括核心算法或主要处理步骤）\\\\n该组件通过OpenAI兼容接口调用DeepSeek API，支持多…\n这是总结：\n1\nreasoning:\n用户想要设计一个控制机器人移动的workflow，这是一个相对明确的需求，但还需要了解更多细节。从用户的描述来看，他们有一个包含多个节点的系统，但这些节点主要是AI模型、OCR、图像生成等功能，缺乏直接的机器人硬件控制能力。我需要了解：1）用户的机器人类型和硬件平台；2）期望的移动控制方式；3）是否需要结合现有的AI节点；4）控制的复杂程度。由于这是第一轮对话，我应该先了解基础信息。\nsummary:\n用户需要设计一个控制机器人移动的workflow，但具体的机器人类型、控制方式、硬件平台等关键信息尚未明确。\n\nreasoning:\n用户确认了机器人类型是轮式机器人，并且选择了'llm规划'，这表明用户希望使用AI大语言模型来进行机器人的移动规划和决策。这是一个很有趣的需求，结合了传统的机器人控制和现代的AI技术。现在我需要进一步了解：1）用户的硬件平台（ESP32、Arduino、树莓派等）；2）期望的规划复杂度（简单指令执行还是复杂环境导航）；3）是否需要传感器输入；4）控制接口方式。由于用户提到了llm规划，我需要了解他们希望LLM如何参与到机器人控制中，是生成控制指令、路径规划还是决策逻辑。\nsummary:\n用户需要设计一个轮式机器人移动控制的workflow，希望结合LLM进行智能规划。机器人类型已确定为轮式机器人（如小车、AGV），控制方式倾向于使用大语言模型进行规划决策，但硬件平台、LLM的具体作用方式、传感器配置等关键技术细节仍需明确。\n\nreasoning:\n用户已经提供了相当详细的信息：硬件平台是ESP32/Arduino，LLM需要承担多重角色（指令解析、路径规划、传感器数据分析），传感器包括超声波/红外和摄像头。这是一个相对复杂的系统设计需求。现在我需要了解的关键信息是：1）用户期望的系统复杂度和实时性要求；2）LLM的部署方式（云端还是边缘）；3）是否需要特定的移动模式。由于这已经是第三轮对话，按照规则应该结束交互，除非有极端情况。用户的需求已经相当明确：基于ESP32的轮式机器人，结合LLM进行智能控制，包含多种传感器输入和多层次的AI决策功能。\nsummary:\n用户需要设计一个基于ESP32/Arduino平台的智能轮式机器人移动控制workflow。系统要求LLM能够：1）根据语音/文字指令生成具体移动命令，2）基于环境信息进行路径规划和决策，3）实时分析传感器数据并调整移动策略。硬件配置包括超声波/红外避障传感器和摄像头视觉系统。这是一个集成了多层次AI决策、多传感器融合的智能机器人控制系统。\n这是全部信息：\nfrom:User,to:0,content:帮我设计一个控制机器人移动的workflow\n##新话题##\nfrom:0,to:3,content:帮我设计一个控制机器人移动的workflow\n##新话题##\nfrom:3,to:0,content:question:我看到您想设计一个机器人移动控制的workflow。为了更好地帮助您，我需要了解一些基本信息：\n\n1. 您使用的是什么类型的机器人？\nA) 轮式机器人（如小车、AGV）\nB) 履带式机器人\nC) 步行机器人（双足/四足）\nD) 机械臂\nE) 其他类型\n\n2. 您希望实现什么样的移动控制？\nA) 基础的前进后退左右转弯\nB) 路径规划和自主导航\nC) 手动遥控\nD) 基于AI视觉的智能移动\nE) 其他需求\nshould_end:false\nfrom:0,to:User,content:question:我看到您想设计一个机器人移动控制的workflow。为了更好地帮助您，我需要了解一些基本信息：\n\n1. 您使用的是什么类型的机器人？\nA) 轮式机器人（如小车、AGV）\nB) 履带式机器人\nC) 步行机器人（双足/四足）\nD) 机械臂\nE) 其他类型\n\n2. 您希望实现什么样的移动控制？\nA) 基础的前进后退左右转弯\nB) 路径规划和自主导航\nC) 手动遥控\nD) 基于AI视觉的智能移动\nE) 其他需求\nshould_end:false\nfrom:User,to:0,content:A) 轮式机器人（如小车、AGV）  #）llm规划\nfrom:0,to:3,content:A) 轮式机器人（如小车、AGV）  #）llm规划\nfrom:3,to:0,content:question:很好！轮式机器人配合LLM规划是个很有前景的方案。我需要进一步了解您的具体需求：\n\n1. 您的硬件平台是什么？\nA) ESP32/Arduino系列\nB) 树莓派\nC) 其他开发板\n\n2. 您希望LLM在机器人控制中扮演什么角色？\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\nD) 其他用途\n\n3. 您的机器人需要哪些传感器输入？\nA) 仅基础控制，无需传感器\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nD) 多种传感器融合\nshould_end:false\nfrom:0,to:User,content:question:很好！轮式机器人配合LLM规划是个很有前景的方案。我需要进一步了解您的具体需求：\n\n1. 您的硬件平台是什么？\nA) ESP32/Arduino系列\nB) 树莓派\nC) 其他开发板\n\n2. 您希望LLM在机器人控制中扮演什么角色？\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\nD) 其他用途\n\n3. 您的机器人需要哪些传感器输入？\nA) 仅基础控制，无需传感器\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nD) 多种传感器融合\nshould_end:false\nfrom:User,to:0,content:ESP32/Arduino系列\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\n\n\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nfrom:0,to:3,content:ESP32/Arduino系列\nA) 根据语音/文字指令生成具体的移动命令\nB) 基于环境信息进行路径规划和决策\nC) 实时分析传感器数据并调整移动策略\n\n\nB) 超声波/红外避障传感器\nC) 摄像头视觉\nfrom:3,to:0,content:question:非常清楚了！您需要的是一个基于ESP32的智能轮式机器人控制系统，集成了语音/文字指令解析、环境感知路径规划、传感器数据实时分析等多项AI功能，并配备超声波/红外避障和视觉传感器。这是一个相当完整的智能机器人方案。我现在可以开始为您设计这个workflow了。\nshould_end:true",
+      "from": "0",
+      "timestamp": "2025-06-15T02:50:34.192920",
+      "to": "4",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [],
+      "content": "基于您的需求，我将为您设计一个基于ESP32的智能轮式机器人移动控制workflow。\n\n## 任务流程描述\n\n该workflow将构建一个完整的智能轮式机器人控制系统，整合语音/文字指令解析、环境感知、路径规划和实时传感器数据分析功能。系统首先接收用户的语音或文字移动指令，通过LLM解析生成具体的移动命令；然后结合超声波避障传感器和摄像头视觉系统获取环境信息，利用LLM进行智能路径规划和决策；最后生成适配ESP32平台的控制代码，实现机器人的智能移动控制。整个流程支持实时传感器数据分析和动态策略调整，确保机器人能够安全、智能地完成移动任务。\n\n## 结构化子任务表\n\n| 步骤 | step_description | input | output | introduction | used_nodes |\n|------|------------------|-------|---------|-------------|------------|\n| 1 | 指令解析与移动命令生成 | 用户语音/文字移动指令（如\"向前走3米然后左转\"） | 结构化的移动命令序列（JSON格式，包含动作、参数、时间等） | 使用大语言模型解析自然语言移动指令，转换为机器人可执行的标准化命令格式 | QwQ_Plus.py, DeepSeekR1.py |\n| 2 | 环境感知数据获取 | 超声波传感器数据、摄像头图像数据 | 环境障碍物信息、视觉特征描述 | 处理传感器输入数据，提取环境中的障碍物位置、距离等关键信息 | QvQ_Vl_Max.py, minico.py |\n| 3 | 智能路径规划与决策 | 移动命令、环境信息、机器人当前状态 | 优化后的移动路径和决策策略 | 基于LLM进行路径规划，结合环境信息优化移动策略，确保安全高效的移动路径 | QwQ_Plus.py, DeepSeekR1.py |\n| 4 | 传感器数据实时分析 | 实时传感器数据流 | 动态调整建议和预警信息 | 持续分析传感器数据，检测环境变化，提供实时的移动策略调整建议 | QvQ_Vl_Max.py, QwQ_Plus.py |\n| 5 | ESP32控制代码生成 | 最终移动指令、硬件配置参数 | ESP32可执行的C++控制代码 | 将高级移动指令转换为ESP32平台的具体控制代码，包括WiFi通信、传感器读取、电机控制等 | Esp32_connect.py |\n\n这个workflow设计充分利用了您现有的LLM节点资源，构建了一个完整的智能机器人控制系统。系统具备多层次的AI决策能力，能够处理复杂的移动任务，同时保证了实时性和安全性。",
+      "from": "4",
+      "timestamp": "2025-06-15T02:52:32.568113",
+      "to": "User",
+      "type": "sent"
+    }
+  ],
+  "limits": []
+}

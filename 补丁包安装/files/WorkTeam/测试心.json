@@ -1,0 +1,163 @@
+{
+  "version": 70,
+  "agents": [
+    {
+      "IsVisible": true,
+      "color": "#000000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "1"
+    },
+    {
+      "IsVisible": true,
+      "color": "#4b2e8e",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "2"
+    },
+    {
+      "IsVisible": true,
+      "color": "#0f855e",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "3"
+    },
+    {
+      "IsVisible": true,
+      "color": "#f0e800",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "4"
+    },
+    {
+      "IsVisible": true,
+      "color": "#a31e0f",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "5"
+    },
+    {
+      "IsVisible": true,
+      "color": "#ffeb0f",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "6"
+    },
+    {
+      "IsVisible": true,
+      "color": "#007a66",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "7"
+    },
+    {
+      "IsVisible": true,
+      "color": "#21e8d1",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "8"
+    },
+    {
+      "IsVisible": true,
+      "color": "#7a47f0",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "9"
+    },
+    {
+      "IsVisible": true,
+      "color": "#e00000",
+      "item": {
+        "folder": "WorkFlow",
+        "name": "测试星跳.json",
+        "type": "file"
+      },
+      "name": "10"
+    }
+  ],
+  "messages": [
+    {
+      "IsLimit": false,
+      "Received": [
+        "1"
+      ],
+      "content": "1",
+      "from": "User",
+      "timestamp": "2025-01-04T02:09:20.808Z",
+      "to": "1",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "1"
+      ],
+      "content": "1",
+      "from": "User",
+      "timestamp": "2025-01-04T02:09:29.431Z",
+      "to": "1",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "2"
+      ],
+      "content": "1",
+      "from": "1",
+      "timestamp": "2025-01-04T02:09:42.813309",
+      "to": "2",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "3"
+      ],
+      "content": "1",
+      "from": "2",
+      "timestamp": "2025-01-04T02:14:55.827579",
+      "to": "3",
+      "type": "sent"
+    },
+    {
+      "IsLimit": false,
+      "Received": [
+        "4"
+      ],
+      "content": "1",
+      "from": "3",
+      "timestamp": "2025-01-04T02:15:05.838266",
+      "to": "4",
+      "type": "sent"
+    }
+  ],
+  "limits": []
+}
