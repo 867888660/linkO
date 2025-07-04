@@ -15,7 +15,7 @@ __pycache__/
 *.whl
 patch-installer/dist/
 saved_images/
-# 大型二进制
+# 大型二进制1
 *.jpg
 *.png
 *.pdf
