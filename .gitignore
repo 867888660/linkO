@@ -25,7 +25,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-# 忽略 TempFiles 目录下所有内容
+#  忽略 TempFiles 目录下所有内容 
 TempFiles/*
 
 # 但允许保留 TempFiles 目录
