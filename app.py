@@ -983,11 +983,19 @@ def run_node_route():
 
     # ---------- 2. 构造完整对话 messages（含图片） ----------
     # 2.1 收集需要转 Base64 的图片
-    temp_images_b64 = [
-        image_to_base64(inp.get("Context", ""))
-        for inp in node.get("Inputs", [])
-        if isinstance(inp.get("Kind"), str) and "FilePath" in inp["Kind"]
-    ]
+    temp_images_b64 = []
+    node_kind = node.get("NodeKind")
+    
+    # 只有当节点类型为LLm时才处理图片
+    if node_kind == "LLm":
+        # 检查文件路径是否为图片后缀
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
+        temp_images_b64 = [
+            image_to_base64(inp.get("Context", ""))
+            for inp in node.get("Inputs", [])
+            if isinstance(inp.get("Kind"), str) and "FilePath" in inp["Kind"] 
+            and any(inp.get("Context", "").lower().endswith(ext) for ext in image_extensions)
+        ]
 
     # 2.2 system_prompt 生成
     system_prompt = f"{node.get('SystemPrompt', '')}\n{node.get('ExprotAfterPrompt', '')}"

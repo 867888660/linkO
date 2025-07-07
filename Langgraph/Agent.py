@@ -8,7 +8,7 @@
     （若已得到答案）
     Final Answer: …
 - 只执行 LLM 点名的那个工具，返回 Observation 后写回对话历史
-- 若检测到 “Final Answer:” 或回合数达到 ReactNum，立即结束
+- 若检测到 "Final Answer:" 或回合数达到 ReactNum，立即结束
 - run_node 返回 [最终回复, debug_info]，debug_info 内含：
     llm_input / llm_output / messages(全过程) / tools
 """
@@ -163,91 +163,142 @@ def tools_node(state: State) -> State:
 
     # 1) 解析上一条助手输出里的 Action
     last_reply = str(state["messages"][-1]["content"])
-    m = re.search(r"Action\s*:\s*(\w+)\s*\((.*?)\)", last_reply, re.I)
-    if not m:
-        return state                  # 没 Action 直接回
 
-    tool_name = m.group(1).strip()
-    arg_str   = m.group(2).strip()
+    # -------- 提取同一条消息里的所有 Action --------
+    actions: list[tuple[str, str]] = []  # [(tool_name, arg_str), ...]
 
-    # ---------- 解析参数 ----------
-    params: Dict[str, str] = {}
-    for kv in filter(None, [s.strip() for s in arg_str.split(",")]):
-        if "=" in kv:
-            k, v = kv.split("=", 1)
-            params[k.strip()] = v.strip().strip('"\'')   # 去引号
+    pos = 0
+    while True:
+        m = re.search(r"Action\s*:\s*(\w+)\s*\(", last_reply[pos:], re.I)
+        if not m:
+            break
+
+        tool_name = m.group(1).strip()
+        # '(' 起始位置（相对于整串）
+        start_idx = pos + m.end(0)
+
+        # 用括号深度计数，找到匹配的 ')'
+        depth = 1
+        i = start_idx
+        while i < len(last_reply) and depth:
+            ch = last_reply[i]
+            if ch == "(":
+                depth += 1
+            elif ch == ")":
+                depth -= 1
+            i += 1
+
+        # 提取参数字符串（不含两端括号）
+        arg_str = last_reply[start_idx:i-1].strip()
+        actions.append((tool_name, arg_str))
+
+        pos = i  # 继续向后搜索
+
+    if not actions:
+        return state  # 没 Action 直接回
+
+    # 依次执行所有 Action（同一轮即可完成多工具调用）
+    for tool_name, arg_str in actions:
+        print(f"工具名: {tool_name}")
+        print(f"原始参数字符串: {arg_str[:50]}...")
+
+        # ---------- 解析参数 ----------
+        params: Dict[str, str] = {}          # ← 这里重新定义
+
+        # 1) args={...} 写法
+        if arg_str.lstrip().startswith("args="):
+            json_part = arg_str.split("=", 1)[1].strip()
+            if json_part.startswith("{") and json_part.endswith("}"):
+                # 尝试用 json 解析，失败就用正则兜底
+                try:
+                    params = json.loads(json_part)
+                except Exception:
+                    for k, v in re.findall(r'"([^"]+)"\s*:\s*"([^"]*)"', json_part):
+                        params[k] = v
         else:
-            params["_arg"] = kv
+            # 2) key=value, key=value 写法
+            for kv in filter(None, [s.strip() for s in arg_str.split(",")]):
+                if "=" in kv:
+                    k, v = kv.split("=", 1)
+                    params[k.strip()] = v.strip().strip('"\'')
+                else:
+                    params["_arg"] = kv
 
-    # 展开 args={...}
-    if "args" in params:
+        print("解析后的参数:", params)        # 调试用
+
+        # ------- ↓ 以下保持原来逻辑，全部用 params 变量 ↓ -------
+        tool_spec = next((t for t in tools if t["name"] == tool_name), None)
+        if tool_spec is None:
+            obs_payload = {
+                "Think": last_reply,
+                "Action": f"{tool_name}({arg_str})",
+                "Result": f"工具 {tool_name} 未找到"
+            }
+            state["messages"].append(
+                {"role": "observation",
+                 "content": "Observation:\n" + json.dumps(obs_payload, ensure_ascii=False, indent=2)}
+            )
+            state.setdefault("tool_results", []).append(
+                {"tool_name": tool_name, "inputs": {},
+                 "result": obs_payload["Result"], "success": False}
+            )
+            return state
+
+        # 3) 执行工具
+        tool_node = {
+            "name": tool_name,
+            "Inputs": [{"name": k, "Context": v} for k, v in params.items()],
+            "ExportPrompt": node.get("ExportPrompt", ""),
+            "Tools": [tool_spec],
+        }
+
+        # 处理auto_input参数
+        tool_inputs = tool_spec.get("Inputs", [])
+        for inp in tool_inputs:
+            param = inp.get("Parameters", "")
+            if param and param.strip() == "auto_input" or not param.strip():
+                name = inp.get("name", "")
+                context = inp.get("Context", "")
+                if name and name not in params:  # 避免覆盖LLM已提供的参数
+                    tool_node["Inputs"].append({"name": name, "Context": context})
+
         try:
-            inner = json.loads(params.pop("args"))
-            if isinstance(inner, dict):
-                params.update(inner)
-        except json.JSONDecodeError:
-            pass
+            result  = _load_and_run_script(tool_name, tool_node)
+            success = True
+        except Exception as e:
+            result  = f"工具执行错误: {e}"
+            success = False
 
-    # 2) 找工具
-    tool_spec = next((t for t in tools if t["name"] == tool_name), None)
-    if tool_spec is None:
-        obs_payload = {
-            "Think": last_reply,
-            "Action": f"{tool_name}({arg_str})",
-            "Result": f"工具 {tool_name} 未找到"
-        }
-        state["messages"].append(
-            {"role": "observation",
-             "content": "Observation:\n" + json.dumps(obs_payload, ensure_ascii=False, indent=2)}
-        )
+        # 4) 记录结果
         state.setdefault("tool_results", []).append(
-            {"tool_name": tool_name, "inputs": params,
-             "result": obs_payload["Result"], "success": False}
+            {"tool_name": tool_name, "inputs": params, "result": result, "success": success}
         )
-        return state
 
-    # 3) 执行工具
-    tool_node = {
-        "name": tool_name,
-        "Inputs": [{"name": k, "Context": v} for k, v in params.items()],
-        "ExportPrompt": node.get("ExportPrompt", ""),
-        "Tools": [tool_spec],
-    }
-    try:
-        result  = _load_and_run_script(tool_name, tool_node)
-        success = True
-    except Exception as e:
-        result  = f"工具执行错误: {e}"
-        success = False
+        # ---------- ★ 生成结构化 Observation ----------
+        # 1) 取 Think 部分（若不存在则给空串）
+        think_match = re.search(r"Think\s*:\s*(.*)", last_reply, re.S)
+        think_text  = think_match.group(1).strip() if think_match else ""
 
-    # 4) 记录结果
-    state.setdefault("tool_results", []).append(
-        {"tool_name": tool_name, "inputs": params, "result": result, "success": success}
-    )
+        # 2) 拼装 Action 字符串（无反斜杠）
+        action_inner = ", ".join(f'{k}="{v}"' for k, v in params.items())
+        action_text  = f"{tool_name}({action_inner})"
 
-    # ---------- ★ 生成结构化 Observation ----------
-    # 1) 取 Think 部分（若不存在则给空串）
-    think_match = re.search(r"Think\s*:\s*(.*)", last_reply, re.S)
-    think_text  = think_match.group(1).strip() if think_match else ""
-
-    # 2) 拼装 Action 字符串（无反斜杠）
-    action_inner = ", ".join(f'{k}="{v}"' for k, v in params.items())
-    action_text  = f"{tool_name}({action_inner})"
-
-    obs_payload = {
-        "Think":  think_text,
-        "Action": action_text,
-        "Result": result
-    }
-
-    # ---------- ★ 生成结构化 Observation ----------
-    obs = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2)
-    state["messages"].append(
-        {
-            "role": "assistant",
-            "content": f"Observation: {obs}"
+        obs_payload = {
+            "Think":  think_text,
+            "Action": action_text,
+            "Result": result
         }
-    )
+
+        # ---------- ★ 生成结构化 Observation ----------
+        obs = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2)
+        state["messages"].append(
+            {
+                "role": "assistant",
+                "content": f"Observation: {obs}"
+            }
+        )
+        print(f"结果 result: {result}...")  # 只打印前100字符
+        print(f"工具 {tool_name} 工具输入: {repr(tool_node)} 执行结果: {repr(obs[:100])}")
     return state
 
 
@@ -256,37 +307,55 @@ def _build_agent():
     try:
         g = StateGraph(State)
         g.add_node("tools", tools_node)
-        g.add_node("llm", llm_node)
-        g.set_entry_point("llm")        # 先思考
-        g.add_edge("tools", "llm")      # 工具后回 LLM
+        g.add_node("llm",   llm_node)
+        g.set_entry_point("llm")          # 先思考
 
-        # 结束条件：Final Answer 或回合数
+        # ---------- 结束条件 / 转移逻辑 ----------
         def _continue_or_end(state: State):
-            # 获取最后一条助手消息
-            last_asst = next((m for m in reversed(state["messages"]) if m["role"] == "assistant"), None)
-            if last_asst:
-                content = str(last_asst["content"]).strip()
-                # 检测 Final Answer
-                if re.search(r'^\s*final\s+answer\s*:', content, re.IGNORECASE | re.MULTILINE):
-                    print("检测到 Final Answer，结束流程")
-                    return END
-            
-            # 检查回合数限制
-            rn = state["node"].get("ReactNum", 3)
+            last_asst = next(
+                (m for m in reversed(state["messages"]) if m["role"] == "assistant"),
+                None
+            )
+            if not last_asst:
+                return END
+
+            content = str(last_asst["content"])
+
+            has_action      = re.search(r'\bAction\s*:',        content, re.I) is not None
+            has_finalanswer = re.search(r'^\s*final\s+answer\s*:',
+                                        content, re.I | re.MULTILINE) is not None
+
+            # 1) 先跑工具（即便同条含 Final Answer）
+            if has_action:
+                return "tools"
+
+            # 2) 没有 Action，但有 Final Answer → 结束
+            if has_finalanswer:
+                print("检测到 Final Answer，结束流程")
+                return END
+
+            # 3) 回合数限制
+            rn  = state["node"].get("ReactNum", 3)
             cnt = len([m for m in state["messages"] if m["role"] == "assistant"])
             if cnt >= rn:
                 print(f"达到最大回合数 {rn}，强制结束流程")
                 return END
-            
+
             print(f"继续执行，当前回合: {cnt}/{rn}")
-            return "tools"
-        g.add_conditional_edges("llm", _continue_or_end, {END: END, "tools": "tools"})
-        
-        # 编译图
+            return "llm"
+
+        # ---------- 条件边 ----------
+        # llm → (tools 或 END)
+        g.add_conditional_edges("llm", _continue_or_end,
+                                {END: END, "tools": "tools"})
+        # tools → (llm 或 END)  —— 复用同一个判断函数
+        g.add_conditional_edges("tools", _continue_or_end,
+                                {END: END, "llm": "llm"})
+
         compiled_graph = g.compile()
         print("Agent 构建成功")
         return compiled_graph
-        
+
     except Exception as e:
         print(f"构建 Agent 时出错: {e}")
         import traceback
@@ -338,8 +407,9 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
     print("tools (count)        :", len(tools))
 
     # ---------- 1. 生成工具文档（重复工具去重） ---------- #
+    import json                           # 确保可用
     nodes_dir = os.path.join(os.getcwd(), "Nodes")
-    tool_docs: list[str] = []
+    tool_docs = []                        # 用于收集各工具描述
     seen_tools = set()
 
     for idx, tool in enumerate(tools, 1):
@@ -348,8 +418,8 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
             continue
         seen_tools.add(fname)
 
-        base  = os.path.basename(fname if fname.endswith(".py") else f"{fname}.py")
-        path  = os.path.join(nodes_dir, base)
+        base = os.path.basename(fname if fname.endswith(".py") else f"{fname}.py")
+        path = os.path.join(nodes_dir, base)
         print(f"[{idx}] 检索 {path}")
         if not os.path.isfile(path):
             print("    ↳ 文件不存在，跳过")
@@ -369,7 +439,7 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
             print("    ↳ 无 FunctionIntroduction，跳过")
             continue
 
-        # 解析字符串字面值
+        # 解析 FunctionIntroduction 字符串字面值
         try:
             intro = ast.literal_eval("'" + m_intro.group("txt") + "'")
         except Exception:
@@ -396,17 +466,68 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
             print("    ↳ 未找到 inputs，跳过")
             continue
 
+        # ---------- ① 初始化：全部写成占位符 ---------- #
         arg_pairs, desc_lines = [], []
+        name_idx_map = {}                              # name → 在 arg_pairs 中的位置
+
         for inp in inputs:
             name = inp.get("name", "")
             typ  = inp.get("type") or "any"
             req  = inp.get("required", False)
             desc = inp.get("description", "")
             arg_pairs.append(f'"{name}": "<{typ}>"')
+            name_idx_map[name] = len(arg_pairs) - 1
             desc_lines.append(
                 f"  - {name} ({typ}, {'必填' if req else '可选填'}): {desc}"
             )
 
+        # ---------- ② 覆写"非 auto_input"字段为真实值 ---------- #
+        for idx_tinp, tinp in enumerate(tool.get("Inputs", [])):
+            name = tinp.get("name", "").strip()
+
+            # ↳ 如果 name 缺失，就按顺序匹配 YAML inputs
+            if not name and idx_tinp < len(inputs):
+                name = inputs[idx_tinp].get("name", "")
+
+            if not name:
+                continue                               # 还是拿不到就放弃
+
+            param_raw = (tinp.get("Parameters", "") or "").strip()
+            if param_raw in ("", "auto_input"):        # auto_input / 空 → 占位符不动
+                continue
+
+            kind = (tinp.get("Kind") or "String").title()
+
+            # --- 根据 Kind 生成 value 字符串 ---
+            if kind == "Num":
+                value_str = str(tinp.get("Num", param_raw))
+                arg_piece = f'"{name}": {value_str}'
+            elif kind == "Boolean":
+                value_str = str(param_raw).lower()
+                arg_piece = f'"{name}": {value_str}'
+            elif kind == "Array":
+                value_str = param_raw                 # 约定为合法 JSON
+                arg_piece = f'"{name}": {value_str}'
+            else:                                     # String 及其他
+                value_str = param_raw
+                arg_piece = f'"{name}": "{value_str}"'
+
+            # --- 覆写占位符 / 追加 ---
+            if name in name_idx_map:                  # YAML 已声明
+                arg_pairs[name_idx_map[name]] = arg_piece
+                for i, line in enumerate(desc_lines):
+                    if re.match(rf"\s*- {re.escape(name)}\b", line):
+                        desc_lines[i] = f"  - {name} ({kind}, 固定): {value_str}"
+                        break
+            else:                                     # YAML 未声明 → 补行
+                arg_pairs.append(arg_piece)
+                desc_lines.append(f"  - {name} ({kind}, 固定): {value_str}")
+
+            # ★ 调试打印
+            print("已写入固定参数:", name, "→", value_str)
+
+
+        # ---------- ③ 组装工具文档 ---------- #
         tool_doc = "\n".join(
             [
                 f"### 工具 {tool.get('name', base)}",
@@ -419,19 +540,18 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
         print("    ↳ 工具描述已生成")
         tool_docs.append(tool_doc)
 
+
     # ---------- 2. 组装 system 提示 ---------- #
     sys_parts = [
         "你是一个遵循 ReAct 流程的助手：",
         "Think: 你的思考",
         "Action: ToolName(param=value)",
-        "Observation: 工具返回（系统自动提供）",
         "Final Answer: 最终答案",
         "",
         "规则：",
-        "1. 只能输出以上四种前缀之一。",
-        "2. **在输出 Action 后立即停止**，等待系统注入 Observation 后再继续。",
-        "3. 禁止在 Observation 注入前自行生成 Observation 或 Final Answer。",
-        "4. 当你确认任务已完成时，输出以 “Final Answer:” 起行的最终答案，并紧跟 JSON（或纯文本）。",
+        "1. 只能输出以上三种前缀之一。",
+        "2. 当你确认任务已完成时，输出以 \"Final Answer:\" 起行的最终答案，并紧跟 JSON（或纯文本）。",
+        "3. \"Final Answer:\" 与\"Action:\"不能同时存在，确认所有action完成，才能输出 Final Answer。",
     ]
 
     if tool_docs:
@@ -478,7 +598,7 @@ def _raw_to_text(raw):
     # str 直接返回
     if isinstance(raw, str):
         return raw
-    # list[dict/str] → 拼接 Context / Description / 自身字符串
+    # list包含dict或str → 拼接 Context / Description / 自身字符串
     if isinstance(raw, list):
         parts = []
         for item in raw:
@@ -540,29 +660,31 @@ def run_node(node: Dict[str, Any]):
             answer_text = str(last_asst["content"]) if last_asst else "无法获取回答"
             print("未找到 Final Answer，使用最后一条助手消息")
 
-        # ---------- 4. 提取 Final Answer 内容并解析JSON ----------
-        # 1) 去掉 “Final Answer:” 前缀（大小写 + 跨行）
-        cleaned = re.sub(r'^\s*final\s+answer\s*:\s*', '', answer_text,
-                        flags=re.I | re.MULTILINE).strip() or answer_text
+        # ---------- 4. 提取 Final Answer 内容并解析 JSON ----------
+        # ① 只保留 "Final Answer:" 之后的内容
+        fa_split = re.split(r'^\s*final\s+answer\s*:\s*',
+                            answer_text, flags=re.I | re.MULTILINE)
+        cleaned_part = fa_split[-1].strip() if len(fa_split) > 1 else answer_text.strip()
 
-        # 2) 去掉 Markdown 代码块围栏 ```json ... ```
-        cleaned = re.sub(r'^```(?:json)?\s*', '', cleaned)   # 去开头 fence
-        cleaned = re.sub(r'\s*```$', '', cleaned)            # 去结尾 fence
+        # ② 去掉 ```json ... ``` 包裹
+        cleaned_part = re.sub(r'^```(?:json)?\s*', '', cleaned_part)   # 去开头 fence
+        cleaned_part = re.sub(r'\s*```$', '', cleaned_part)            # 去结尾 fence
 
-        # 3) 若还不是纯 {...}，就截取首尾大括号之间的内容
-        if not (cleaned.startswith('{') and cleaned.endswith('}')):
-            start, end = cleaned.find('{'), cleaned.rfind('}')
+        # ③ 截取最外层 { ... }
+        if not (cleaned_part.startswith('{') and cleaned_part.endswith('}')):
+            start, end = cleaned_part.find('{'), cleaned_part.rfind('}')
             if start != -1 and end != -1 and end > start:
-                cleaned = cleaned[start:end+1]
+                cleaned_part = cleaned_part[start:end+1]
 
-        # 4) 解析 JSON，失败则按原样返回
+        # ④ 解析 JSON
         try:
-            json_obj = json.loads(cleaned)   # 成功解析
-            outputs = [json_obj]             # 保持前端兼容：统一包装成数组
+            json_obj = json.loads(cleaned_part)
+            outputs = [json_obj]
             print("成功解析为JSON对象:", json_obj)
         except json.JSONDecodeError:
-            outputs = [{"result": cleaned}]  # 解析失败：兜底
+            outputs = [{"result": cleaned_part}]
             print("JSON解析失败，包装为数组:", outputs)
+
 
         # ---------- 5. 组装 debug ----------
         debug_obj = {
