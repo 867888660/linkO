@@ -19,6 +19,797 @@
         }
       ],
       "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 身高：2.16米/216公分/7尺1\n- 体重：112.9公斤/114.55公斤/249磅/252.6磅\n- 臂展：220公分\n- 站立摸高：282公分\n- 手长：25公分\n- 手宽：28公分\n- 位置：中锋\n- 生日：2005年6月26日\n- 球队：青岛队\n- 国籍：中国\n\n其他数据：\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 变向跑：11.79秒\n- 定点投篮：14-25\n- 运球投篮：15-39\n- 三分投篮：14-25\n- 罚球：7-10\n- 边线中线折返投篮：14-27"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存到F://linkO//TempFiles/杨瀚森.txt和F://linkO//TempFiles/杨瀚森身体数据.mp3"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 身高：218cm（CBA官网数据）/216cm（联合试训数据）\n- 臂展：224cm（CBA官网数据）/220cm（联合试训数据）\n- 体重：119kg（CBA官网数据）/114.55kg（联合试训数据）\n- 站立摸高：285cm（CBA官网数据）/282cm（联合试训数据）\n- 手长：25.4cm\n- 手宽：28.575cm\n\n动态数据：\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 变向跑：11.79秒\n\n其他信息：\n- 位置：中锋\n- 球队：青岛队\n- 国籍：中国\n- 生日：2005年6月26日"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存为F://linkO//TempFiles/杨瀚森.txt，音频解说已保存为F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：裸足身高216厘米，臂展220厘米，体重114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他被誉为中国篮球的未来之星，拥有出色的静态天赋和身体素质。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件和音频解说已成功保存，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：裸足身高216厘米，臂展220厘米，体重114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他在3/4场地冲刺中用时3.38秒，折返跑3.01秒，变向跑11.79秒，定点投篮14中25，运球投篮15中39，三分投篮14中25，罚球7中10，边线中线折返投篮14中27。他被誉为中国篮球未来之星。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本和音频均已成功保存至 F://linkO//TempFiles 目录，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 裸足身高：216厘米（2.16米）\n- 官方身高：218厘米（2.18米）\n- 体重：114.55公斤（252.6磅），另有数据为119公斤\n- 臂展：220厘米（另有数据为224厘米）\n- 站立摸高：282厘米（另有数据为285厘米）\n- 手长：25厘米（或25.4厘米）\n- 手宽：28厘米（或28.575厘米）\n- 其他动态数据：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒等"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件保存成功，路径为 F://linkO//TempFiles\\杨瀚森.txt；音频生成失败，原因：Azure工具执行错误（list index out of range）"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高218cm（另有说法为216cm），臂展224cm，体重113kg（也有说法为115kg）。他是一位年轻的中锋球员，具备出色的身高和臂展，在篮下具有统治力，防守和篮板能力强，体重也保证了对抗稳定性。他曾获得CBA盖帽王和最佳新人奖等荣誉，未来被寄予厚望。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件和音频文件均已成功保存，路径为 F://linkO//TempFiles 下的 杨瀚森.txt 和 杨瀚森.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森身体数据如下：身高216cm，体重114.55kg，臂展220cm，站立摸高282cm，手长25cm，手宽28cm。他是中国篮球的潜力新星，参加了NBA联合试训，表现亮眼。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已成功保存为 F://linkO//TempFiles\\杨瀚森.txt，但音频生成因技术问题暂未成功。"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：裸足身高216cm，臂展220cm，体重114.55kg，站立摸高282cm，手长25cm，手宽28cm。他在NBA联合试训中的表现也非常亮眼。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已成功保存为 F://linkO//TempFiles\\杨瀚森.txt，但音频生成因技术问题暂未成功。"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 身高：216cm/218cm\n- 臂展：220cm/224cm\n- 体重：114.55kg/119kg\n- 站立摸高：282cm/285cm\n- 手长：25cm/25.4cm\n- 手宽：28cm/28.575cm\n- 原地跳：66cm\n- 助跑跳：76cm\n\n数据来源：百度搜索"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已保存到F://linkO//TempFiles/杨瀚森.txt，音频解说已生成到F://linkO//TempFiles/杨瀚森身体数据.mp3"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 身高：216cm（裸足）或218cm（穿鞋）\n- 体重：约114.55kg 至 119kg\n- 臂展：220cm 至 224cm\n- 站立摸高：282cm 至 285cm\n- 手长：25cm（约10英寸）\n- 手宽：28cm（约11.25英寸）\n- 运动能力：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒\n- 投篮测试：定点投篮14中25，三分投篮14中25，罚球7中10等\n这些数据来自2025年5月和6月的CBA和NBA联合试训体测。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已保存为 F://linkO//TempFiles\\杨瀚森.txt，音频生成失败（多次尝试 Azure 工具出错）"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 裸足身高：2.16米（部分报道为2.18米）\n- 体重：114.55公斤至119公斤\n- 臂展：2.20米\n- 站立摸高：2.82米\n- 手长：25厘米\n- 手宽：28厘米\n- 原地垂直起跳：66厘米\n- 助跑垂直起跳：76.2厘米\n- 变向跑：11.79秒\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 出生日期：2005年6月26日\n- 位置：中锋，效力于CBA青岛队，场均16.2分10篮板2.7盖帽"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已保存为 F://linkO//TempFiles\\杨瀚森.txt，音频生成失败（参数错误）"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高216cm，体重114.55kg，臂展220cm，站立摸高282cm，手长25cm，手宽28cm。他在NBA联合试训中的动态数据包括：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒，定点投篮14中25，三分投篮14中25，罚球7中10。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已成功保存为 F://linkO//TempFiles\\杨瀚森.txt，但音频生成失败，原因是语音工具执行错误。"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高216cm，体重114.55kg，臂展220cm，站立摸高282cm，手长25cm，手宽28cm。他在NBA联合试训中的表现也非常亮眼，具备出色的静态身体素质。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已成功保存为 F://linkO//TempFiles\\杨瀚森.txt，但音频生成因技术问题未能完成。"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高216厘米，臂展220厘米，体重约114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他是中国篮球最具潜力的新星之一。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件和音频解说已成功保存至 F://linkO//TempFiles 目录"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：裸足身高216厘米，臂展220厘米，体重114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他在3/4场地冲刺中成绩为3.38秒，折返跑3.01秒，变向跑11.79秒。投篮方面，定点投篮14中25，运球投篮15中39，三分投篮14中25，罚球7中10，边线中线折返投篮14中27。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本和音频文件已成功保存至 F://linkO//TempFiles 目录下，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 裸足身高：2.16米（部分报道为2.18米）\n- 体重：114.55公斤至119公斤\n- 臂展：2.20米\n- 站立摸高：2.82米\n- 手长：25厘米\n- 手宽：28厘米\n- 原地垂直起跳：66厘米\n- 助跑垂直起跳：76.2厘米\n- 变向跑：11.79秒\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 出生日期：2005年6月26日\n- 位置：中锋，效力于CBA青岛队，场均16.2分10篮板2.7盖帽"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "F://linkO//TempFiles\\杨瀚森.txt"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：裸足身高216厘米，臂展220厘米，体重114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他的3/4场地冲刺为3.38秒，折返跑3.01秒，变向跑11.79秒，定点投篮14中25，运球投篮15中39，三分投篮14中25，罚球7中10，边线中线折返投篮14中27。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本和音频已成功保存至 F://linkO//TempFiles 目录下，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森身体数据如下：\n- 裸足身高：216cm\n- 臂展：220cm\n- 体重：114.55kg\n- 站立摸高：282cm\n- 手长：25cm\n- 手宽：28cm\n- 原地弹跳：66cm\n- 助跑弹跳：76cm\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 变向跑：11.79秒\n- 定点投篮：14中25\n- 运球投篮：15中39\n- 三分投篮：14中25\n- 罚球：7中10\n- 边线中线折返投篮：14中27"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件保存成功，路径为 F://linkO//TempFiles\\杨瀚森.txt；音频生成失败，请稍后重试。"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森身体数据如下：\n- 身高：216厘米\n- 体重：114.55公斤\n- 臂展：220厘米\n- 站立摸高：282厘米\n- 手长：25厘米\n- 手宽：28厘米\n- 原地弹跳：66厘米\n- 助跑弹跳：76厘米\n数据来源：百度搜索，CBA官网及NBA联合试训信息。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本和音频均已成功保存，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高216cm，臂展220cm，体重114.55kg，站立摸高282cm，手长25cm，手宽28cm。他在NBA联合试训中的动态数据包括：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒，定点投篮14中25，三分投篮14中25，罚球7中10。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件已保存为 F://linkO//TempFiles\\杨瀚森.txt，但音频生成失败（list index out of range）"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森是一位中国篮球运动员，出生于2005年6月26日，司职中锋。他的身体数据非常出色：裸足身高为216厘米，臂展220厘米，体重114.55公斤，站立摸高为282厘米。他的手掌长度为25厘米，手掌宽度为28厘米，属于顶级大手型球员。这些身体条件使他在篮球场上具有极大的潜力和优势。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本和音频均已成功保存至 F://linkO//TempFiles 目录下，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：身高216厘米，臂展220厘米，体重114.55公斤，站立摸高282厘米，手长25厘米，手宽28厘米。他在NBA联合试训中的动态数据包括：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒，定点投篮14中25，运球投篮15中39，三分投篮14中25，罚球7中10，边线中线折返投篮14中27。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件和音频文件已成功保存至 F://linkO//TempFiles 目录下，文件名为“杨瀚森”"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森 身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n- 身高：216cm（裸足），218cm（穿鞋）\n- 体重：114.55kg 至 119kg\n- 臂展：220cm 至 224cm\n- 站立摸高：282cm 至 285cm\n- 手长：25cm 至 25.4cm\n- 手宽：28cm 至 28.575cm\n- 3/4场地冲刺：3.38秒\n- 折返跑：3.01秒\n- 变向跑：11.79秒\n- 投篮测试：定点14/25，运球15/39，三分14/25，罚球7/10，边线中线折返14/27"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文本文件保存成功，路径为 F://linkO//TempFiles\\杨瀚森.txt；音频生成失败，Azure工具调用出错"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据如下：\n\n1. 身高：218cm（CBA官网数据）/216cm（联合试训数据）\n2. 臂展：224cm（CBA官网数据）/220cm（联合试训数据）\n3. 体重：119kg（CBA官网数据）/114.55kg（联合试训数据）\n4. 站立摸高：285cm（CBA官网数据）/282cm（联合试训数据）\n5. 手长：25.4cm/25cm\n6. 手宽：28.575cm/28cm\n7. 动态数据：3/4场地冲刺3.38秒，折返跑3.01秒，变向跑11.79秒\n8. 投篮数据：定点投篮14-25，运球投篮15-39，三分投篮14-25，罚球7-10\n\n杨瀚森被誉为中国篮球的未来之星，他的静态天赋和动态表现都非常出色。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存到 F://linkO//TempFiles/杨瀚森.txt 和 F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森是中国篮球运动员，身高216厘米，体重113公斤"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已保存至F://linkO//TempFiles/杨瀚森.txt，音频解说已生成至F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据+身高+体重"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "已成功查询到杨瀚森的身体数据信息：杨瀚森是一位19岁的篮球运动员，参加了NBA联合试训。他的详细身体数据为：裸足身高216cm，臂展220cm，体重约114.58kg（252.6磅），站立摸高282cm，手长25cm，手宽28cm。此外还包括各项运动能力测试数据如原地纵跳66.04cm，助跑最大垂直起跳76.20cm等。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "查询结果已成功保存到F://linkO//TempFiles/杨瀚森.txt文件中，同时生成了名为'杨瀚森身体数据解说'的音频文件，音频内容包含了杨瀚森的详细身体数据介绍"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森+身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森最新的NBA体测数据显示，其裸足身高为2.16米（部分报道为2.18米），体重114.55-119公斤，臂展2.20米，站立摸高2.82米，手长25厘米、手宽28厘米（本届新秀顶级水平），动态测试中原地弹跳66厘米、助跑弹跳76.2厘米。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存到F://linkO//TempFiles/杨瀚森.txt，音频文件已成功保存到F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据：身高218cm（另有说法为216cm），臂展224cm，体重113kg（也有说法为115kg）。作为一位年轻的中锋球员，杨瀚森凭借其出色的身高和臂展条件，在篮下具有天然的统治力，这让他在防守端和争抢篮板方面展现出了巨大的优势。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存为F://linkO//TempFiles/杨瀚森.txt，音频解说已保存为F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
+    },
+    {
+      "name": "New started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "DeepSeek2",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "String",
+          "Context": "https://www.baidu.com/s?wd=杨瀚森身体数据"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "杨瀚森的身体数据：身高218cm（另有说法为216cm），臂展224cm，体重113kg（也有说法为115kg）。作为一位年轻的中锋球员，杨瀚森凭借其出色的身高和臂展条件，在篮下具有天然的统治力，这让他在防守端和争抢篮板方面展现出了巨大的优势。同时，他的体重也保证了他在对抗中的稳定性。"
+        },
+        {
+          "name": "Output3",
+          "Kind": "String",
+          "Context": "文件已成功保存为F://linkO//TempFiles/杨瀚森.txt，音频解说已生成F://linkO//TempFiles/杨瀚森身体数据.wav"
+        }
+      ],
+      "Inputs": []
     }
   ]
 ]

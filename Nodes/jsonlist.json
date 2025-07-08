@@ -121,7 +121,7 @@
     },
     {
         "Filename": "createTxt.py",
-        "Hash": "cc2c041d7b995eefd53e38bfb733311593b38e01a36280d0a0361c5a430d4d0f",
+        "Hash": "35c5a5ea3bd2cefc4e51b9b98079af8cf12e0136df9f37dbe8d3b39fd43a91ca",
         "NodeKind": "Normal",
         "NodeFunction": "这是一个创建和保存TXT文本文件的组件。\\\\n\\\\n代码功能摘要：该组件接收文件路径、文件名和内容三个输入参数，将内容以UTF-8编码格式保存为.txt文件，并返回保存状态和完整文件路径。\\\\n\\\\n参数：\\\\n```yaml\\\\ninputs:\\\\n  - name: File_Path\\\\n    type: string\\\\n    required: true\\\\n    description: 文件保存的目录路径\\\\n  - name: File_Name\\\\n    type: string\\\\n    required: false\\\\n    description: 要创建的文件名称（不含扩展名）\\\\n  - name: Content\\\\n    type: string\\\\n    required: false\\\\n    description: 要写入文件的文本内容\\\\noutputs:\\\\n  - name: Result\\\\n    type: string\\\\n    description: 文件保存操作的结果状态信息\\\\n  - name: File_Path\\\\n    type: string\\\\n    description: 完整的文件保存路径\\\\n```\\\\n\\\\n运行逻辑：\\\\n- 从输入节点获取文件保存路径、文件名称和文件内容\\\\n- 对文件名进行预处理，移除其中的换行符\\\\n- 将文件路径和文件名拼接，形成完整路径\\\\n- 自动为文件添加.txt扩展名\\\\n- 使用UTF-8编码方式将内容写入到指定文件\\\\n- 输出文件保存成功的状态信息到Result\\\\n- 输出完整的文件保存路径到File_Path"
     },

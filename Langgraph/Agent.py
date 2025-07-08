@@ -79,16 +79,15 @@ def _load_and_run_script(script_name: str, node: Dict[str, Any]) -> str:
 def llm_node(state: State) -> State:
     import json, re
     node = state["node"]
-    
-    # 重要：使用状态中的 messages，而不是 node 中的
+
+    # 使用状态里的 messages
     messages = state["messages"]
-    
+
     cnt = len([m for m in messages if m["role"] == "assistant"])
     remaining = node.get("ReactNum", 3) - cnt
-    
     print(f"当前回合: {cnt}, 剩余回合: {remaining}")
-    
-    # 如果只剩1回合或更少，强制修改 system 消息
+
+    # 如果只剩 1 回合，追加终止提示
     if remaining <= 1 and not any("⚠️ 终止提示" in m["content"] for m in messages):
         warning = (
             "⚠️ 终止提示\n"
@@ -98,72 +97,107 @@ def llm_node(state: State) -> State:
         )
         messages.append({"role": "system", "content": warning})
 
-
-    
-    # 将当前 messages 传给 node，供 LLM 脚本使用
+    # 把当前 messages 传给脚本
     node["messages"] = messages
-    
-    try:
-        raw = _load_and_run_script(node["name"], node)
 
-        # 转换为字符串
-        if isinstance(raw, list):
-            ctx = next((d.get("Context", "") for d in raw if isinstance(d, dict)), "")
-            text = ctx or json.dumps(raw, ensure_ascii=False, indent=2)
-        elif isinstance(raw, str):
-            text = raw
+    # === 关键改动：失败时最多重试 3 次 ===
+    max_retries = 3
+    last_error  = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            raw = _load_and_run_script(node["name"], node)
+            last_error = None  # 只要成功就清空错误
+            break
+        except Exception as e:
+            last_error = e
+            print(f"LLM执行错误(第 {attempt}/{max_retries} 次): {e}")
+            if attempt == max_retries:
+                # 全部重试失败
+                error_msg = f"LLM执行错误: {e}"
+                state["messages"].append({"role": "assistant", "content": error_msg})
+                return state  # 直接返回，后续逻辑不再执行
+
+    # ------ 以下为原本成功后的处理逻辑 ------
+    # 转换为字符串
+    if isinstance(raw, list):
+        ctx = next((d.get("Context", "") for d in raw if isinstance(d, dict)), "")
+        text = ctx or json.dumps(raw, ensure_ascii=False, indent=2)
+    elif isinstance(raw, str):
+        text = raw
+    else:
+        text = json.dumps(raw, ensure_ascii=False, indent=2)
+
+    # 检查是否包含 Final Answer
+    has_final_answer = re.search(r'^\s*final\s+answer\s*:', text, re.IGNORECASE | re.MULTILINE)
+
+    if has_final_answer:
+        final_text = text.strip()
+        print("检测到 Final Answer，保留完整内容")
+    else:
+        if remaining <= 1:
+            print("⚠️ 强制转换为 Final Answer")
+            think_match = re.search(r'Think\s*:\s*(.*?)(?=\n\n|\nAction:|$)', text, re.DOTALL)
+            think_content = think_match.group(1).strip() if think_match else text.strip()
+            final_text = f"Final Answer: {think_content}"
         else:
-            text = json.dumps(raw, ensure_ascii=False, indent=2)
+            think_line, action_line = "", ""
+            for line in text.splitlines():
+                if not think_line and line.lstrip().startswith("Think:"):
+                    think_line = line.strip()
+                elif not action_line and line.lstrip().startswith("Action:"):
+                    action_line = line.strip()
+                if think_line and action_line:
+                    break
+            final_text = f"{think_line}\n\n{action_line}".strip()
 
-        # 检查是否包含 Final Answer
-        has_final_answer = re.search(r'^\s*final\s+answer\s*:', text, re.IGNORECASE | re.MULTILINE)
-        
-        if has_final_answer:
-            # 如果包含 Final Answer，保留完整内容
-            final_text = text.strip()
-            print("检测到 Final Answer，保留完整内容")
-        else:
-            # 如果剩余回合<=1但仍然没有输出 Final Answer，强制转换
-            if remaining <= 1:
-                print("⚠️ 强制转换为 Final Answer")
-                # 提取 Think 内容作为最终答案
-                think_match = re.search(r'Think\s*:\s*(.*?)(?=\n\n|\nAction:|$)', text, re.DOTALL)
-                think_content = think_match.group(1).strip() if think_match else text.strip()
-                
-                # 构造 Final Answer
-                final_text = f"Final Answer: {think_content}"
-            else:
-                # 否则只保留 Think 和 Action 行
-                think_line = ""
-                action_line = ""
-                for line in text.splitlines():
-                    if not think_line and line.lstrip().startswith("Think:"):
-                        think_line = line.strip()
-                    elif not action_line and line.lstrip().startswith("Action:"):
-                        action_line = line.strip()
-                    if think_line and action_line:
-                        break
-                final_text = f"{think_line}\n\n{action_line}".strip()
-
-        print(f"LLM 输出: {repr(final_text[:100])}")
-        state["messages"].append({"role": "assistant", "content": final_text})
-        
-    except Exception as e:
-        error_msg = f"LLM执行错误: {e}"
-        print(error_msg)
-        state["messages"].append({"role": "assistant", "content": error_msg})
-    
+    print(f"LLM 输出: {repr(final_text[:100])}")
+    state["messages"].append({"role": "assistant", "content": final_text})
     return state
+def escape_newlines_in_json(raw: str) -> str:
+    """
+    将 JSON 字面量里的“裸换行/回车”替换成 '\\n' / '\\r'，
+    只动双引号包裹的字符串，外部结构不受影响。
+    """
+    def _fix(match: re.Match) -> str:
+        s = match.group(0)                      # 被 "" 包住的整段字符串，包括引号
+        # 跳过已转义的 \n，保留其它内容，把真实换行替换为 \\n
+        return s.replace('\r', '\\r').replace('\n', '\\n')
 
+    # (?s) == re.DOTALL 让 '.' 匹配换行
+    return re.sub(r'"(?:[^"\\]|\\.)*"', _fix, raw, flags=re.DOTALL)
 # ---------- 5. Tools 节点 ----------
 def tools_node(state: State) -> State:
-    import json                       # ★ 确保可用
+    import json   
+        # ---------- 🔧 通用：从指定位置起找成对 { ... } ----------
+    def _grab_brace_block(s: str, start: int) -> tuple[str, int] | None:
+        """
+        从 s[start] == '{' 开始，返回 (完整 '{...}' 字符串, 结束下标 after_end)。
+        会忽略字符串里的大括号和转义。
+        若匹配失败返回 None。
+        """
+        depth, i, in_str, esc = 1, start + 1, None, False
+        while i < len(s) and depth:
+            ch = s[i]
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch in ("'", '"'):
+                in_str = None if in_str == ch else ch
+            elif not in_str:
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+            i += 1
+        return (s[start:i], i) if depth == 0 else None
+                    # ★ 确保可用
     node = state["node"]
     tools = node.get("Tools", [])
 
     # 1) 解析上一条助手输出里的 Action
     last_reply = str(state["messages"][-1]["content"])
-
+    
     # -------- 提取同一条消息里的所有 Action --------
     actions: list[tuple[str, str]] = []  # [(tool_name, arg_str), ...]
 
@@ -190,42 +224,55 @@ def tools_node(state: State) -> State:
 
         # 提取参数字符串（不含两端括号）
         arg_str = last_reply[start_idx:i-1].strip()
+        arg_str = escape_newlines_in_json(arg_str)
+        # === ★ 补漏：若只有 'args=' 无 '{'，继续向后找最近的 {...} ★ ===
+        if arg_str.startswith("args=") and "{" not in arg_str:
+            brace_pos = last_reply.find("{", i)
+            if brace_pos != -1:
+                grabbed = _grab_brace_block(last_reply, brace_pos)
+                if grabbed:
+                    brace_block, after_end = grabbed
+                    arg_str += brace_block      # 拼上 '{...}'
+                    i = after_end               # 同步游标，防止死循环
+        # === ★ 补漏结束 ★ ===
+
         actions.append((tool_name, arg_str))
 
         pos = i  # 继续向后搜索
 
     if not actions:
         return state  # 没 Action 直接回
-
+    print("🔥  actions 抓取结果 =", actions)
     # 依次执行所有 Action（同一轮即可完成多工具调用）
     for tool_name, arg_str in actions:
-        print(f"工具名: {tool_name}")
-        print(f"原始参数字符串: {arg_str[:50]}...")
+        print("\n===== 新 Action =====")
+        print("tool_name =", tool_name)
+        print("arg_str repr =", repr(arg_str))        # 含换行/转义
+        print("arg_str length =", len(arg_str))
 
         # ---------- 解析参数 ----------
-        params: Dict[str, str] = {}          # ← 这里重新定义
+        params: Dict[str, str] = {}
 
-        # 1) args={...} 写法
-        if arg_str.lstrip().startswith("args="):
+        if arg_str.lstrip().startswith("args="):            # args={...} 写法
             json_part = arg_str.split("=", 1)[1].strip()
             if json_part.startswith("{") and json_part.endswith("}"):
-                # 尝试用 json 解析，失败就用正则兜底
-                try:
+                try:                                        # ① 先尝试标准 JSON
                     params = json.loads(json_part)
                 except Exception:
-                    for k, v in re.findall(r'"([^"]+)"\s*:\s*"([^"]*)"', json_part):
-                        params[k] = v
-        else:
-            # 2) key=value, key=value 写法
+                    import ast                              # ② JSON 失败再试 Python 字面量
+                    try:
+                        params = ast.literal_eval(json_part)
+                    except Exception:                       # ③ 兜底：用正则硬提取
+                        for k, v in re.findall(r'"([^"]+)"\s*:\s*"([^"]*)"', json_part):
+                            params[k] = v
+        else:                                               # key=value, key=value 写法
             for kv in filter(None, [s.strip() for s in arg_str.split(",")]):
                 if "=" in kv:
                     k, v = kv.split("=", 1)
                     params[k.strip()] = v.strip().strip('"\'')
                 else:
                     params["_arg"] = kv
-
-        print("解析后的参数:", params)        # 调试用
-
+        print("解析后的 params =", params)
         # ------- ↓ 以下保持原来逻辑，全部用 params 变量 ↓ -------
         tool_spec = next((t for t in tools if t["name"] == tool_name), None)
         if tool_spec is None:
@@ -256,7 +303,7 @@ def tools_node(state: State) -> State:
         tool_inputs = tool_spec.get("Inputs", [])
         for inp in tool_inputs:
             param = inp.get("Parameters", "")
-            if param and param.strip() == "auto_input" or not param.strip():
+            if (param and param.strip() == "auto_input") or not param.strip():
                 name = inp.get("name", "")
                 context = inp.get("Context", "")
                 if name and name not in params:  # 避免覆盖LLM已提供的参数
@@ -552,6 +599,7 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
         "1. 只能输出以上三种前缀之一。",
         "2. 当你确认任务已完成时，输出以 \"Final Answer:\" 起行的最终答案，并紧跟 JSON（或纯文本）。",
         "3. \"Final Answer:\" 与\"Action:\"不能同时存在，确认所有action完成，才能输出 Final Answer。",
+        "4. 在 Action 的 args JSON 中，任何换行必须写成 `\\n`，**禁止出现真实回车/换行符**；否则视为格式错误。"
     ]
 
     if tool_docs:
@@ -614,127 +662,150 @@ def _raw_to_text(raw):
 
 # ---------- 8. 外部接口 ----------
 def run_node(node: Dict[str, Any]):
-    import copy, re, json
-    
-    try:
-        agent = _get_agent()
-        if agent is None:
-            raise RuntimeError("Agent 未正确初始化")
-            
-        react_num = node.get("ReactNum", 3)
+    import copy, re, json, traceback
 
-        # ---------- 1. 生成一次初始 messages ----------
-        init_messages = _prepare_messages(node)
+    max_retries = 3               # ← 新增：最多尝试 3 次
+    last_error  = None
 
-        init_state: State = {
-            "node": node,
-            "messages": init_messages,
-            "tool_results": [],
-        }
-
-        # ---------- 2. 执行 ----------
-        print("开始执行 Agent...")
-        result = agent.invoke(
-            init_state,
-            config={"recursion_limit": react_num * 2 + 1}
-        )
-        print("Agent 执行完成")
-
-        # ---------- 3. 改进的 Final Answer 捕获 ----------
-        final_msg = None
-        for m in reversed(result.get("messages", [])):
-            if m["role"] == "assistant":
-                content = str(m["content"]).strip()
-                if re.search(r'^\s*final\s+answer\s*:', content, re.IGNORECASE | re.MULTILINE):
-                    final_msg = m
-                    print(f"找到 Final Answer: {repr(content[:100])}")
-                    break
-
-        if final_msg:
-            answer_text = str(final_msg["content"])
-        else:
-            last_asst = next(
-                (m for m in reversed(result.get("messages", [])) if m["role"] == "assistant"),
-                None
-            )
-            answer_text = str(last_asst["content"]) if last_asst else "无法获取回答"
-            print("未找到 Final Answer，使用最后一条助手消息")
-
-        # ---------- 4. 提取 Final Answer 内容并解析 JSON ----------
-        # ① 只保留 "Final Answer:" 之后的内容
-        fa_split = re.split(r'^\s*final\s+answer\s*:\s*',
-                            answer_text, flags=re.I | re.MULTILINE)
-        cleaned_part = fa_split[-1].strip() if len(fa_split) > 1 else answer_text.strip()
-
-        # ② 去掉 ```json ... ``` 包裹
-        cleaned_part = re.sub(r'^```(?:json)?\s*', '', cleaned_part)   # 去开头 fence
-        cleaned_part = re.sub(r'\s*```$', '', cleaned_part)            # 去结尾 fence
-
-        # ③ 截取最外层 { ... }
-        if not (cleaned_part.startswith('{') and cleaned_part.endswith('}')):
-            start, end = cleaned_part.find('{'), cleaned_part.rfind('}')
-            if start != -1 and end != -1 and end > start:
-                cleaned_part = cleaned_part[start:end+1]
-
-        # ④ 解析 JSON
+    # === 重试循环 ===
+    for attempt in range(1, max_retries + 1):
         try:
-            json_obj = json.loads(cleaned_part)
-            outputs = [json_obj]
-            print("成功解析为JSON对象:", json_obj)
-        except json.JSONDecodeError:
-            outputs = [{"result": cleaned_part}]
-            print("JSON解析失败，包装为数组:", outputs)
+            # ---------- 以下为原始逻辑 ----------
+            agent = _get_agent()
+            if agent is None:
+                raise RuntimeError("Agent 未正确初始化")
 
+            react_num = node.get("ReactNum", 3)
 
-        # ---------- 5. 组装 debug ----------
-        debug_obj = {
-            "messages": copy.deepcopy(result.get("messages", [])),
-            "tools": copy.deepcopy(result.get("tool_results", [])),
-        }
-        debug_text = json.dumps(debug_obj, ensure_ascii=False, indent=2)
-        
-        # ---------- 4. 将 outputs 封装进 node['Outputs'] ----------
-        Outputs = copy.deepcopy(node.get("Outputs", []))
+            # 1) 生成初始 messages
+            init_messages = _prepare_messages(node)
+            init_state: State = {
+                "node": node,
+                "messages": init_messages,
+                "tool_results": [],
+            }
 
-        # === 智能识别是否为 JSON 结果 ===
-        selector = (node.get('OriginalTextSelector') or '').lower()
-        is_json_mode = (
-            selector == 'json' or
-            isinstance(outputs, dict) or
-            (isinstance(outputs, list) and outputs and isinstance(outputs[0], dict))
-        )
-
-        if is_json_mode:
-            Temp_dict = (
-                outputs[0] if isinstance(outputs, list) and isinstance(outputs[0], dict)
-                else outputs if isinstance(outputs, dict)
-                else {}
+            # 2) 执行
+            print(f"开始执行 Agent... (尝试 {attempt}/{max_retries})")
+            result = agent.invoke(
+                init_state,
+                config={"recursion_limit": react_num * 2 + 1}
             )
-            index = -1
-            for key, value in Temp_dict.items():
-                index += 1
-                if index >= len(Outputs):
-                    break
-                kind = Outputs[index].get('Kind')
-                if kind == 'String':
-                    Outputs[index]['Context'] = str(value)
-                elif kind == 'Num':
-                    Outputs[index]['Num'] = int(value) if str(value).isdigit() else 0
-                elif kind == 'Boolean':
-                    Outputs[index]['Boolean'] = bool(value)
-        else:
-            if Outputs:
-                Outputs[0]['Context'] = _raw_to_text(outputs)
-        # ---------- 5. 返回 ----------
-        return {
-            "outputs": Outputs,       # ← 用新的封装结果
-            "debug_text": debug_text
-        }
+            print("Agent 执行完成")
 
+            # 3) 捕获 Final Answer
+            final_msg = None
+            for m in reversed(result.get("messages", [])):
+                if m["role"] == "assistant":
+                    content = str(m["content"]).strip()
+                    if re.search(r'^\s*final\s+answer\s*:', content,
+                                 re.IGNORECASE | re.MULTILINE):
+                        final_msg = m
+                        print(f"找到 Final Answer: {repr(content[:100])}")
+                        break
 
-        
-    except Exception as e:
-        print(f"run_node 执行错误: {e}")
-        import traceback
-        traceback.print_exc()
-        return [f"执行错误: {e}", "{}"]
+            if final_msg:
+                answer_text = str(final_msg["content"])
+            else:
+                last_asst = next(
+                    (m for m in reversed(result.get("messages", []))
+                     if m["role"] == "assistant"),
+                    None
+                )
+                answer_text = str(last_asst["content"]) if last_asst else "无法获取回答"
+                print("未找到 Final Answer，使用最后一条助手消息")
+
+            # 4) 解析 Final Answer -> JSON
+            fa_split = re.split(r'^\s*final\s+answer\s*:\s*',
+                                answer_text, flags=re.I | re.MULTILINE)
+            cleaned_part = fa_split[-1].strip() if len(fa_split) > 1 else answer_text.strip()
+            cleaned_part = re.sub(r'^```(?:json)?\s*', '', cleaned_part)
+            cleaned_part = re.sub(r'\s*```$', '', cleaned_part)
+            if not (cleaned_part.startswith('{') and cleaned_part.endswith('}')):
+                start, end = cleaned_part.find('{'), cleaned_part.rfind('}')
+                if start != -1 and end != -1 and end > start:
+                    cleaned_part = cleaned_part[start:end + 1]
+
+            try:
+                json_obj = json.loads(cleaned_part)
+                outputs = [json_obj]
+                print("成功解析为JSON对象:", json_obj)
+            except json.JSONDecodeError:
+                outputs = [{"result": cleaned_part}]
+                print("JSON解析失败，包装为数组:", outputs)
+
+            # 5) 组装 debug 信息
+            debug_obj = {
+                "messages": copy.deepcopy(result.get("messages", [])),
+                "tools": copy.deepcopy(result.get("tool_results", [])),
+                "final_answer": answer_text,
+            }
+
+            def _brief(txt: str, limit: int = 300):
+                txt = txt.replace("\n", "\\n")
+                return txt if len(txt) <= limit else txt[:limit] + " …"
+
+            lines: list[str] = ["=== Messages ==="]
+            for idx, m in enumerate(debug_obj["messages"], 1):
+                role = m.get("role", "")
+                content = _brief(str(m.get("content", "")))
+                lines.append(f"{idx:02d}. [{role}] {content}")
+
+            lines.append("\n=== Tools ===")
+            for t in debug_obj["tools"]:
+                tool_name = t.get("tool_name", "")
+                success = t.get("success", False)
+                result_sn = _brief(str(t.get("result", "")))
+                lines.append(f"- {tool_name} | success={success} | result: {result_sn}")
+
+            lines.append("\n=== Final Answer ===\n" + answer_text)
+            debug_text = "\n".join(lines)
+
+            # 6) 封装 Outputs
+            Outputs = copy.deepcopy(node.get("Outputs", []))
+            selector = (node.get('OriginalTextSelector') or '').lower()
+            is_json_mode = (
+                selector == 'json' or
+                isinstance(outputs, dict) or
+                (isinstance(outputs, list) and outputs and isinstance(outputs[0], dict))
+            )
+
+            if is_json_mode:
+                Temp_dict = (
+                    outputs[0] if isinstance(outputs, list) and isinstance(outputs[0], dict)
+                    else outputs if isinstance(outputs, dict)
+                    else {}
+                )
+                index = -1
+                for key, value in Temp_dict.items():
+                    index += 1
+                    if index >= len(Outputs):
+                        break
+                    kind = Outputs[index].get('Kind')
+                    if kind == 'String':
+                        Outputs[index]['Context'] = str(value)
+                    elif kind == 'Num':
+                        Outputs[index]['Num'] = int(value) if str(value).isdigit() else 0
+                    elif kind == 'Boolean':
+                        Outputs[index]['Boolean'] = bool(value)
+            else:
+                if Outputs:
+                    Outputs[0]['Context'] = _raw_to_text(outputs)
+
+            # 7) 成功返回
+            return {
+                "outputs": Outputs,
+                "debug": debug_text
+            }
+
+        # ---------- 捕获错误并决定是否重试 ----------
+        except Exception as e:
+            last_error = e
+            print(f"run_node 执行错误(第 {attempt}/{max_retries} 次): {e}")
+            traceback.print_exc()
+
+            if attempt == max_retries:
+                # 三次都失败，最终返回错误信息
+                return [f"执行错误: {e}", "{}"]
+
+            print("准备重试...\n")

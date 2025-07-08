@@ -1023,7 +1023,7 @@ def run_node_route():
     # ---------- 3. 统一结果格式处理 ----------
     def normalize_result(result):
         if isinstance(result, dict) and "outputs" in result:
-            output, debug_text = result["outputs"], result.get("debug_text", "")
+            output, debug_text = result["outputs"], result.get("debug", "")
         else:
             output, debug_text = result, ""
 
@@ -1066,7 +1066,7 @@ def run_node_route():
 
             return jsonify({
                 "output":       output,
-                "debug_text":   debug_text,
+                "debug":   debug_text,
                 "inputs":       node.get("Inputs", []),
                 "ExportPrompt": node.get("ExportPrompt"),
             })
@@ -1091,7 +1091,7 @@ def run_node_route():
 
         return jsonify({
             "output":       output,
-            "debug_text":   debug_text,
+            "debug":   debug_text,
             "inputs":       node.get("Inputs", []),
             "ExportPrompt": node.get("ExportPrompt"),
         })

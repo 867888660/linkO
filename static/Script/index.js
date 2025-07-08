@@ -9603,13 +9603,15 @@ function createSideWindow(item, isCheckMode = false) {
   });
   outputsHtml += '</div>';
   //创建一个debug区域
+  const debugText = (node.debug || '').replace(/\\n/g, '\n');
+
   let debugHtml = `
-  <div class="section-container">
-      <h3>Debug</h3>
-      <div class="debug-wrapper">
-          <textarea class="side-window-textarea" readonly>${node.debug}</textarea>
-      </div>
-  </div>`;  
+    <div class="section-container">
+        <h3>Debug</h3>
+        <div class="debug-wrapper">
+            <textarea class="side-window-textarea" style="white-space:pre-wrap;" readonly>${debugText}</textarea>
+        </div>
+    </div>`;
   // 组合所有 HTML 内容
   contentArea.innerHTML = tokenInfo + inputsHtml + promptHtml + outputsHtml + debugHtml ;
 
