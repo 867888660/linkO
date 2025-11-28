@@ -1,0 +1,1073 @@
+.info-bar {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 10px 20px;
+    background-color: #f5f5f5;
+    border-bottom: 1px solid #ddd;
+    gap: 20px;
+}
+
+.left-section {
+    justify-self: start;
+}
+
+.center-section {
+    justify-self: center;
+}
+
+.right-section {
+    justify-self: end;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.openagents-btn {
+    padding: 6px 15px;
+    background: #17a2b8;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.openagents-btn:hover {
+    background: #138496;
+}
+
+.message-select {
+    padding: 6px 10px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background: white;
+}
+
+.message-btn {
+    padding: 6px 15px;
+    background: #4a90e2;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s;
+}
+
+.message-btn:hover {
+    background: #357abd;
+}
+
+#createMessageBtn {
+    background: #28a745;
+}
+
+#createMessageBtn:hover {
+    background: #218838;
+}
+
+#saveMessageBtn {
+    background: #ffc107;
+    color: #212529;
+}
+
+#saveMessageBtn:hover {
+    background: #e0a800;
+}
+
+.agent-item {
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border-radius: 8px;
+    padding: 10px 16px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    width: 100%; /* 确保占满容器宽度 */
+}
+.agent-name {
+    font-size: 16px;
+    font-weight: 500;
+    width: 100%; /* 确保宽度为100% */
+    margin-bottom: 8px;
+    color: #333;
+    text-align: left; /* 确保文字靠左对齐 */
+}
+.controls-row {
+    display: flex;
+    align-items: left;
+    gap: 8px;
+    
+}
+.agent-select {
+    width: 160px; /* 减小宽度 */
+    padding: 6px 8px;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.color-picker {
+    width: 36px ;
+    height: 36px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.run-btn, .delete-btn, .confirms-btn, .delete-icon-btn {
+    padding: 6px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: opacity 0.3s;
+}
+
+.run-btn {
+    background-color: #4CAF50;
+    color: white;
+}
+
+.delete-btn, .delete-icon-btn {
+    background-color: #F44336;
+    color: white;
+}
+
+.confirms-btn {
+    background-color: #2196F3;
+    color: white;
+}
+
+.run-btn:hover, 
+.delete-btn:hover {
+    opacity: 0.8;
+}
+
+body, html {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f0f4f8;
+}
+.app-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+.main-content {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+}
+.sidebar {
+    width: 1100px;
+    background-color: #ffffff;
+    padding: 20px;
+    flex: 0 0 600px; /* 调整宽度as needed */
+    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    overflow-y: auto;
+}
+
+h1 {
+    font-size: 28px;
+    color: #2c3e50;
+    margin-top: 0;
+    margin-bottom: 20px;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+}
+
+.section {
+    margin-bottom: 30px;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    padding: 15px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+h2 {
+    font-size: 20px;
+    color: #34495e;
+    border-bottom: 2px solid #3498db;
+    padding-bottom: 10px;
+    margin-top: 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.create-btn {
+    background-color: #2ecc71;
+    color: white;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: background-color 0.3s ease;
+}
+
+.create-btn:hover {
+    background-color: #27ae60;
+}
+
+/* 外层容器样式 */
+.list-container {
+    max-height: 800px;
+    overflow-y: auto;
+    width: 600px;
+    padding: 10px;
+    box-sizing: border-box;
+}
+
+.item {
+    background-color: #ffffff;
+    border: 1px solid #e0e0e0;
+    padding: 12px;
+    margin-top: 10px;
+    border-radius: 6px;
+    transition: box-shadow 0.3s ease;
+}
+
+.item:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.agent-item, .limit-item {
+    display: flex;
+    align-items: center;
+    margin-bottom: 8px;
+    width: 500px;
+}
+
+.agent-item input, .limit-item input {
+    flex: 1;
+    margin-right: 8px;
+    padding: 8px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    transition: border-color 0.3s ease;
+}
+.suggestions-up {
+    border-bottom: none;
+    border-top: 1px solid #ccc;
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+}
+
+.agent-item input:focus, .limit-item input:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.limit-item span {
+    margin: 0 8px;
+    color: #7f8c8d;
+}
+
+.chat-section {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+    background-color: #ecf0f1;
+}
+
+#chatBox {
+    flex-grow: 1;
+    border: 1px solid #bdc3c7;
+    padding: 15px;
+    overflow-y: auto;
+    background-color: #ffffff;
+    border-radius: 8px;
+    margin-bottom: 15px;
+    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+}
+.chat-input {
+    display: flex;
+    align-items: flex-start;
+    background-color: #ffffff;
+    padding: 10px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+}
+
+#toInput {
+    width: 80px;
+    padding: 10px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    margin-right: 10px;
+    transition: border-color 0.3s ease;
+}
+
+#messageInput {
+    flex-grow: 1;
+    padding: 10px;
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    margin-right: 10px;
+    transition: border-color 0.3s ease, height 0.3s ease;
+    resize: none; /* 移除拖动角 */
+    min-height: 38px;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+#sendMessageBtn {
+    align-self: flex-start;
+    background-color: #3498db;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+.shortcut-bar {
+    position: absolute;
+    width: 250px;
+    background: white;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    display: none;
+}
+.shortcut-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+.shortcut-category {
+    display: block;
+    font-weight: bold;
+    padding: 5px 10px;
+    background: #f0f0f0;
+}
+.shortcut-item {
+    padding: 5px 20px;
+    cursor: pointer;
+}
+.shortcut-item:hover, .shortcut-item.selected {
+    background: #e0e0e0;
+}
+
+#sendMessageBtn:hover {
+    background-color: #2980b9;
+}
+
+
+#toInput:focus, #messageInput:focus {
+    border-color: #3498db;
+    outline: none;
+}
+
+.top-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    background-color: #f0f0f0;
+}
+.info-bar {
+    display: flex;
+    align-items: center;
+    padding: 10px;
+    justify-content: space-between; /* 保持这个，以确保左右两端对齐 */
+}
+
+.button-group {
+    display: flex;
+    align-items: center;
+}
+.port-info {
+    display: inline-block;
+    padding: 2px 8px;
+    background-color: #e0e0e0;
+    border-radius: 4px;
+}
+.save-btn, .openagents-btn {
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    text-align: center;
+    text-decoration: none;
+    display: inline-block;
+    font-size: 14px;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.3s;
+}
+
+.save-btn:hover {
+    background-color: #45a049;
+}
+
+.openagents-btn {
+    background-color: #059fcf;
+    margin-left: 10px; /* 只保留左边距 */
+}
+.openagents-btn:hover {
+    background-color: #006478;
+}
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1001;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+}
+.modal-content {
+    background-color: #fefefe;
+    margin: 15% auto;
+    padding: 20px;
+    border: 1px solid #888;
+    width: 300px;
+}
+.modal-btn {
+    margin: 10px;
+    padding: 5px 10px;
+}
+#fileNameInput {
+    width: 100%;
+    padding: 5px;
+    margin-top: 10px;
+}
+.shortcut-bar {
+    position: absolute;
+    width: 250px;
+    background: white;
+    border: 1px solid #ccc;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    display: none;
+    z-index: 1000;
+}
+.shortcut-list {
+    max-height: 300px;
+    overflow-y: auto;
+}
+.shortcut-category {
+    font-weight: bold;
+    padding: 5px 10px;
+    background: #f0f0f0;
+}
+.shortcut-item {
+    padding: 5px 20px;
+    cursor: pointer;
+}
+.shortcut-item:hover, .shortcut-item.selected {
+    background: #e0e0e0;
+}
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #95a5a6;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #7f8c8d;
+}
+.suggestions-container {
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #888 #f1f1f1;
+}
+
+.suggestions-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.suggestions-container::-webkit-scrollbar-track {
+    background: #f1f1f1;
+}
+
+.suggestions-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 4px;
+}
+
+.suggestions-container::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+/* Message Components
+-------------------------------------------------- */
+/* 消息包装器 */
+.message-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    margin: 20px 0;
+}
+
+/* 消息气泡基础样式 */
+.message-bubble {
+    max-width: 70%;
+    position: relative;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+/* 消息方向 */
+.message-wrapper .message-bubble.sent {
+    align-self: flex-end;
+}
+
+.message-wrapper .message-bubble.received {
+    align-self: flex-start;
+}
+/* 消息状态徽章基础样式 */
+.message-status {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
+}
+
+/* 新消息样式 */
+.message-status.new {
+    animation: subtle-pulse 2s infinite;
+}
+
+.message-status.new i {
+    font-size: 8px;
+    animation: blink 1.5s infinite;
+}
+
+/* 已读消息样式 */
+.message-status.received {
+    opacity: 0.9;
+}
+
+.message-status.received i {
+    font-size: 10px;
+}
+
+/* 更柔和的脉冲动画 */
+@keyframes subtle-pulse {
+    0% {
+        transform: translateY(-50%) scale(1);
+    }
+    50% {
+        transform: translateY(-50%) scale(1.05);
+    }
+    100% {
+        transform: translateY(-50%) scale(1);
+    }
+}
+
+/* 闪烁动画 */
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+/* 确保 header 使用相对定位以便正确定位徽章 */
+.message-inner .header {
+    position: relative;
+    padding: 8px 80px 8px 12px; /* 为徽章留出足够空间 */
+}
+
+/* 鼠标悬停效果 */
+.message-status:hover {
+    transform: translateY(-50%) scale(1.05);
+}
+
+/* 消息内容组件样式保持不变 */
+.message-bubble .header {
+    color: white;
+    padding: 10px 15px;
+    font-size: 14px;
+    font-weight: bold;
+}
+.message-bubble .content {
+    background-color: #f8f9fa;
+    padding: 15px;
+    font-size: 15px;
+    line-height: 1.5;
+}
+
+.message-bubble .timestamp {
+    font-size: 12px;
+    color: #888;
+    text-align: right;
+    padding: 4px 8px;
+    font-style: italic;
+}
+
+/* 限制消息样式 - 修复版 */
+.message-bubble.limited {
+    margin: 2px;  /* 为边框留出空间 */
+}
+
+.message-bubble.limited .message-inner {
+    position: relative;
+    background-color: #fff5f5;
+    border: 2px solid #ff4757;
+    border-radius: 8px;  /* 确保圆角完整显示 */
+    overflow: visible;   /* 允许内容和边框完全显示 */
+}
+
+/* 醒目的头部样式 */
+.message-bubble.limited .header {
+    background-color: #ff4757;
+    color: white;
+    border-radius: 6px 6px 0 0;  /* 适应内部圆角 */
+    padding: 8px 120px 8px 15px; /* 右侧为警告文本留空间 */
+    position: relative;
+}
+
+.message-bubble.limited .header::after {
+    content: '⚠️ 访问受限';
+    position: absolute;
+    right: 15px;
+    top: 50%;
+    transform: translateY(-50%);
+    background-color: white;
+    color: #ff4757;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+/* 内容区域样式 */
+.message-bubble.limited .content {
+    background-color: #fff5f5;
+    padding: 15px;
+    padding-bottom: 35px;  /* 为底部警告文本留空间 */
+    position: relative;
+    border-radius: 0 0 6px 6px;  /* 适应内部圆角 */
+}
+
+.message-bubble.limited .content::after {
+    content: '⚠️ 该消息的显示范围已受限';
+    position: absolute;
+    bottom: 10px;
+    left: 15px;
+    color: #ff4757;
+    font-size: 13px;
+    font-weight: bold;
+}
+
+/* 时间戳样式 */
+.message-bubble.limited .timestamp {
+    color: #ff4757;
+    padding: 5px 15px;
+}
+
+/* 确保操作按钮正常显示 */
+.message-bubble.limited .message-actions {
+    z-index: 10;
+}
+.file-path {
+    display: inline-flex;
+    align-items: center;
+    font-family: monospace;
+    color: #2980b9;
+    background: #f8f9fa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin: 0 2px;
+    cursor: pointer;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+    font-style: normal;
+    text-decoration: none;
+    word-break: break-all; /* 允许在任何字符处换行 */
+    line-height: 1.5;
+}
+
+.file-path:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #2c3e50;
+}
+
+.file-path i {
+    margin-right: 8px;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+.file-path i.fa-folder {
+    color: #f39c12;
+}
+
+.file-path i.fa-file {
+    color: #3498db;
+}
+.url-link {
+    display: inline-flex;
+    align-items: center;
+    color: #2980b9;
+    background: #f8f9fa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin: 0 2px;
+    cursor: pointer;
+    border: 1px solid #e9ecef;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    word-break: break-all;
+    line-height: 1.5;
+}
+
+.url-link:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #2c3e50;
+    text-decoration: none;
+}
+
+.url-link i {
+    margin-right: 8px;
+    font-size: 14px;
+    color: #3498db;
+}
+
+
+/* 操作按钮组件
+-------------------------------------------------- */
+/* 操作按钮组件样式 */
+.message-wrapper .message-actions {
+    position: absolute;
+    top: -40px;
+    display: none;
+    gap: 8px;
+    background: white;
+    padding: 5px 10px;
+    border-radius: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    z-index: 200;
+}
+/* 添加一个透明的区域来扩展悬停范围 */
+.message-wrapper::before {
+    content: '';
+    position: absolute;
+    top: -45px; /* 比按钮位置略高一些 */
+    left: 0;
+    right: 0;
+    height: 45px; /* 覆盖按钮区域的高度 */
+    background: transparent;
+}
+/* 根据消息方向调整按钮位置 */
+.message-bubble.sent .message-actions {
+    right: 0;
+}
+
+.message-bubble.received .message-actions {
+    left: 0;
+}
+/* 新增：内层容器样式 */
+.message-bubble .message-inner {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+/* 按钮样式 */
+.action-btn {
+    padding: 5px 10px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: white;
+    font-size: 14px;
+    transition: transform 0.2s;
+}
+
+.edit-btn { 
+    background-color: #3498db; 
+}
+
+.delete-btn { 
+    background-color: #e74c3c; 
+}
+.visibility-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+.visibilitys-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+.delete-icon-btn{
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+}
+
+.confirm-btn { 
+    background-color: #2ecc71; 
+}
+
+/* 悬停效果 */
+.message-wrapper:hover .message-bubble {
+    transform: scale(1.02);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* 修改悬停选择器 */
+.message-wrapper:hover .message-actions,
+.message-actions:hover {
+    display: flex;
+}
+/* 修改悬停效果 */
+.message-wrapper:hover .message-inner {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+.action-btn:hover {
+    transform: scale(1.1);
+}
+
+/* 编辑表单组件
+-------------------------------------------------- */
+.edit-form {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: white;
+    padding: 25px;
+    border-radius: 15px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+    width: 90%;
+    max-width: 500px;
+}
+
+.edit-form h3 {
+    margin: 0 0 20px 0;
+    color: #2c3e50;
+}
+
+/* 表单输入框 */
+.edit-form input,
+.editable-div {
+    border: 1px solid #ccc;
+    padding: 8px;
+    min-height: 100px;
+    white-space: pre-wrap;
+  }
+  
+  .highlight-blue {
+    color: rgb(23, 155, 255);
+    font-weight: bold;
+  }
+  
+  .highlight-red {
+    color: rgb(255, 73, 73);
+    font-weight: bold;
+    text-decoration: none; /* 禁用红色下划线 */
+  }
+
+/* 表单按钮 */
+.form-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.form-buttons button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.form-buttons button:hover {
+    transform: translateY(-2px);
+}
+
+/* 聊天容器
+-------------------------------------------------- */
+#chat-messages {
+    display: flex;
+    flex-direction: column;
+    padding: 40px 10px 10px 10px;
+    background-color: #ecf0f1;
+    border-radius: 8px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
+}
+
+
+#dropZone {
+    border: 2px dashed #ccc;
+    border-radius: 20px;
+    width: 100%;
+    margin: 20px 0;
+    padding: 20px;
+    text-align: center;
+    color: #ccc;
+    font-size: 18px;
+    transition: all 0.3s ease;
+}
+
+#dropZone.highlight {
+    border-color: #333;
+    background-color: #f0f0f0;
+    color: #333;
+}
+#dragOverlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 9999;
+}
+
+#dragOverlay div {
+    background-color: white;
+    padding: 20px;
+    border-radius: 10px;
+    font-size: 24px;
+    text-align: center;
+}
+
+.chat-box {
+    border: 1px solid #aaa;
+    padding: 10px;
+    flex-grow: 1;
+    overflow-y: auto;
+    background-color: #e0e0e0;
+    border-radius: 10px;
+    box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    width: calc(100% - 100px); /* 保持两边各50px的间距 */
+    margin: 0 auto; /* 水平居中 */
+}
+
+.message {
+    margin: 20px 0; /* 增加聊天气泡之间的垂直间隔 */
+    border-radius: 10px;
+    background-color: #f0f0f0;
+    border-top: 30px solid;
+    box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.2);
+    position: relative;
+    padding: 20px;
+    transition: transform 0.2s;
+    width: calc(100% - 100px); /* 缩小聊天气泡的宽度 */
+    max-width: 800px; /* 限制最大宽度 */
+    margin-left: auto;
+    margin-right: auto; /* 水平居中 */
+}
+
+.message:hover {
+    transform: scale(1.02);
+    box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.3);
+}
+
+.message.normal {
+    border-top-color: #2e8b57;
+}
+
+.message.llm {
+    border-top-color: #4682b4;
+}
+
+.message.ifnode {
+    border-top-color: #db7093;
+}
+
+.message.trigger {
+    border-top-color: #ffa500;
+}
+
+.message-header {
+    font-weight: bold;
+    margin: 0;
+    color: white;
+    padding: 5px;
+    position: absolute;
+    top: -30px;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+}
+
+.input-section, .output-section {
+    margin-top: 10px;
+}
+
+.section-title {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.input, .output {
+    padding: 10px;
+    margin: 10px 0;
+    border-radius: 10px;
+    display: block;
+    box-shadow: 0px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.input-name, .output-name {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.input.string, .output.string {
+    background-color: #66cdaa;
+    color: #333;
+}
+
+.input.num, .output.num {
+    background-color: #5f9ea0;
+    color: #333;
+}
+
+.input.boolean, .output.boolean {
+    background-color: #9370db;
+    color: #333;
+}
+
+.input.trigger, .output.trigger {
+    background-color: #d45c00;
+    color: #333;
+}
+
+.new-message {
+    text-align: center;
+    font-weight: bold;
+    margin: 20px 0;
+    color: #333;
+}

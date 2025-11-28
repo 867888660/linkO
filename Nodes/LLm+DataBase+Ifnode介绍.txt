@@ -1,0 +1,60 @@
+所有节点的Inputs和Outputs接口都可以自由创建和定制，通过`{{input}}`语法引入某个input
+
+#### 1. LLM节点 (`NodeKind: "LLm"`)
+**核心功能**：执行大语言模型推理
+**关键配置**：
+- `SystemPrompt`: 系统角色设定
+- `prompt`: 主示词模板，支持`{{变量名}}`占位符
+- 模型参数：`max_tokens`、`temperature`、`Top_p`等
+
+**接口灵活性**：可根据需要创建任意数量的输入输出，输入通常对应SystemPrompt,prompt中的占位符变量，输出可以是处理结果的不同部分。
+Outputs可以编辑你需要输出的节点。你可以直接输出自然语言，也可以用json输出用Outputs
+
+#### 2. 数据库节点 (`NodeKind: "DataBase"`)
+**核心功能**：数据库查询、增删改操作
+
+关键配置output数组：
+DataBaseSubjectArray: 查询字段名数组 （支持多个字段，数组可扩展）
+DataBaseContentArray: 查询内容数组 （与字段数组一一对应，支持占位符）
+DataBaseLogicKind: 多条件逻辑关系（AND/OR）
+DataBaseIsExactArray: 每个条件的匹配方式数组 （每个字段可独立设置精确/模糊匹配）
+selectBox5: 操作类型（查询/新增/修改/删除）
+
+**数组扩展能力**：
+- 三个核心数组（Subject/Content/IsExact）长度必须保持一致
+- 可以添加任意数量的查询条件，每个条件对应数组中的一个元素
+- 输入输出接口可根据查询复杂度自由定制
+
+#### 3. 条件判断节点 (`NodeKind: "IfNode"`)
+**核心功能**：基于多条件逻辑控制流程分支
+
+**支持的比较运算**：
+- Boolean: `true`/`false`
+- Num: `>`/`<`/`==`/`>=`/`<=`/`!=`
+- String: `include`/`exclude`/`empty`/`no empty`
+
+关键配置output数组：
+
+IfLogicSubjectArray: 判断字段名列表 （支持多个判断条件，数组可扩展）
+IfLogicContentArray: 比较表达式数组 （与字段列表一一对应）
+IfLogicKind: 条件组合逻辑（AND/OR
+
+**多条件支持**：
+- 两个核心数组（Subject/Content）长度必须一致
+- 可以设置任意数量的判断条件，所有条件通过AND/OR逻辑组合
+- 输入接口需要与判断字段相匹配，输出通常是Trigger类型用于流程控制
+
+### 接口设计原则
+
+**输入输出自由创建**：
+- 每个节点的`Inputs`和`Outputs`数组都可以根据具体需求自由定义
+- 输入输出的数量、类型、名称都可以自定义
+- 唯一要求是接口定义要与节点的功能逻辑相匹配
+
+**匹配规则**：
+- LLM节点：输入对应prompt占位符，输出对应生成内容的不同部分
+- DataBase节点：输入提供查询参数，输出返回查询结果
+- IfNode节点：输入提供判断数据，输出提供流程控制触发器
+
+### 变量占位符机制
+所有节点都支持`{{变量名}}`语法，用于引用其他节点的输出或预定义变量，实现节点间数据传递。数组配置中的内容也支持占位符语法。
