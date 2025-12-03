@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。\n\n一个同科的动物是**霓虹灯鱼**（也叫红绿灯鱼，学名：Paracheirodon innesi）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "食人鱼"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。  \n一个同科的动物是**霓虹灯鱼**（红绿灯鱼，学名：*Paracheirodon innesi*）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。\n\n一个同科的动物是**霓虹灯鱼**（也叫红绿灯鱼，学名：Paracheirodon innesi）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。  \n一个同科的动物是**霓虹灯鱼**（红绿灯鱼，学名：*Paracheirodon innesi*）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。  \n一个同科的动物是**霓虹灯鱼**（红绿灯鱼，学名：*Paracheirodon innesi*）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "食人鱼"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "食人鱼属于**脂鲤科**（Characidae）。  \n一个同科的动物是**霓虹灯鱼**（红绿灯鱼，学名：*Paracheirodon innesi*）。"
+        }
+      ]
+    }
+  ]
+]

@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "鲨鱼并不是单一的一个科，而是一类软骨鱼类的统称，属于**软骨鱼纲**（Chondrichthyes）下的**鲨总目**（Selachimorpha），包含多个目、科、属。\n\n不过，如果我们以常见的**大白鲨**为例，它属于**鼠鲨科**（Lamnidae）。\n\n- **大白鲨的科**：鼠鲨科（Lamnidae）  \n- **同科的另一个动物**：灰鲭鲨（Isurus oxyrinchus）\n\n所以，答案是：\n\n- **科**：鼠鲨科  \n- **同科动物**：灰鲭鲨\n\n如果你指的是其他种类的鲨鱼（比如虎鲨、锤头鲨等），它们所属的科会不同。欢迎提供具体种类以获得更准确的回答！"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鲨鱼"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你提到的动物是**鲨鱼**，但鲨鱼是一个包含多个科的庞大类群。若以最常见的**大白鲨**为代表：\n\n- **所属科**：鼠鲨科（Lamnidae）  \n- **同科的另一种动物**：灰鲭鲨（Isurus oxyrinchus）\n\n因此，答案是：  \n**鼠鲨科**，同科动物例如**灰鲭鲨**。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鲨鱼并不是单一的一个科，而是一类软骨鱼类的统称，属于**软骨鱼纲**（Chondrichthyes）下的**鲨总目**（Selachimorpha），包含多个目、科、属。\n\n不过，如果我们以常见的**大白鲨**为例，它属于**鼠鲨科**（Lamnidae）。\n\n- **大白鲨的科**：鼠鲨科（Lamnidae）  \n- **同科的另一个动物**：灰鲭鲨（Isurus oxyrinchus）\n\n所以，答案是：\n\n- **科**：鼠鲨科  \n- **同科动物**：灰鲭鲨\n\n如果你指的是其他种类的鲨鱼（比如虎鲨、锤头鲨等），它们所属的科会不同。欢迎提供具体种类以获得更准确的回答！"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你提到的动物是**鲨鱼**，但“鲨鱼”是一个统称，包含多个科。如果以**大白鲨**为例：\n\n- **所属科**：鼠鲨科（Lamnidae）  \n- **同科的另一种动物**：**灰鲭鲨**（Isurus oxyrinchus）\n\n所以答案是：  \n**鼠鲨科**，同科动物例如**灰鲭鲨**。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你提到的动物是**鲨鱼**，但鲨鱼是一个包含多个科的庞大类群。若以最常见的**大白鲨**为代表：\n\n- **所属科**：鼠鲨科（Lamnidae）  \n- **同科的另一种动物**：灰鲭鲨（Isurus oxyrinchus）\n\n因此，答案是：  \n**鼠鲨科**，同科动物例如**灰鲭鲨**。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "鲨鱼"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "你提到的动物是**鲨鱼**，但“鲨鱼”是一个统称，包含多个科。如果以**大白鲨**为例：\n\n- **所属科**：鼠鲨科（Lamnidae）  \n- **同科的另一种动物**：**灰鲭鲨**（Isurus oxyrinchus）\n\n所以答案是：  \n**鼠鲨科**，同科动物例如**灰鲭鲨**。"
+        }
+      ]
+    }
+  ]
+]

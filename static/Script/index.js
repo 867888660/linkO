@@ -884,7 +884,8 @@ G6.registerNode('fileNode', {
     {
       cfg.Outputs=[];
     }
-    maxHeight = Math.max(cfg.Inputs.length, cfg.Outputs.length)  
+    maxHeight = Math.max(cfg.Inputs.length, cfg.Outputs.length) 
+     //
     let maxWidth = 0;
     cfg.draggable = false;
     cfg.Inputs.map((input, index) => {
@@ -938,8 +939,11 @@ G6.registerNode('fileNode', {
       group.removeChild(textShape)
 
     }); // Inputs 标题文字
-    maxWidth = maxWidth+120;
-    cfg.height = maxHeight* 20;
+    maxWidth = maxWidth + 140; // 增加基础宽度：(左右padding 24*2) + (锚点预留 16*2) + (中间间距)
+    // 确保有一个最小宽度，避免内容很少时卡片太窄不好看
+    maxWidth = Math.max(maxWidth, 200); 
+    
+    cfg.height = maxHeight * 28;
     cfg.width = maxWidth;
     if(cfg.IsHovor==true || cfg.IsBlock==true ||cfg.IsError==true)
     {
@@ -965,7 +969,7 @@ G6.registerNode('fileNode', {
           x: -5,
           y: -5,
           width: maxWidth + 10,
-          height: 70 + maxHeight * 20,
+          height: 70 + maxHeight * 24.3,
           stroke: TempColor, // 淡蓝色边框
           lineWidth: 3,
           radius: [10, 10],
@@ -983,37 +987,54 @@ G6.registerNode('fileNode', {
         x: 0,
         y: 0,
         width: maxWidth,
-        height: 60 + maxHeight * 20,
-        stroke: 'black',
-        radius: [8, 8],
-        fill: 'rgb(238,241,243)', // todo 节点背景框颜色
+        height: 60 + maxHeight * 24.3,
+        stroke: 'rgba(0,0,0,0.08)', // 极细的淡灰边框，更现代
+        lineWidth: 1,
+        radius: 12, // 增大圆角，更有 iOS 卡片感
+        fill: '#ffffff', // 纯白底色，干净
+        shadowColor: 'rgba(0, 0, 0, 0.08)', // 柔和的弥散阴影
+        shadowBlur: 16,
+        shadowOffsetX: 0,
+        shadowOffsetY: 4,
       },
       name: 'rect',
     });// 最外层灰色的框
     const shape = group.findById('rect'); // 通过 id 获取矩形图形
     let TitleColor = 'rgb(3,197,136)';
+    // 映射苹果风格的颜色 (保持原有色相，但调整饱和度和明度以适应 Apple Design)
+    let HeaderFill = '#34C759'; // Default Green (Apple Style)
+    
     if (cfg.NodeKind == undefined) {
       cfg.NodeKind = 'Normal';
     }
     if (cfg.IsLoadSuccess == false) {
-      TitleColor = '#ff0000'; // Set TitleColor to red if IsLoadSuccess is false
+      TitleColor = '#ff0000'; 
+      HeaderFill = '#FF3B30'; // Apple Red
     } else if (cfg.NodeKind.includes('LLm')) {
       TitleColor = '#009fcb';
+      HeaderFill = '#007AFF'; // Apple Blue
     } else if (cfg.NodeKind == 'IfNode') {
       TitleColor = '#b300ff';
+      HeaderFill = '#AF52DE'; // Apple Purple
     } else if (cfg.NodeKind.includes('passivityTrigger')) {
       TitleColor = '#ff9100';
+      HeaderFill = '#FF9500'; // Apple Orange
     } else if (cfg.NodeKind.includes('ArrayTrigger')) {
       TitleColor = '#e75500';
+      HeaderFill = '#FF2D55'; // Apple Pink/Red
+    } else {
+        // Normal / Default
+        HeaderFill = '#34C759'; // Apple Green
     }
+
     group.addShape('rect', {
       attrs: {
         x: 0,
         y: 0,
         width: maxWidth,
-        height: 40,
-        radius: [8, 8, 0, 0],
-        fill: TitleColor, // todo 节点标题栏颜色
+        height: 44, // 稍微增加标题栏高度，留出呼吸感
+        radius: [12, 12, 0, 0], // 顶部的圆角跟随外框
+        fill: HeaderFill, // 使用优化后的颜色
       },
       capture: false,
       name: 'rect',
@@ -1048,47 +1069,48 @@ G6.registerNode('fileNode', {
     
     group.addShape('text', {
       attrs: {
-        x: 30,
-        y: 20,
+        x: 24, // 稍微增加左边距
+        y: 22, // 垂直居中 (44/2)
         //text: cfg.name.replace(".py", ""),
         text: cfg.label,
         fill: '#fff',
         textBaseline: 'middle',
-        fontWeight: 600,
-        fontSize: 16,
-        fontFamily: 'Microsoft YaHei',
+        fontWeight: 600, // Semibold
+        fontSize: 15, // 稍微调小一点，更精致
+        fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif', // 苹果字体栈
         textAlign: 'left',
+        shadowColor: 'rgba(0,0,0,0.1)', // 增加一点文字投影，增加层次
+        shadowBlur: 2,
+        shadowOffsetX: 0,
+        shadowOffsetY: 1
       },
       capture: false,
       name: 'nameText',
     }); // 文件名的文字
     cfg.Inputs.map((input, index) => {
       let Temp=''
-      // 定义每行显示的最大字符数
       const maxDisplayLength = 50;
-
-    if(input.IsLabel == true) {
-        if(input.Kind.includes('String')) {
-            Temp = ':' + truncateTextWithEllipsis(input.Context, maxDisplayLength);
-        }
-        if(input.Kind == 'Num') {
-            Temp = ':' + input.Num;
-        }
-        if(input.Kind == 'Boolean') {
-            Temp = ':' + input.Boolean;
-        }
-    }
-
+      if(input.IsLabel == true) {
+          if(input.Kind.includes('String')) {
+              Temp = ':' + truncateTextWithEllipsis(input.Context, maxDisplayLength);
+          }
+          if(input.Kind == 'Num') {
+              Temp = ':' + input.Num;
+          }
+          if(input.Kind == 'Boolean') {
+              Temp = ':' + input.Boolean;
+          }
+      }
       group.addShape('text', {
         attrs: {
-          x: 15,
-          y: 54 + index * 20,
+          x: 16, // 左对齐
+          y: 58 + index * 24, // 增加行高间距 (20->24)，增加呼吸感
           text: input.name+Temp, // 使用 input.Id 替代 name
-          fill: '#000000',
+          fill: '#1d1d1f', // Apple Dark Gray
           textBaseline: 'top',
-          fontWeight: 600,
-          fontSize: 14,
-          fontFamily: 'Microsoft YaHei',
+          fontWeight: 500, // Medium
+          fontSize: 13, // 更加精致的字号
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
           textAlign: 'left',
         },
         capture: false,
@@ -1099,14 +1121,14 @@ G6.registerNode('fileNode', {
     cfg.Outputs.map((output, index) => {
       group.addShape('text', {
         attrs: {
-          x: maxWidth -15,
-          y: 54 + index * 20,
+          x: maxWidth - 16, // 右对齐
+          y: 58 + index * 24, // 增加行高间距
           text: output.name,
-          fill: '#000000',
+          fill: '#1d1d1f', // Apple Dark Gray
           textBaseline: 'top',
-          fontWeight: 600,
-          fontSize: 14,
-          fontFamily: 'Microsoft YaHei',
+          fontWeight: 500, // Medium
+          fontSize: 13,
+          fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif',
           textAlign: 'right',
         },
         capture: false,
@@ -1141,7 +1163,7 @@ G6.registerNode('fileNode', {
                     attrs: {
                         r: 8, // 外圈的半径比内圈大，可以根据需要调整大小
                         x: 6, // 固定在左侧
-                        y: (60 + maxHeight * 20) * anchorPos[1],
+                        y: 58 + i * 24 + 6, // 精确对齐文本中心：y(58) + 字体大小的一半(13/2≈6.5)
                         fill: 'none', // 通常外圈填充为透明
                         stroke: '#E80000', // 使用外圈的颜色
                         lineWidth: 2 // 设置外圈边框粗细为 2，可以根据需要调整
@@ -1152,7 +1174,7 @@ G6.registerNode('fileNode', {
                     attrs: {
                         r: 6,
                         x: 6, // 固定在左侧
-                        y: (60 + maxHeight * 20) * anchorPos[1],
+                        y: 58 + i * 24 + 6, // 精确对齐文本中心：y(58) + 字体大小的一半(13/2≈6.5)
 
                         fill: circleColor,
                         stroke: strokecolor,
@@ -1187,7 +1209,7 @@ G6.registerNode('fileNode', {
                   attrs: {
                       r: 0,
                       x: -3, // 固定在左侧
-                      y: (60 + maxHeight * 20) * anchorPos[1],
+                      y: 58 + i * 24 + 6,
 
                       fill: circleColor,
                       stroke: strokecolor,
@@ -1211,7 +1233,7 @@ G6.registerNode('fileNode', {
               width: 40, // 输入框的宽度
               height: 20, // 输入框的高度
               x: 10, // 位置 X
-              y: (60 + maxHeight * 20) * anchorPos[1], // 位置 Y
+              y: (60 + maxHeight * 24.3) * anchorPos[1], // 位置 Y
               fill: '#fff', // 背景颜色
               stroke: '#5F95FF', // 边框颜色
             },
@@ -1221,7 +1243,7 @@ G6.registerNode('fileNode', {
             attrs: {
               text: '0', // 默认值
               x: 15, // 位置 X，稍微偏移以居中显示
-              y: (60 + maxHeight * 20) * anchorPos[1] + 15, // 位置 Y，稍微偏移以居中显示
+              y: (60 + maxHeight * 24.3) * anchorPos[1] + 15, // 位置 Y，稍微偏移以居中显示
               fill: '#333', // 文本颜色
               textAlign: 'left', // 文本对齐方式
               textBaseline: 'middle', // 文本基线
@@ -1256,7 +1278,7 @@ G6.registerNode('fileNode', {
                     attrs: {
                       r: 6,
                       x: maxWidth - 7, // 固定在右侧
-                      y: (60 + maxHeight * 20) * anchorPos[1],
+                      y: 58 + (i - cfg.Inputs.length) * 24 + 6,
                       fill: circleColor,
                       stroke: strokecolor,
                       lineWidth: 3 // 设置边框粗细为 3
@@ -1305,21 +1327,28 @@ G6.registerNode('fileNode', {
 
       }
     }) // 圆圈锚点
-    //从新定义anchorPoints，位置为6/maxWidth与maxWidth - 7/maxWidth
+  //从新定义anchorPoints，位置为6/maxWidth与maxWidth - 7/maxWidth
     cfg.anchorPoints.forEach((anchorPos, i) => {
-      if(i<cfg.Inputs.length)
-      {
+      // 精确计算每个点的 y 坐标比例，确保与圆圈绘制位置完全一致
+      const yPos = (58 + i * 24 + 6) / (60 + maxHeight * 24.3);
 
-        anchorPos[0] = 6/maxWidth;
-      }
-      else if(i>=cfg.Inputs.length && i<cfg.Inputs.length+cfg.Outputs.length)
+      if(i < cfg.Inputs.length)
       {
-        anchorPos[0]= (maxWidth - 7)/maxWidth;
+        anchorPos[0] = 6/maxWidth;
+        // 只有 Inputs 和 Outputs 需要重新计算 y，因为它们是按列表排列的
+        anchorPos[1] = (58 + i * 24 + 6) / (60 + maxHeight * 24.3);
       }
-      else if(i==cfg.Inputs.length+cfg.Outputs.length)
+      else if(i >= cfg.Inputs.length && i < cfg.Inputs.length + cfg.Outputs.length)
+      {
+        anchorPos[0] = (maxWidth - 7)/maxWidth;
+        // 输出点的索引需要减去输入点的数量才能对应到正确的行
+        const outputIndex = i - cfg.Inputs.length;
+        anchorPos[1] = (58 + outputIndex * 24 + 6) / (60 + maxHeight * 24.3);
+      }
+      else if(i == cfg.Inputs.length + cfg.Outputs.length)
       {
         anchorPos[0]= 10/maxWidth;
-        anchorPos[1]=10/(60 + maxHeight * 20);
+        anchorPos[1]= 10/(60 + maxHeight * 24.3);
       }
     });
     //console.log('cfg',cfg.anchorPoints)
@@ -5662,7 +5691,128 @@ function CreatDetaile(Item)
                               ChangeDatas(dataTemp);
                               console.warn('[DB] success: ChangeDatas called');
                               console.log('Data:', dataTemp);
-                              
+
+                              // 数据库列加载成功后，立即刷新该节点的所有 Outputs 下拉（与另一处逻辑保持一致）
+                              try {
+                                setTimeout(() => {
+                                  try {
+                                    if (!window.__DBColumnsLoadedListenerInstalled) {
+                                      document.addEventListener('DatabaseColumnsLoaded', function(ev) {
+                                        try {
+                                          const detail   = ev && ev.detail ? ev.detail : {};
+                                          const nodeId   = detail.nodeId;
+                                          console.warn('[DB] DatabaseColumnsLoaded fired', {
+                                            rawDetail: detail,
+                                            nodeId,
+                                          });
+                                          if (nodeId == null) {
+                                            console.warn('[DB] skip: nodeId is null/undefined');
+                                            return;
+                                          }
+                                          const data     = graph.save();
+                                          const tempNode = (data.nodes || []).find(n => n.id == nodeId);
+                                          console.warn('[DB] tempNode found?', !!tempNode, tempNode);
+                                          if (!tempNode) return;
+                                          const CurrentCols      = (tempNode && typeof tempNode.TempColumns === 'object') ? tempNode.TempColumns : {};
+                                          const defaultTableKey  = tempNode?.Inputs?.[1]?.Context || null; // 仅对 ArrayTrigger_DataBase 有意义
+                                          const nodeKind         = tempNode.NodeKind || '';
+                                          const selector    = 'select.db-output-group-select[data-node-id="' + nodeId + '"]';
+                                          const selects     = document.querySelectorAll(selector);
+                                          console.warn('[DB] handler context', {
+                                            defaultTableKey,
+                                            nodeKind,
+                                            TempColumnsKeys: CurrentCols ? Object.keys(CurrentCols) : null,
+                                            selector,
+                                            selectsLength: selects.length,
+                                          });
+                                          selects.forEach((selectEl, idx) => {
+                                            // 先根据 output 配置计算当前下拉应绑定的“表名”(DataBase) 或使用旧逻辑(ArrayTrigger_DataBase)
+                                            const outIdAttr = selectEl.getAttribute('data-output-id');
+                                            let outputConfig = null;
+                                            if (Array.isArray(tempNode.Outputs)) {
+                                              outputConfig = tempNode.Outputs.find(out => out && out.Id == outIdAttr) || null;
+                                            }
+                                            let tableKey = null;
+                                            if (nodeKind === 'ArrayTrigger_DataBase') {
+                                              // 旧节点依然从 Inputs[1].Context 读取 sheet 名
+                                              tableKey = defaultTableKey;
+                                            } else if (nodeKind === 'DataBase') {
+                                              // 新 DataBase 节点：selectBox1 存的是 sheet / 表名
+                                              tableKey = outputConfig && outputConfig.selectBox1 ? outputConfig.selectBox1 : null;
+                                            }
+                                            console.warn('[DB] updating select', {
+                                              index: idx,
+                                              element: selectEl,
+                                              beforeValue: selectEl.value,
+                                              tableKey,
+                                              outId: outIdAttr,
+                                            });
+                                            const prevValue = selectEl.value;
+                                            // 清空并重建选项
+                                            selectEl.innerHTML = '';
+                                            const optAll = document.createElement('option');
+                                            optAll.value = 'All';
+                                            optAll.text  = 'All';
+                                            selectEl.appendChild(optAll);
+                                            const addedKeys = new Set();
+                                            if (tableKey && CurrentCols && CurrentCols[tableKey]) {
+                                              const arr = CurrentCols[tableKey];
+                                              if (Array.isArray(arr)) {
+                                                arr.forEach(item => {
+                                                  if (Array.isArray(item)) {
+                                                    item.forEach(subItem => populateSelectBoxFromObject(addedKeys, subItem, "", selectEl));
+                                                  } else {
+                                                    populateSelectBoxFromObject(addedKeys, item, "", selectEl);
+                                                  }
+                                                });
+                                              }
+                                            }
+                                            console.warn('[DB] options before rebuild', {
+                                              tableKey,
+                                              CurrentCols,
+                                            });
+                                            // 再插入列的 key
+                                            if (CurrentCols) {
+                                              Object.keys(CurrentCols).forEach(k => {
+                                                const o = document.createElement('option');
+                                                o.value = k;
+                                                o.text  = k;
+                                                selectEl.appendChild(o);
+                                              });
+                                            }
+                                            // 恢复之前保存或当前选择
+                                            const savedVal = outputConfig && outputConfig.selectBox1 != null
+                                              ? outputConfig.selectBox1
+                                              : null;
+                                            const values = Array.from(selectEl.options).map(o => o.value);
+                                            if (savedVal && values.includes(savedVal)) {
+                                              console.warn('[DB] apply savedVal to select', { savedVal });
+                                              selectEl.value = savedVal;
+                                            } else if (values.includes(prevValue)) {
+                                              console.warn('[DB] keep previous value for select', { prevValue });
+                                              selectEl.value = prevValue;
+                                            } else {
+                                              console.warn('[DB] fallback to first option', {
+                                                options: values,
+                                              });
+                                            }
+                                            // 触发一次 change，保证下游依赖更新
+                                            selectEl.dispatchEvent(new Event('change'));
+                                          });
+                                        } catch (errHandler) {
+                                          console.warn('DatabaseColumnsLoaded handler error:', errHandler);
+                                        }
+                                      });
+                                      window.__DBColumnsLoadedListenerInstalled = true;
+                                    }
+                                  } catch (_) {}
+                                  // 仅在成功时广播当前节点的刷新事件
+                                  document.dispatchEvent(new CustomEvent('DatabaseColumnsLoaded', { detail: { nodeId: id, columns: data.columns } }));
+                                }, 0);
+                              } catch (e) {
+                                console.warn('Outputs refresh skipped:', e);
+                              }
+
                           } else {
                               console.error('Error:', data.message,data);
                               pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
@@ -6679,18 +6829,54 @@ const database = graph.save();
                                     if (!window.__DBColumnsLoadedListenerInstalled) {
                                       document.addEventListener('DatabaseColumnsLoaded', function(ev) {
                                         try {
-                                          console.warn('[DB]asda')
                                           const detail   = ev && ev.detail ? ev.detail : {};
                                           const nodeId   = detail.nodeId;
-                                          if (nodeId == null) return;
+                                          console.warn('[DB] DatabaseColumnsLoaded fired', {
+                                            rawDetail: detail,
+                                            nodeId,
+                                          });
+                                          if (nodeId == null) {
+                                            console.warn('[DB] skip: nodeId is null/undefined');
+                                            return;
+                                          }
                                           const data     = graph.save();
                                           const tempNode = (data.nodes || []).find(n => n.id == nodeId);
+                                          console.warn('[DB] tempNode found?', !!tempNode, tempNode);
                                           if (!tempNode) return;
-                                          const CurrentCols = (tempNode && typeof tempNode.TempColumns === 'object') ? tempNode.TempColumns : {};
-                                          const tableKey    = tempNode?.Inputs?.[1]?.Context || null;
+                                          const CurrentCols      = (tempNode && typeof tempNode.TempColumns === 'object') ? tempNode.TempColumns : {};
+                                          const defaultTableKey  = tempNode?.Inputs?.[1]?.Context || null; // 仅对 ArrayTrigger_DataBase 有意义
+                                          const nodeKind         = tempNode.NodeKind || '';
                                           const selector    = 'select.db-output-group-select[data-node-id=\"' + nodeId + '\"]';
                                           const selects     = document.querySelectorAll(selector);
-                                          selects.forEach((selectEl) => {
+                                          console.warn('[DB] handler context', {
+                                            defaultTableKey,
+                                            nodeKind,
+                                            TempColumnsKeys: CurrentCols ? Object.keys(CurrentCols) : null,
+                                            selector,
+                                            selectsLength: selects.length,
+                                          });
+                                          selects.forEach((selectEl, idx) => {
+                                            // 先根据 output 配置计算当前下拉应绑定的“表名”(DataBase) 或使用旧逻辑(ArrayTrigger_DataBase)
+                                            const outIdAttr = selectEl.getAttribute('data-output-id');
+                                            let outputConfig = null;
+                                            if (Array.isArray(tempNode.Outputs)) {
+                                              outputConfig = tempNode.Outputs.find(out => out && out.Id == outIdAttr) || null;
+                                            }
+                                            let tableKey = null;
+                                            if (nodeKind === 'ArrayTrigger_DataBase') {
+                                              // 旧节点依然从 Inputs[1].Context 读取 sheet 名
+                                              tableKey = defaultTableKey;
+                                            } else if (nodeKind === 'DataBase') {
+                                              // 新 DataBase 节点：selectBox1 存的是 sheet / 表名
+                                              tableKey = outputConfig && outputConfig.selectBox1 ? outputConfig.selectBox1 : null;
+                                            }
+                                            console.warn('[DB] updating select', {
+                                              index: idx,
+                                              element: selectEl,
+                                              beforeValue: selectEl.value,
+                                              tableKey,
+                                              outId: outIdAttr,
+                                            });
                                             const prevValue = selectEl.value;
                                             // 清空并重建选项
                                             selectEl.innerHTML = '';
@@ -6711,6 +6897,10 @@ const database = graph.save();
                                                 });
                                               }
                                             }
+                                            console.warn('[DB] options before rebuild', {
+                                              tableKey,
+                                              CurrentCols,
+                                            });
                                             // 再插入列的 key
                                             if (CurrentCols) {
                                               Object.keys(CurrentCols).forEach(k => {
@@ -6720,21 +6910,30 @@ const database = graph.save();
                                                 selectEl.appendChild(o);
                                               });
                                             }
+                                            // 记录重建后的所有选项
+                                            console.warn('[DB] options after rebuild', {
+                                              nodeId,
+                                              index: idx,
+                                              options: Array.from(selectEl.options).map(o => ({
+                                                value: o.value,
+                                                text : o.text,
+                                              })),
+                                            });
                                             // 恢复之前保存或当前选择
-                                            const outId  = selectEl.getAttribute('data-output-id');
-                                            let savedVal = null;
-                                            if (Array.isArray(tempNode.Outputs)) {
-                                              tempNode.Outputs.forEach(out => {
-                                                if (out && out.Id == outId && out.selectBox1 != null) {
-                                                  savedVal = out.selectBox1;
-                                                }
-                                              });
-                                            }
+                                            const savedVal = outputConfig && outputConfig.selectBox1 != null
+                                              ? outputConfig.selectBox1
+                                              : null;
                                             const values = Array.from(selectEl.options).map(o => o.value);
                                             if (savedVal && values.includes(savedVal)) {
+                                              console.warn('[DB] apply savedVal to select', { savedVal });
                                               selectEl.value = savedVal;
                                             } else if (values.includes(prevValue)) {
+                                              console.warn('[DB] keep previous value for select', { prevValue });
                                               selectEl.value = prevValue;
+                                            } else {
+                                              console.warn('[DB] fallback to first option', {
+                                                options: values,
+                                              });
                                             }
                                             // 触发一次 change，保证下游依赖更新
                                             selectEl.dispatchEvent(new Event('change'));
@@ -7385,52 +7584,97 @@ const database = graph.save();
             InitSelectBox2(output.selectBox2);
           }
           function initLogicContainer(outputContainer, table, tempColumns, tempoutput){
-            /* 初始化数据字段 */
-            if (outputContainer.querySelector('.logic-container')) return;
-
+            /* 初始化数据字段（无论新建还是刷新，都要保证数组存在） */
             tempoutput.DataBaseSubjectArray = tempoutput.DataBaseSubjectArray || [];
             tempoutput.DataBaseContentArray = tempoutput.DataBaseContentArray || [];
             tempoutput.DataBaseLogicKind   = tempoutput.DataBaseLogicKind   || 'And';
             tempoutput.DataBaseIsExactArray = tempoutput.DataBaseIsExactArray || [];
-          
-            /* ---- DOM ---- */
-            const logicContainer = document.createElement('div');
-            logicContainer.className = 'logic-container';
-          
-            /* 左侧全局 And/Or */
-            const toggleBtn = document.createElement('div');
-            toggleBtn.className = 'logic-toggle';
-            toggleBtn.textContent = tempoutput.DataBaseLogicKind;
-            toggleBtn.onclick = () => {
-              tempoutput.DataBaseLogicKind = tempoutput.DataBaseLogicKind === 'And' ? 'Or' : 'And';
+
+            let logicContainer = outputContainer.querySelector('.logic-container');
+
+            /* ====== 场景一：首次创建逻辑区域 ====== */
+            if (!logicContainer) {
+              /* ---- DOM ---- */
+              logicContainer = document.createElement('div');
+              logicContainer.className = 'logic-container';
+            
+              /* 左侧全局 And/Or */
+              const toggleBtn = document.createElement('div');
+              toggleBtn.className = 'logic-toggle';
               toggleBtn.textContent = tempoutput.DataBaseLogicKind;
-            };
-            logicContainer.appendChild(toggleBtn);
-          
-            /* 右侧主体 */
-            const body = document.createElement('div');
-            body.className = 'logic-body';
-            logicContainer.appendChild(body);
-          
-            /* 底部新增按钮 */
-            const createBtn = document.createElement('button');
-            createBtn.className = 'create-logic-row';
-            createBtn.textContent = '新增匹配条件';
-            createBtn.onclick = () => 
-            {
-              tempoutput.DataBaseSubjectArray.push('');
-              tempoutput.DataBaseContentArray.push('');
-              addLogicRow(body, table, tempColumns, tempoutput,tempoutput.DataBaseSubjectArray.length-1);
+              toggleBtn.onclick = () => {
+                tempoutput.DataBaseLogicKind = tempoutput.DataBaseLogicKind === 'And' ? 'Or' : 'And';
+                toggleBtn.textContent = tempoutput.DataBaseLogicKind;
+              };
+              logicContainer.appendChild(toggleBtn);
+            
+              /* 右侧主体 */
+              const body = document.createElement('div');
+              body.className = 'logic-body';
+              logicContainer.appendChild(body);
+            
+              /* 底部新增按钮 */
+              const createBtn = document.createElement('button');
+              createBtn.className = 'create-logic-row';
+              createBtn.textContent = '新增匹配条件';
+              createBtn.onclick = () => 
+              {
+                tempoutput.DataBaseSubjectArray.push('');
+                tempoutput.DataBaseContentArray.push('');
+                addLogicRow(body, table, tempColumns, tempoutput,tempoutput.DataBaseSubjectArray.length-1);
+              }
+              body.appendChild(createBtn);
+            
+              /* 插入到 outputContainer */
+              outputContainer.appendChild(logicContainer);
+            
+              /* 先加一行默认行 */
+              for (let i = 0; i < tempoutput.DataBaseSubjectArray.length; i++) {
+                addLogicRow(body, table, tempColumns, tempoutput,i);
+              }
+              return;
             }
-            body.appendChild(createBtn);
-          
-            /* 插入到 outputContainer */
-            outputContainer.appendChild(logicContainer);
-          
-            /* 先加一行默认行 */
-            for (let i = 0; i < tempoutput.DataBaseSubjectArray.length; i++) {
-              addLogicRow(body, table, tempColumns, tempoutput,i);
+
+            /* ====== 场景二：TempColumns / 表名 发生变化时的“刷新” ====== */
+            const body = logicContainer.querySelector('.logic-body');
+            if (!body) return;
+
+            /* 确保“新增匹配条件”按钮后续新增的行也使用最新的列信息 */
+            const createBtn = body.querySelector('.create-logic-row');
+            if (createBtn) {
+              createBtn.onclick = () => {
+                // 使用当前最新的 TempColumns / table 来生成新行
+                tempoutput.DataBaseSubjectArray.push('');
+                tempoutput.DataBaseContentArray.push('');
+                addLogicRow(body, table, tempColumns, tempoutput, tempoutput.DataBaseSubjectArray.length - 1);
+              };
             }
+
+            const rows = Array.from(body.querySelectorAll('.logic-row'));
+            rows.forEach((row, idx) => {
+              const subjectSelect = row.querySelector('select');
+              if (!subjectSelect) return;
+
+              const prevVal = subjectSelect.value;
+              // 清空并用最新的列信息重建 subject 选项
+              subjectSelect.innerHTML = '';
+              populateSubject(subjectSelect, table, tempColumns);
+
+              const savedVal = Array.isArray(tempoutput.DataBaseSubjectArray)
+                ? tempoutput.DataBaseSubjectArray[idx] || prevVal
+                : prevVal;
+              const optionsValues = Array.from(subjectSelect.options).map(o => o.value);
+              if (savedVal && optionsValues.includes(savedVal)) {
+                subjectSelect.value = savedVal;
+              } else if (optionsValues.length > 0) {
+                subjectSelect.value = optionsValues[0];
+              }
+
+              // 列发生变化后，同步刷新右侧依赖于列选择的其他下拉（如字段选择）
+              try {
+                InitSelectBox2(subjectSelect.value);
+              } catch(_) {}
+            });
           }
           
           /* ======= 新增一行 ======= */
@@ -9367,9 +9611,7 @@ const database = graph.save();
       const outputColumn = document.createElement('div');
       outputColumn.className = 'column';
       const addNode1 = document.createElement('div');
-      addNode1.className = 'column-AddNode'; // 使用之前定义的样式类
-      addNode1.style.left = '60px'; // 设置左边距
-      addNode1.style.marginTop = '-35px'; // 设置上边距
+      addNode1.className = 'column-AddNode'; // 使用之前定义的样式类（定位由 CSS 统一控制）
       const JsonColumn = document.createElement('div');
       JsonColumn.className = 'Jsoncolumn';
       const OriginalTextColumn = document.createElement('div');
@@ -9378,7 +9620,8 @@ const database = graph.save();
       OriginalTextColumn.style.alignItems = 'flex-start'; // 使内容顶部对齐
       OriginalTextColumn.style.flexWrap = 'nowrap'; // 允许子元素换行
       
-      JsonColumn.appendChild(addNode1);
+      // 加号回到 Output 整体列的头部，与 Output 标题同一层级（始终可用）
+      outputColumn.appendChild(addNode1);
       const OutputSelect = document.createElement('select');
       OutputSelect.style.width = '75px'; // 设置固定宽度
       OutputSelect.style.position = 'absolute'; // 设置相对定位
@@ -9397,7 +9640,13 @@ const database = graph.save();
       OutputSelect.appendChild(optionJson);
       OutputSelect.appendChild(optionOriginalText);
       OutputSelect.value = OriginalTextSelector;
-      
+
+      // 根据初始模式决定是否显示加号（OriginalText 隐藏，Json 显示）
+      if (OriginalTextSelector === 'OriginalText') {
+        addNode1.style.display = 'none';
+      } else {
+        addNode1.style.display = 'block';
+      }
       const outputLabel = document.createElement('div');
       outputLabel.textContent = 'Output'; // 设置文本
       outputLabel.className = 'column-label'; // 设置样式类
@@ -9440,6 +9689,8 @@ const database = graph.save();
         } catch(_) {}
         if(this.value=='OriginalText')
         {
+          // OriginalText 模式下隐藏新增输出加号
+          addNode1.style.display = 'none';
           //JsonColumn隐身
           OriginalTextColumn.style.display = 'block';
           JsonColumn.style.display = 'none';
@@ -9491,6 +9742,8 @@ const database = graph.save();
         }
         else
         {
+          // Json 模式下显示新增输出加号
+          addNode1.style.display = 'block';
           //JsonColumn显示
           OriginalTextColumn.style.display = 'none';
           JsonColumn.style.display = 'block';
@@ -9944,7 +10197,7 @@ const database = graph.save();
 
         // Create type selection box
         const Select1 = document.createElement('select');
-        Select1.style.width = '75px'; // Set a fixed width
+        Select1.style.width = '105px'; // Set a fixed width
         const optionContext = document.createElement('option');
         optionContext.value = 'String';
         optionContext.text = 'String';
@@ -11892,7 +12145,7 @@ function createSideWindow(item, isCheckMode = false) {
       let value = '';
       if (output.Kind === 'Num') {
           value = output.Num ?? '';
-      } else if (output.Kind.includes('String')) {
+      } else if (output.Kind?.includes('String')) {
           value = output.Context ?? '';
       } else if (output.Kind === 'Boolean' || output.Kind === 'Trigger') {
           value = output.Boolean ? 'true' : 'false';
@@ -11987,9 +12240,13 @@ function createSideWindow(item, isCheckMode = false) {
     console.log(`[SIDEWIN:DATA] inputs=${inputsCount} outputs=${outputsCount} debugLen=${debugText.length}`);
   } catch(_) {}
 
-  // 显示侧边窗口
+  // 显示侧边窗口 (Apple Style Animation)
   const sideWindow = document.getElementById('side-window');
-  sideWindow.style.display = 'block';
+  sideWindow.style.display = 'flex'; // Ensure it's in the DOM for transition
+  // Use requestAnimationFrame to ensure the browser registers the display change before adding the class
+  requestAnimationFrame(() => {
+      sideWindow.classList.add('visible');
+  });
   try { console.log(`[SIDEWIN:DOM] show side-window display=${sideWindow && sideWindow.style && sideWindow.style.display}`); } catch(_) {}
   // 确保关闭按钮始终可见
   try { const closeBtn = document.getElementById('close-button'); if (closeBtn) closeBtn.style.display = 'block'; } catch(_) {}
@@ -12268,7 +12525,13 @@ function createSideWindow(item, isCheckMode = false) {
 
   // 设置关闭按钮
   document.getElementById('close-button').onclick = () => {
-      sideWindow.style.display = 'none';
+      // Apple Style Animation: Remove visible class first
+      sideWindow.classList.remove('visible');
+      // Wait for transition (0.5s) then hide
+      setTimeout(() => {
+        sideWindow.style.display = 'none';
+      }, 500);
+      
       if (!isCheckMode && runButton._clickHandler) {
           runButton.removeEventListener('click', runButton._clickHandler);
       }
@@ -12611,7 +12874,7 @@ function updateOutputs(outputs,debug,Id) {
           let value = '';
           if (output.Kind === 'Num') {
               value = output.Num ?? '';
-          } else if (output.Kind.includes('String')) {
+          } else if (output.Kind?.includes('String')) {
               value = output.Context ?? '';
           } else if (output.Kind === 'Boolean') {
               value = output.Boolean ? 'true' : 'false';
@@ -14802,7 +15065,7 @@ function LoadInPassivityTriggerArray(data, triggerNode) {
 function loadArrayTriggerArray(passivityData) {
   // 克隆数据
   let DataTemp = structuredClone(passivityData);
-  let hasArrayTrigger = DataTemp.nodes.some(node => node.NodeKind.includes('ArrayTrigger'));
+  let hasArrayTrigger = DataTemp.nodes.some(node => node.NodeKind?.includes('ArrayTrigger'));
   if (hasArrayTrigger) {
     runArrayTriggerNodesInPassivityTriggerArray(DataTemp);
   } else {
@@ -14816,7 +15079,7 @@ function UpdateNodeOutputs(node, outputData) {
   node.Outputs.forEach((output, index) => {
     if (output.Kind === 'Num') {
       output.Num = outputData[index].Num;
-    } else if (output.Kind.includes('String')) {
+    } else if (output.Kind?.includes('String')) {
       output.Context = outputData[index].Context;
     } else if (output.Kind === 'Boolean') {
       output.Boolean = outputData[index].Boolean;
@@ -14827,7 +15090,7 @@ function UpdateNodeOutputs(node, outputData) {
 function UpdateNodeInputs(node, targetAnchor, output) {
   if (node.Inputs[targetAnchor].Kind === 'Num') {
     node.Inputs[targetAnchor].Num = output.Num;
-  } else if (node.Inputs[targetAnchor].Kind.includes('String')) {
+  } else if (node.Inputs[targetAnchor].Kind?.includes('String')) {
     node.Inputs[targetAnchor].Context = output.Context;
   } else if (node.Inputs[targetAnchor].Kind === 'Boolean') {
     node.Inputs[targetAnchor].Boolean = output.Boolean;

@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个具体的动物物种，而是一大类已灭绝的爬行动物的统称，包含许多不同的科和属。因此，严格来说，“恐龙”本身不属于某一个“科”，而是包括多个科，例如暴龙科、鸭嘴龙科、角龙科、蜥脚类中的腕龙科等。\n\n不过，如果你指的是某种具体的恐龙，比如“霸王龙”（Tyrannosaurus rex），那么：\n\n- 霸王龙属于**暴龙科**（Tyrannosauridae）。\n- 一个同科的动物是**特暴龙**（Tarbosaurus），它也属于暴龙科，生活在亚洲，与霸王龙亲缘关系很近。\n\n所以，若以“霸王龙”为例：\n- 科：暴龙科（Tyrannosauridae）\n- 同科动物：特暴龙（Tarbosaurus）\n\n如果你有具体指的是哪种恐龙，可以告诉我，我可以给出更准确的答案！"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "恐龙"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你说得非常对！“恐龙”是一个庞大的演化支，包含许多不同的科。如果我们以**霸王龙**（Tyrannosaurus rex）为例：\n\n- **科**：暴龙科（Tyrannosauridae）  \n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\n\n特暴龙生活在晚白垩世的亚洲（主要在现今的蒙古和中国地区），体型与霸王龙相近，头骨结构和捕食习性也非常相似，是暴龙科中除霸王龙外最著名的成员之一。\n\n如果你有其他具体的恐龙名称（比如三角龙、腕龙、迅猛龙等），也可以告诉我，我会为你指出它所属的科和一个同科的近亲！"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个具体的动物物种，而是一大类已灭绝的爬行动物的统称，包含许多不同的科和属。因此，严格来说，“恐龙”本身不属于某一个“科”，而是包括多个科，例如暴龙科、鸭嘴龙科、角龙科、蜥脚类中的腕龙科等。\n\n不过，如果你指的是某种具体的恐龙，比如“霸王龙”（Tyrannosaurus rex），那么：\n\n- 霸王龙属于**暴龙科**（Tyrannosauridae）。\n- 一个同科的动物是**特暴龙**（Tarbosaurus），它也属于暴龙科，生活在亚洲，与霸王龙亲缘关系很近。\n\n所以，若以“霸王龙”为例：\n- 科：暴龙科（Tyrannosauridae）\n- 同科动物：特暴龙（Tarbosaurus）\n\n如果你有具体指的是哪种恐龙，可以告诉我，我可以给出更准确的答案！"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你提到的动物是**霸王龙**（Tyrannosaurus rex）。\n\n- **科**：**暴龙科**（Tyrannosauridae）  \n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\n\n特暴龙是暴龙科中与霸王龙亲缘关系非常近的成员，主要发现于亚洲（如蒙古和中国），在体型、头骨结构和生态位上都与霸王龙高度相似，是暴龙科在亚洲的代表性物种。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你说得非常对！“恐龙”是一个庞大的演化支，包含许多不同的科。如果我们以**霸王龙**（Tyrannosaurus rex）为例：\n\n- **科**：暴龙科（Tyrannosauridae）  \n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\n\n特暴龙生活在晚白垩世的亚洲（主要在现今的蒙古和中国地区），体型与霸王龙相近，头骨结构和捕食习性也非常相似，是暴龙科中除霸王龙外最著名的成员之一。\n\n如果你有其他具体的恐龙名称（比如三角龙、腕龙、迅猛龙等），也可以告诉我，我会为你指出它所属的科和一个同科的近亲！"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='你提到的动物是**霸王龙**（Tyrannosaurus rex）。\\n\\n- **科**：**暴龙科**（Tyrannosauridae）  \\n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\\n\\n特暴龙是暴龙科中与霸王龙亲缘关系非常近的成员，主要发现于亚洲（如蒙古和中国），在体型、头骨结构和生态位上都与霸王龙高度相似，是暴龙科在亚洲的代表性物种。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '恐龙'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['你提到的动物是**霸王龙**（Tyrannosaurus rex）。\\n\\n- **科**：**暴龙科**（Tyrannosauridae）  \\n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\\n\\n特暴龙是暴龙科中与霸王龙亲缘关系非常近的成员，主要发现于亚洲（如蒙古和中国），在体型、头骨结构和生态位上都与霸王龙高度相似，是暴龙科在亚洲的代表性物种。', '恐龙']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "恐龙"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "你提到的动物是**霸王龙**（Tyrannosaurus rex）。\n\n- **科**：**暴龙科**（Tyrannosauridae）  \n- **同科的动物**：**特暴龙**（Tarbosaurus bataar）\n\n特暴龙是暴龙科中与霸王龙亲缘关系非常近的成员，主要发现于亚洲（如蒙古和中国），在体型、头骨结构和生态位上都与霸王龙高度相似，是暴龙科在亚洲的代表性物种。"
+        }
+      ]
+    }
+  ]
+]

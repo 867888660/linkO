@@ -95,12 +95,10 @@ def run_node(node):
                         cond = 'not empty' if (cont is None or cont == '') else 'include'
                         print(f"[DEBUG]   Condition 缺失，按 String 默认 => '{cond}'")
                     elif sel_kind == 'Num':
-                        # 缺省比较为不等于 0；若提供了内容则默认等于
+                        # 缺省比较为大于
                         if cont is None or cont == '':
                             cont = '0'
-                            cond = '!='
-                        else:
-                            cond = '=='
+                        cond = '>'
                         print(f"[DEBUG]   Condition 缺失，按 Num 默认 => '{cond}', Content = {cont}")
                 else:
                     print(f"[DEBUG]   使用提供的 Condition = '{cond}'")

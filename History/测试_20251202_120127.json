@@ -1,0 +1,643 @@
+{
+  "nodes": [
+    {
+      "Inputs": [
+        {
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx",
+          "Id": "Input1",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "Sheet1",
+          "Id": "Input2",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Table"
+        }
+      ],
+      "NodeKind": "ArrayTrigger_DataBase",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output1",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "Output1",
+          "selectBox1": "1/A/名称",
+          "selectKind": null
+        }
+      ],
+      "ParallelLimit": 1,
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "DataBase_Array.py_1764647058901",
+      "label": "DataBase_Array0",
+      "name": "DataBase_Array.py",
+      "x": 389,
+      "y": 365.40625,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.014828688105191007,
+          0.6
+        ],
+        [
+          0.014828688105191007,
+          0.8
+        ],
+        [
+          0.9826998638772771,
+          0.6
+        ],
+        [
+          0.024714480175318344,
+          0.1
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 40,
+      "width": 404.62109375,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false,
+        false
+      ],
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": "",
+      "ErrorContext": ""
+    },
+    {
+      "ExportPrompt": "这是动物\n蛇",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "蛇",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "JsonOutputs": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OutPut1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "蛇不是一个单一的“科”，而是一个爬行动物的目，称为**有鳞目**（Squamata）下的**蛇亚目**（Serpentes）。蛇亚目下包含多个科，例如：\n\n- **游蛇科**（Colubridae）  \n- **眼镜蛇科**（Elapidae）  \n- **蝰蛇科**（Viperidae）  \n- **蟒科**（Pythonidae）  \n- **蚺科**（Boidae）  \n\n如果你指的是常见的无毒蛇，比如“草蛇”或“水蛇”，它们通常属于**游蛇科**。\n\n✅ 举例：  \n- **蛇所属的一个科**：游蛇科（Colubridae）  \n- **同科的另一种动物**：王锦蛇（Elaphe carinata）或鼠蛇（Ptyas mucosa）\n\n如果你有具体是哪一种蛇（比如眼镜蛇、蟒蛇、响尾蛇等），我可以给出更准确的科和同科动物。",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "completion_tokens": 218,
+          "name": "OriginalText",
+          "prompt_tokens": 51,
+          "total_tokens": 269
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py_1764647095956",
+      "label": "Qw72B1",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 943,
+      "y": 378.40625,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.02914901389607124,
+          0.75
+        ],
+        [
+          0.9659928171212502,
+          0.75
+        ],
+        [
+          0.0485816898267854,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 20,
+      "width": 205.8388671875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false
+      ]
+    },
+    {
+      "ExportPrompt": "这是动物\n蛇不是一个单一的“科”，而是一个爬行动物的目，称为**有鳞目**（Squamata）下的**蛇亚目**（Serpentes）。蛇亚目下包含多个科，例如：\n\n- **游蛇科**（Colubridae）  \n- **眼镜蛇科**（Elapidae）  \n- **蝰蛇科**（Viperidae）  \n- **蟒科**（Pythonidae）  \n- **蚺科**（Boidae）  \n\n如果你指的是常见的无毒蛇，比如“草蛇”或“水蛇”，它们通常属于**游蛇科**。\n\n✅ 举例：  \n- **蛇所属的一个科**：游蛇科（Colubridae）  \n- **同科的另一种动物**：王锦蛇（Elaphe carinata）或鼠蛇（Ptyas mucosa）\n\n如果你有具体是哪一种蛇（比如眼镜蛇、蟒蛇、响尾蛇等），我可以给出更准确的科和同科动物。",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "蛇不是一个单一的“科”，而是一个爬行动物的目，称为**有鳞目**（Squamata）下的**蛇亚目**（Serpentes）。蛇亚目下包含多个科，例如：\n\n- **游蛇科**（Colubridae）  \n- **眼镜蛇科**（Elapidae）  \n- **蝰蛇科**（Viperidae）  \n- **蟒科**（Pythonidae）  \n- **蚺科**（Boidae）  \n\n如果你指的是常见的无毒蛇，比如“草蛇”或“水蛇”，它们通常属于**游蛇科**。\n\n✅ 举例：  \n- **蛇所属的一个科**：游蛇科（Colubridae）  \n- **同科的另一种动物**：王锦蛇（Elaphe carinata）或鼠蛇（Ptyas mucosa）\n\n如果你有具体是哪一种蛇（比如眼镜蛇、蟒蛇、响尾蛇等），我可以给出更准确的科和同科动物。",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "你提到的“蛇”是一个大类，属于**蛇亚目**（Serpentes），其下包含多个科。如果我们以最常见的**游蛇科**（Colubridae）为例（这是蛇类中种类最多的一科，约占所有蛇类的三分之二）：\n\n- **该动物所属的科**：**游蛇科**（Colubridae）  \n- **同科的另一种动物**：**黑眉锦蛇**（Elaphe taeniura）\n\n> 黑眉锦蛇是一种广泛分布于中国南方的无毒蛇，体色鲜艳，性情温和，和常见的草蛇、水蛇一样都属于游蛇科。\n\n如果你心中想的是某种特定的蛇（比如眼镜蛇、响尾蛇、蟒蛇等），请告诉我具体名称，我可以给出它确切的科和同科代表！",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "completion_tokens": 182,
+          "name": "OriginalText",
+          "prompt_tokens": 484,
+          "total_tokens": 666
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py1764647159697",
+      "label": "Qw72B.py2",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 1171,
+      "y": 375,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.02914901389607124,
+          0.75
+        ],
+        [
+          0.9659928171212502,
+          0.75
+        ],
+        [
+          0.0485816898267854,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 20,
+      "width": 205.8388671875,
+      "depth": 0,
+      "TriggerLink": 1,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false
+      ]
+    },
+    {
+      "ExportPrompt": "这是动物\n你提到的“蛇”是一个大类，属于**蛇亚目**（Serpentes），其下包含多个科。如果我们以最常见的**游蛇科**（Colubridae）为例（这是蛇类中种类最多的一科，约占所有蛇类的三分之二）：\n\n- **该动物所属的科**：**游蛇科**（Colubridae）  \n- **同科的另一种动物**：**黑眉锦蛇**（Elaphe taeniura）\n\n> 黑眉锦蛇是一种广泛分布于中国南方的无毒蛇，体色鲜艳，性情温和，和常见的草蛇、水蛇一样都属于游蛇科。\n\n如果你心中想的是某种特定的蛇（比如眼镜蛇、响尾蛇、蟒蛇等），请告诉我具体名称，我可以给出它确切的科和同科代表！",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "你提到的“蛇”是一个大类，属于**蛇亚目**（Serpentes），其下包含多个科。如果我们以最常见的**游蛇科**（Colubridae）为例（这是蛇类中种类最多的一科，约占所有蛇类的三分之二）：\n\n- **该动物所属的科**：**游蛇科**（Colubridae）  \n- **同科的另一种动物**：**黑眉锦蛇**（Elaphe taeniura）\n\n> 黑眉锦蛇是一种广泛分布于中国南方的无毒蛇，体色鲜艳，性情温和，和常见的草蛇、水蛇一样都属于游蛇科。\n\n如果你心中想的是某种特定的蛇（比如眼镜蛇、响尾蛇、蟒蛇等），请告诉我具体名称，我可以给出它确切的科和同科代表！",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py1764647162480",
+      "label": "Qw72B.py3",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 1399,
+      "y": 370,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.02914901389607124,
+          0.75
+        ],
+        [
+          0.9659928171212502,
+          0.75
+        ],
+        [
+          0.0485816898267854,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 20,
+      "width": 205.8388671875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false
+      ]
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "1",
+          "Id": "Input1_1764647196019",
+          "IsLabel": true,
+          "Isnecessary": false,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 1,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "IfNode",
+      "Outputs": [
+        {
+          "Boolean": true,
+          "Context": "",
+          "Description": "",
+          "Id": "Output1",
+          "IfLogicContentArray": [
+            "0"
+          ],
+          "IfLogicKind": "And",
+          "IfLogicSubjectArray": [
+            "Input1"
+          ],
+          "Kind": "Boolean",
+          "Link": 1,
+          "Num": null,
+          "TriggerKind": "STOP",
+          "name": "OutPut1"
+        }
+      ],
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "IfNode.py_1764647193698",
+      "label": "IfNode4",
+      "name": "IfNode.py",
+      "x": 793,
+      "y": 540.40625,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.03274651828400569,
+          0.75
+        ],
+        [
+          0.96179572866866,
+          0.75
+        ],
+        [
+          0.05457753047334282,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 20,
+      "width": 183.2255859375,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false
+      ]
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "@TempFiles\\\\工作簿1.xlsx",
+          "Id": "Input11",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": null,
+          "Id": "Input2_1764647712722",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input2"
+        },
+        {
+          "Context": null,
+          "Id": "Input3_1764647715572",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input3"
+        }
+      ],
+      "NodeKind": "DataBase",
+      "Outputs": [
+        {
+          "Context": null,
+          "Id": "Output11",
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Result"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [
+            "{{Input2}}"
+          ],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [
+            "1/A/名称"
+          ],
+          "Id": "Output21764647730556",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Output2",
+          "selectBox1": "Sheet1",
+          "selectBox2": "1/A/名称",
+          "selectBox3": "{{Input2}}",
+          "selectBox4": "2/B/分析",
+          "selectBox5": "修改",
+          "selectBox6": "{{Input3}}",
+          "selectKind": "Str",
+          "selectNum2": "1/A/名称",
+          "selectNum3": "2/B/分析"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "DataBase.py_1764647700380",
+      "label": "DataBase5",
+      "name": "DataBase.py",
+      "x": 1625,
+      "y": 373.40625,
+      "IsBlock": false,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.016519104247270343,
+          0.5
+        ],
+        [
+          0.016519104247270343,
+          0.6666666666666666
+        ],
+        [
+          0.016519104247270343,
+          0.8333333333333334
+        ],
+        [
+          0.980727711711518,
+          0.5
+        ],
+        [
+          0.980727711711518,
+          0.6666666666666666
+        ],
+        [
+          0.027531840412117235,
+          0.08333333333333333
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 60,
+      "width": 363.2158203125,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false,
+        false,
+        false
+      ]
+    }
+  ]
+}

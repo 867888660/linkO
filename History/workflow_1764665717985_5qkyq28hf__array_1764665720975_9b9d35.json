@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你好！你只写了“这是动物”，但没有具体说明是哪种动物（比如老虎、大象、麻雀等），所以我无法判断它属于哪个科。\n\n请你提供具体的动物名称，例如：“老虎”或“大熊猫”，这样我才能告诉你它属于什么科，并给出一个同科的动物。\n\n期待你的补充！"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": ""
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你好！你说“这是动物”，但没有指出具体是哪一种动物。为了回答你的问题（“说出这动物是什么科，并给出一个同科的动物”），我需要知道你指的是哪种动物。\n\n请告诉我具体的动物名称，比如：\n\n- 狮子  \n- 企鹅  \n- 袋鼠  \n- 鲸鱼  \n- 蝴蝶  \n\n举个例子：  \n如果你说“老虎”，我就会回答：  \n老虎属于猫科，同科的动物有狮子。\n\n期待你补充具体的动物名称！😊"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你好！你只写了“这是动物”，但没有具体说明是哪种动物（比如老虎、大象、麻雀等），所以我无法判断它属于哪个科。\n\n请你提供具体的动物名称，例如：“老虎”或“大熊猫”，这样我才能告诉你它属于什么科，并给出一个同科的动物。\n\n期待你的补充！"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你好！你提到“这是动物”，但没有说明具体是哪一种动物。为了准确回答“它属于什么科”以及“一个同科的动物”，我需要你提供具体的动物名称。\n\n例如，如果你说的是：\n\n**“大熊猫”**，  \n我会回答：  \n大熊猫属于**熊科**，同科的动物有**棕熊**。\n\n或者，如果你说的是：  \n**“猎豹”**，  \n我会回答：  \n猎豹属于**猫科**，同科的动物有**家猫**。\n\n请告诉我你想了解的具体动物名称吧！🐾"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你好！你说“这是动物”，但没有指出具体是哪一种动物。为了回答你的问题（“说出这动物是什么科，并给出一个同科的动物”），我需要知道你指的是哪种动物。\n\n请告诉我具体的动物名称，比如：\n\n- 狮子  \n- 企鹅  \n- 袋鼠  \n- 鲸鱼  \n- 蝴蝶  \n\n举个例子：  \n如果你说“老虎”，我就会回答：  \n老虎属于猫科，同科的动物有狮子。\n\n期待你补充具体的动物名称！😊"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": ""
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "你好！你提到“这是动物”，但没有说明具体是哪一种动物。为了准确回答“它属于什么科”以及“一个同科的动物”，我需要你提供具体的动物名称。\n\n例如，如果你说的是：\n\n**“大熊猫”**，  \n我会回答：  \n大熊猫属于**熊科**，同科的动物有**棕熊**。\n\n或者，如果你说的是：  \n**“猎豹”**，  \n我会回答：  \n猎豹属于**猫科**，同科的动物有**家猫**。\n\n请告诉我你想了解的具体动物名称吧！🐾"
+        }
+      ]
+    }
+  ]
+]

@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个单一的动物，而是一大类已经灭绝的爬行动物的统称，包含许多不同的科和属。因此，严格来说，“恐龙”本身不是一个科，而是一个总目（Dinosauria），下面分为多个科。\n\n不过，如果你指的是某种具体的恐龙，比如“霸王龙”（Tyrannosaurus rex），那么它属于**暴龙科（Tyrannosauridae）**，同科的动物还有**特暴龙（Tarbosaurus）**。\n\n如果你只是泛指“恐龙”，我们可以举一个例子：\n\n- **三角龙（Triceratops）** 属于**角龙科（Ceratopsidae）**，同科的动物还有**开角龙（Chasmosaurus）**。\n\n所以，请注意：  \n**恐龙不是单一物种，也不是一个“科”，而是包含多个科的庞大类群。**  \n但举例来说：\n\n👉 **三角龙属于角龙科，同科的还有开角龙。**  \n或  \n👉 **霸王龙属于暴龙科，同科的还有特暴龙。**\n\n如果你有具体是哪一种恐龙，我可以给出更准确的答案！"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "恐龙"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你提到的“恐龙”是一个总称，不是一个具体的动物，因此它本身不属于某一个“科”。但我们可以选一种著名的恐龙作为例子来回答你的问题。\n\n例如：\n\n**霸王龙（Tyrannosaurus rex）** 属于 **暴龙科（Tyrannosauridae）**。  \n同科的另一种动物是 **特暴龙（Tarbosaurus）**。\n\n所以答案是：  \n👉 **暴龙科**，同科动物：**特暴龙**。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个单一的动物，而是一大类已经灭绝的爬行动物的统称，包含许多不同的科和属。因此，严格来说，“恐龙”本身不是一个科，而是一个总目（Dinosauria），下面分为多个科。\n\n不过，如果你指的是某种具体的恐龙，比如“霸王龙”（Tyrannosaurus rex），那么它属于**暴龙科（Tyrannosauridae）**，同科的动物还有**特暴龙（Tarbosaurus）**。\n\n如果你只是泛指“恐龙”，我们可以举一个例子：\n\n- **三角龙（Triceratops）** 属于**角龙科（Ceratopsidae）**，同科的动物还有**开角龙（Chasmosaurus）**。\n\n所以，请注意：  \n**恐龙不是单一物种，也不是一个“科”，而是包含多个科的庞大类群。**  \n但举例来说：\n\n👉 **三角龙属于角龙科，同科的还有开角龙。**  \n或  \n👉 **霸王龙属于暴龙科，同科的还有特暴龙。**\n\n如果你有具体是哪一种恐龙，我可以给出更准确的答案！"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你提到的是“恐龙”这一大类，但“恐龙”本身不是单一物种，也不属于某一个“科”。为了回答你的问题，我们需要具体到某一种恐龙。\n\n以**三角龙（Triceratops）**为例：\n\n- **三角龙**属于 **角龙科（Ceratopsidae）**。  \n- 同科的另一种动物是 **开角龙（Chasmosaurus）**。\n\n✅ 答案：**角龙科**，同科动物：**开角龙**。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你提到的“恐龙”是一个总称，不是一个具体的动物，因此它本身不属于某一个“科”。但我们可以选一种著名的恐龙作为例子来回答你的问题。\n\n例如：\n\n**霸王龙（Tyrannosaurus rex）** 属于 **暴龙科（Tyrannosauridae）**。  \n同科的另一种动物是 **特暴龙（Tarbosaurus）**。\n\n所以答案是：  \n👉 **暴龙科**，同科动物：**特暴龙**。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "恐龙"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "你提到的是“恐龙”这一大类，但“恐龙”本身不是单一物种，也不属于某一个“科”。为了回答你的问题，我们需要具体到某一种恐龙。\n\n以**三角龙（Triceratops）**为例：\n\n- **三角龙**属于 **角龙科（Ceratopsidae）**。  \n- 同科的另一种动物是 **开角龙（Chasmosaurus）**。\n\n✅ 答案：**角龙科**，同科动物：**开角龙**。"
+        }
+      ]
+    }
+  ]
+]

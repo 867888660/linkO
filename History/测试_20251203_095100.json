@@ -1,0 +1,1108 @@
+{
+  "nodes": [
+    {
+      "Inputs": [
+        {
+          "Context": "F:/linkO/TempFiles\\\\polymarket\\\\PolyMarketHistory.db",
+          "Id": "Input1",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "测试",
+          "Id": "Input2",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Table"
+        }
+      ],
+      "NodeKind": "ArrayTrigger_DataBase",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output1",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "Output1",
+          "selectBox1": "名字",
+          "selectKind": null
+        }
+      ],
+      "ParallelLimit": 1,
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "DataBase_Array.py_1764647058901",
+      "label": "DataBase_Array0",
+      "name": "DataBase_Array.py",
+      "x": 109,
+      "y": 363.40625,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.010164259327577337,
+          0.64
+        ],
+        [
+          0.010164259327577337,
+          0.88
+        ],
+        [
+          0.9881416974511598,
+          0.64
+        ],
+        [
+          0.016940432212628892,
+          0.1
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 56,
+      "width": 590.3037109375,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false,
+        false
+      ],
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "debug": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "TempColumns": {
+        "polyMarket_Buy": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "Buy_price",
+          "llm_is_Matching",
+          "KeyWords"
+        ],
+        "polyMarket_OrderList": [
+          "Oder_id",
+          "Token",
+          "Question",
+          "Rule",
+          "Buy_Price",
+          "IsSuccess",
+          "Qty",
+          "apr_eff_if_win",
+          "endData",
+          "Score",
+          "Explain",
+          "News",
+          "KeyWords",
+          "name",
+          "nowtime"
+        ],
+        "polyMarket入库记录": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "Research_Debug",
+          "IsRightNow",
+          "KeyWords",
+          "LLM_Think",
+          "LLM_researh"
+        ],
+        "polyMarket入库记录_1109": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching"
+        ],
+        "polyMarket入库记录_11095": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "Research_Debug"
+        ],
+        "polyMarket入库记录_1110": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "Research_Debug"
+        ],
+        "polyMarket入库记录_11103": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "Research_Debug"
+        ],
+        "polyMarket入库记录_11104": [
+          "condition_id",
+          "question",
+          "endDate",
+          "days_to_end",
+          "rules",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "ask",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "now_ask_price",
+          "now_bid_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "Research_Debug"
+        ],
+        "测试": [
+          "名字",
+          "分析"
+        ]
+      }
+    },
+    {
+      "ExportPrompt": "这是动物\n老鼠",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "老鼠",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "JsonOutputs": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OutPut1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**仓鼠**（也属于鼠科）。",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "completion_tokens": 28,
+          "name": "OriginalText",
+          "prompt_tokens": 51,
+          "total_tokens": 79
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py_1764647095956",
+      "label": "Qw72B1",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 917,
+      "y": 220.40625,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.0265676146658076,
+          0.8
+        ],
+        [
+          0.9690044495565578,
+          0.8
+        ],
+        [
+          0.044279357776346,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 225.8388671875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": true,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "ErrorContext": "",
+      "RecursionBehavior": "STOP",
+      "messages": [
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠"
+        },
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠"
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "ExportPrompt": "这是动物\n老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**仓鼠**（也属于鼠科）。",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**仓鼠**（也属于鼠科）。",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**田鼠**（也属于鼠科）。",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "completion_tokens": 28,
+          "name": "OriginalText",
+          "prompt_tokens": 105,
+          "total_tokens": 133
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py1764647159697",
+      "label": "Qw72B.py2",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 1226,
+      "y": 361,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.0265676146658076,
+          0.8
+        ],
+        [
+          0.9690044495565578,
+          0.8
+        ],
+        [
+          0.044279357776346,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 225.8388671875,
+      "depth": 0,
+      "TriggerLink": 1,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "RecursionBehavior": "Run",
+      "ErrorContext": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**仓鼠**（也属于鼠科）。"
+        },
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**仓鼠**（也属于鼠科）。"
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "ExportPrompt": "这是动物\n老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**田鼠**（也属于鼠科）。",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**田鼠**（也属于鼠科）。",
+          "Id": "Input1_1764647100958",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "OriginalText",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**褐家鼠**（Rattus norvegicus），它和家鼠一样，都是鼠科的典型成员。",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "OriginalText",
+          "prompt_tokens": 105,
+          "completion_tokens": 45,
+          "total_tokens": 150
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "说出这动物是什么科，给他说出一个同科的动物",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "Qw72B.py1764647162480",
+      "label": "Qw72B.py3",
+      "max_tokens": 4096,
+      "name": "Qw72B.py",
+      "presence_penalty": 0,
+      "prompt": "这是动物\n{{Input1}}",
+      "temperature": 0.7,
+      "x": 1512,
+      "y": 362,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.0265676146658076,
+          0.8
+        ],
+        [
+          0.9690044495565578,
+          0.8
+        ],
+        [
+          0.044279357776346,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 225.8388671875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**田鼠**（也属于鼠科）。"
+        },
+        {
+          "role": "system",
+          "content": "说出这动物是什么科，给他说出一个同科的动物"
+        },
+        {
+          "role": "user",
+          "content": "这是动物\n老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**田鼠**（也属于鼠科）。"
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "1",
+          "Id": "Input1_1764647196019",
+          "IsLabel": true,
+          "Isnecessary": false,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 1,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "IfNode",
+      "Outputs": [
+        {
+          "Boolean": true,
+          "Context": "",
+          "Description": "",
+          "Id": "Output1",
+          "IfLogicContentArray": [
+            "0"
+          ],
+          "IfLogicKind": "And",
+          "IfLogicSubjectArray": [
+            "Input1"
+          ],
+          "Kind": "Boolean",
+          "Link": 1,
+          "Num": null,
+          "TriggerKind": "STOP",
+          "name": "OutPut1"
+        }
+      ],
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "IfNode.py_1764647193698",
+      "label": "IfNode4",
+      "name": "IfNode.py",
+      "x": 926,
+      "y": 436.40625,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.02952384155922788,
+          0.8
+        ],
+        [
+          0.9655555181809008,
+          0.8
+        ],
+        [
+          0.04920640259871314,
+          0.125
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 203.2255859375,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [
+        false
+      ],
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db",
+          "Id": "Input11",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "老鼠",
+          "Id": "Input2_1764647712722",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input2"
+        },
+        {
+          "Context": "老鼠属于**鼠科**（Muridae）。  \n一个同科的动物是**褐家鼠**（Rattus norvegicus），它和家鼠一样，都是鼠科的典型成员。",
+          "Id": "Input3_1764647715572",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input3"
+        }
+      ],
+      "NodeKind": "DataBase",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "测试 修改 -1 行 -> 分析='老鼠属于**鼠科**（Muridae）。  \\n一个同科的动物是**褐家鼠**（Rattus norvegicus），它和家鼠一样，都是鼠科的典型成员。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '老鼠'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['老鼠属于**鼠科**（Muridae）。  \\n一个同科的动物是**褐家鼠**（Rattus norvegicus），它和家鼠一样，都是鼠科的典型成员。', '老鼠']",
+          "Id": "Output11",
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Result"
+        },
+        {
+          "Boolean": false,
+          "Context": "修改完成（-1 行，已落库）",
+          "DataBaseContentArray": [
+            "{{Input2}}"
+          ],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [
+            "名字"
+          ],
+          "Id": "Output21764647730556",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Output2",
+          "selectBox1": "测试",
+          "selectBox2": "名字",
+          "selectBox3": "{{Input2}}",
+          "selectBox4": "分析",
+          "selectBox5": "修改",
+          "selectBox6": "{{Input3}}",
+          "selectKind": "Str",
+          "selectNum2": "名字",
+          "selectNum3": "分析"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "DataBase.py_1764647700380",
+      "label": "DataBase5",
+      "name": "DataBase.py",
+      "x": 1808,
+      "y": 377.40625,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.010926085317361521,
+          0.5333333333333333
+        ],
+        [
+          0.010926085317361521,
+          0.7333333333333333
+        ],
+        [
+          0.010926085317361521,
+          0.9333333333333333
+        ],
+        [
+          0.9872529004630782,
+          0.5333333333333333
+        ],
+        [
+          0.9872529004630782,
+          0.7333333333333333
+        ],
+        [
+          0.018210142195602536,
+          0.08333333333333333
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 84,
+      "width": 549.14453125,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [
+        true,
+        true,
+        true
+      ],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    }
+  ]
+}

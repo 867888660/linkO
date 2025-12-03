@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但同属象科）。  \n在现存动物中，**亚洲象**和**非洲象**本身就是象科下的不同属，因此如果你指的是非洲象，那么同科的另一个现存动物就是**亚洲象**，反之亦然。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的现存动物是**亚洲象**（如果你指的是非洲象），或者**非洲象**（如果你指的是亚洲象）。  \n若包括已灭绝物种，**猛犸象**也是象科的成员。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但同属象科）。  \n在现存动物中，**亚洲象**和**非洲象**本身就是象科下的不同属，因此如果你指的是非洲象，那么同科的另一个现存动物就是**亚洲象**，反之亦然。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**亚洲象**（如果原指非洲象），或**非洲象**（如果原指亚洲象）。  \n（注：现存象科仅包含非洲象属和亚洲象属，因此两者互为同科动物。）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的现存动物是**亚洲象**（如果你指的是非洲象），或者**非洲象**（如果你指的是亚洲象）。  \n若包括已灭绝物种，**猛犸象**也是象科的成员。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='大象属于**象科**（Elephantidae）。  \\n一个同科的动物是**亚洲象**（如果原指非洲象），或**非洲象**（如果原指亚洲象）。  \\n（注：现存象科仅包含非洲象属和亚洲象属，因此两者互为同科动物。）'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '大象'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['大象属于**象科**（Elephantidae）。  \\n一个同科的动物是**亚洲象**（如果原指非洲象），或**非洲象**（如果原指亚洲象）。  \\n（注：现存象科仅包含非洲象属和亚洲象属，因此两者互为同科动物。）', '大象']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "大象"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**亚洲象**（如果原指非洲象），或**非洲象**（如果原指亚洲象）。  \n（注：现存象科仅包含非洲象属和亚洲象属，因此两者互为同科动物。）"
+        }
+      ]
+    }
+  ]
+]

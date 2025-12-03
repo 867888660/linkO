@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（学名：Acrididae）。\n\n一个同科的动物是**蚱蜢**（也常被泛称为蝗虫的一种，但在分类上与蝗虫同属蝗科，例如中华剑角蝗 *Acrida cinerea*）。\n\n简要说明：  \n蝗科是直翅目（Orthoptera）下的一个大家族，包括我们常见的蝗虫、蚱蜢等。它们通常具有强健的后腿，善于跳跃，多数以植物为食，有些种类在特定条件下会形成群居型，造成蝗灾。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蝗虫"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（Acrididae）。  \n一个同科的动物是**中华剑角蝗**（*Acrida cinerea*），它也是蝗科的典型成员，常被称作蚱蜢的一种。\n\n简要说明：  \n蝗科隶属于直翅目，包含许多善于跳跃、以植物为食的昆虫，如常见的飞蝗、蚱蜢等。部分种类在环境适宜时会聚集形成大规模群体，引发蝗灾。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（学名：Acrididae）。\n\n一个同科的动物是**蚱蜢**（也常被泛称为蝗虫的一种，但在分类上与蝗虫同属蝗科，例如中华剑角蝗 *Acrida cinerea*）。\n\n简要说明：  \n蝗科是直翅目（Orthoptera）下的一个大家族，包括我们常见的蝗虫、蚱蜢等。它们通常具有强健的后腿，善于跳跃，多数以植物为食，有些种类在特定条件下会形成群居型，造成蝗灾。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（Acrididae）。  \n一个同科的动物是**飞蝗**（*Locusta migratoria*）。\n\n简要说明：  \n蝗科是直翅目中的一个大家族，成员多为植食性、后足发达善跳跃的昆虫。飞蝗是该科中最具代表性的种类之一，具有群居型和散居型两种形态，在群居状态下可形成大规模蝗群，造成严重农业灾害。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（Acrididae）。  \n一个同科的动物是**中华剑角蝗**（*Acrida cinerea*），它也是蝗科的典型成员，常被称作蚱蜢的一种。\n\n简要说明：  \n蝗科隶属于直翅目，包含许多善于跳跃、以植物为食的昆虫，如常见的飞蝗、蚱蜢等。部分种类在环境适宜时会聚集形成大规模群体，引发蝗灾。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "Sheet 'All' 不存在\n---- DEBUG DETAILS ----"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "Sheet not found"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "蝗虫"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "蝗虫属于**蝗科**（Acrididae）。  \n一个同科的动物是**飞蝗**（*Locusta migratoria*）。\n\n简要说明：  \n蝗科是直翅目中的一个大家族，成员多为植食性、后足发达善跳跃的昆虫。飞蝗是该科中最具代表性的种类之一，具有群居型和散居型两种形态，在群居状态下可形成大规模蝗群，造成严重农业灾害。"
+        }
+      ]
+    }
+  ]
+]

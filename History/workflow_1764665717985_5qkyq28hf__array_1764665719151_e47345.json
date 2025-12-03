@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。\n\n一个同科的动物是：**非洲鸵鸟**（实际上，鸵鸟的学名就是 *Struthio camelus*，也就是非洲鸵鸟，是鸵鸟科中现存的唯一物种）。不过，如果从更广义的分类或近亲角度来看，鸵鸟科属于**鸵鸟目**（Struthioniformes），而与其亲缘关系较近的其他不会飞的大型鸟类（如鸸鹋、食火鸡等）则属于不同的科和目。\n\n严格来说，**鸵鸟科现存仅有一个物种**，即非洲鸵鸟，因此没有其他现存的同科不同种动物。但若考虑已灭绝的近亲，例如**阿拉伯鸵鸟**（*Struthio syriacus*，现已灭绝），它也属于鸵鸟科。\n\n所以简要回答：\n\n- 鸵鸟属于**鸵鸟科**。  \n- 一个同科的动物（已灭绝）是**阿拉伯鸵鸟**。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鸵鸟"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。  \n一个同科的动物是**阿拉伯鸵鸟**（*Struthio syriacus*，现已灭绝）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。\n\n一个同科的动物是：**非洲鸵鸟**（实际上，鸵鸟的学名就是 *Struthio camelus*，也就是非洲鸵鸟，是鸵鸟科中现存的唯一物种）。不过，如果从更广义的分类或近亲角度来看，鸵鸟科属于**鸵鸟目**（Struthioniformes），而与其亲缘关系较近的其他不会飞的大型鸟类（如鸸鹋、食火鸡等）则属于不同的科和目。\n\n严格来说，**鸵鸟科现存仅有一个物种**，即非洲鸵鸟，因此没有其他现存的同科不同种动物。但若考虑已灭绝的近亲，例如**阿拉伯鸵鸟**（*Struthio syriacus*，现已灭绝），它也属于鸵鸟科。\n\n所以简要回答：\n\n- 鸵鸟属于**鸵鸟科**。  \n- 一个同科的动物（已灭绝）是**阿拉伯鸵鸟**。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。  \n一个同科的现存动物是**非洲鸵鸟**（*Struthio camelus*），也就是通常所说的普通鸵鸟，是目前鸵鸟科中唯一现存的物种。  \n（注：阿拉伯鸵鸟曾是鸵鸟科的一个亚种或近缘种，但已灭绝；目前鸵鸟科仅存非洲鸵鸟一种。）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。  \n一个同科的动物是**阿拉伯鸵鸟**（*Struthio syriacus*，现已灭绝）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "鸵鸟"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "鸵鸟属于**鸵鸟科**（Struthionidae）。  \n一个同科的现存动物是**非洲鸵鸟**（*Struthio camelus*），也就是通常所说的普通鸵鸟，是目前鸵鸟科中唯一现存的物种。  \n（注：阿拉伯鸵鸟曾是鸵鸟科的一个亚种或近缘种，但已灭绝；目前鸵鸟科仅存非洲鸵鸟一种。）"
+        }
+      ]
+    }
+  ]
+]

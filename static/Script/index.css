@@ -17,8 +17,8 @@
   --text-high:rgba(255,255,255,.87);
   --text-med :rgba(255,255,255,.6);
 
-  --accent:#2980fe;
-  --accent-hover:#3d8fff;
+  --accent:#0a84ff;
+  --accent-hover:#5aa9ff;
   --success:#2fbf7e;
   --error:#e04848;
 
@@ -28,27 +28,7 @@
 }
 
 /***** 侧边窗口主体 *****/
-.side-window{
-  position:fixed;
-  right:var(--pad); top:var(--pad);
-  width:650px; max-width:calc(100vw - var(--pad)*2);
-  height:calc(100vh - var(--pad)*2);
-  background:var(--gray-800);
-  color:var(--text-high);
-  border:1px solid var(--gray-600);
-  border-radius:4px;
-  box-shadow:0 6px 18px rgba(0,0,0,.45);
-  display:none;
-  overflow:hidden;
-  z-index:1000;
-  transition:all .3s cubic-bezier(.4,0,.2,1);
-}
-.side-window.fullscreen{
-  inset:0;
-  width:100vw; height:100vh;
-  max-width:100vw;
-  border-radius:0;
-}
+/* .side-window definition moved to line 650 for consolidation */
 
 /***** 头部 *****/
 .side-header{
@@ -56,8 +36,11 @@
   display:flex; justify-content:space-between; align-items:center;
   height:var(--header-h);
   padding:0 24px;
-  background:var(--gray-800);
-  border-bottom:1px solid var(--gray-600);
+  background:rgba(12,12,12,.82);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  box-shadow:0 1px 0 rgba(255,255,255,.05);
   z-index:10;
 }
 
@@ -65,42 +48,42 @@
 .side-header button{
   padding:8px 18px;
   margin:0 4px;
-  border:1px solid var(--gray-500);
-  border-radius:4px;
-  background:var(--gray-700);
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:10px;
+  background:rgba(255,255,255,.04);
   color:var(--text-high);
-  font:13px/1 "Segoe UI",sans-serif;
+  font:13px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
   cursor:pointer;
-  transition:background .15s, border-color .15s, transform .12s;
-  box-shadow:none;
+  transition:background .18s ease,border-color .18s ease,box-shadow .18s ease;
+  box-shadow:0 8px 16px rgba(0,0,0,.15);
 }
 .side-header button:hover{
-  background:var(--gray-650);
-  border-color:var(--gray-400);
-  transform:scale(.97);
+  background:rgba(255,255,255,.09);
+  border-color:rgba(255,255,255,.22);
+  box-shadow:0 12px 20px rgba(0,0,0,.22);
 }
 
 #run-button{background:var(--accent);}
 #run-button:hover{background:var(--accent-hover);}
-#close-button{background:var(--error);}
-#close-button:hover{background:color-mix(in srgb,var(--error) 85%, black 15%);}
+#close-button{background:rgba(255,69,58,.2); border-color:rgba(255,69,58,.3);}
+#close-button:hover{background:rgba(255,69,58,.28);}
 
 /* 放大按钮 */
 #maximize-button{
   width:40px; height:40px; padding:0;
   display:flex; justify-content:center; align-items:center;
   font-size:18px;
-  background:transparent;
+  background:rgba(255,255,255,.03);
   color:var(--accent);
-  border:2px solid var(--accent);
-  border-radius:4px;
-  transition:background .15s, color .15s, transform .12s, box-shadow .15s;
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:12px;
+  transition:background .18s ease,color .18s ease,box-shadow .18s ease,border-color .18s ease;
 }
 #maximize-button:hover{
-  background:var(--accent);
+  background:rgba(10,132,255,.15);
   color:#fff;
-  transform:scale(.95);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 35%, transparent);
+  border-color:rgba(10,132,255,.4);
+  box-shadow:0 10px 18px rgba(0,0,0,.25);
 }
 #maximize-button:disabled{
   opacity:.35;
@@ -117,10 +100,12 @@
   height:var(--status-h);
   display:flex; align-items:center;
   padding:0 24px;
-  background:var(--gray-800);
-  border-bottom:1px solid var(--gray-600);
-  font-size:13px;
-  color:var(--text-med);
+  background:rgba(10,10,10,.78);
+  backdrop-filter:blur(14px);
+  border-bottom:1px solid rgba(255,255,255,.06);
+  font-size:12.5px;
+  color:rgba(255,255,255,.55);
+  letter-spacing:0.02em;
 }
 #loading-indicator{color:var(--accent);}
 .loader{
@@ -134,68 +119,162 @@
 
 /***** token 信息块 *****/
 .token-info{
-  background:var(--gray-650);
-  border:1px solid color-mix(in srgb,var(--gray-600) 70%, white 30%);
-  border-radius:10px;
-  padding:18px;
+  background:rgba(255,255,255,.035);
+  border:1px solid rgba(255,255,255,.08);
+  border-radius:14px;
+  padding:18px 22px;
   margin:16px 24px;
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
 }
-.token-item{color:var(--success); font-size:14px;}
-
-/***** 内容区 *****/
-#content-area{
-  padding:24px;
-  height:calc(100% - var(--header-h) - var(--status-h) - 48px);
-  overflow-y:auto; overflow-x:hidden;
-  background:var(--gray-800);
-  box-sizing:border-box;
-  scrollbar-width:thin; scrollbar-color:var(--gray-400) transparent;
+.token-item{
+  color:rgba(255,255,255,.85);
+  font-size:13px;
+  display:flex;
+  justify-content:space-between;
 }
-#content-area::-webkit-scrollbar{width:8px;}
-#content-area::-webkit-scrollbar-track{background:transparent;}
-#content-area::-webkit-scrollbar-thumb{background:var(--gray-400);border-radius:4px;}
-#content-area::-webkit-scrollbar-thumb:hover{background:var(--gray-300);}
 
-/***** 文本域统一 *****/
+/***** 内容区 (Updated) *****/
+#content-area {
+  padding: 20px;
+  height: calc(100% - var(--header-h) - var(--status-h) - 48px);
+  overflow-y: overlay;
+  overflow-x: hidden;
+  background: rgba(0,0,0,.25);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border-top: 1px solid rgba(255,255,255,.04);
+  box-sizing: border-box;
+}
+
+/***** 文本域统一 (Apple Style Input) *****/
 .side-window-textarea,
 .side-window-input-textarea,
-.input-textarea{
-  width:100%; min-height:120px; margin-top:8px; padding:14px 16px;
-  background:var(--gray-800); color:var(--text-high);
-  border:1px solid var(--gray-500); border-radius:8px;
-  font:14px/1.6 "Monaco","Menlo","Ubuntu Mono",monospace;
-  resize:vertical; box-sizing:border-box;
-  transition:border-color .2s, box-shadow .2s;
+.input-textarea {
+  width: 100%;
+  min-height: 100px;
+  margin-top: 8px;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(245, 245, 247, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(5px);
 }
+
 .side-window-textarea:focus,
 .side-window-input-textarea:focus,
-.input-textarea:focus{
-  outline:none; border-color:var(--accent);
-  box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 40%, transparent);
+.input-textarea:focus {
+  outline: none;
+  background: rgba(10, 132, 255, 0.08);
+  border-color: rgba(10, 132, 255, 0.4);
+  box-shadow: 0 0 0 3px rgba(10, 132, 255, 0.12);
 }
+
 .side-window-textarea[readonly],
 .side-window-input-textarea[readonly],
-.input-textarea[readonly]{background:var(--gray-700); cursor:default;}
-.side-window-textarea::-webkit-scrollbar,
-.side-window-input-textarea::-webkit-scrollbar,
-.input-textarea::-webkit-scrollbar{width:6px;}
-.side-window-textarea::-webkit-scrollbar-thumb,
-.side-window-input-textarea::-webkit-scrollbar-thumb,
-.input-textarea::-webkit-scrollbar-thumb{background:var(--gray-400);border-radius:3px;}
-.side-window-textarea::-webkit-scrollbar-thumb:hover,
-.side-window-input-textarea::-webkit-scrollbar-thumb:hover,
-.input-textarea::-webkit-scrollbar-thumb:hover{background:var(--gray-300);}
+.input-textarea[readonly] {
+  background: rgba(255, 255, 255, 0.02);
+  border-color: rgba(255,255,255,0.04);
+  color: rgba(255, 255, 255, 0.6);
+  cursor: text;
+}
 
-/***** 输入 / 输出区域标题 *****/
-.section-container{margin-bottom:20px;}
-.section-container h3{margin:0 0 14px;color:var(--text-high);font-size:16px;font-weight:600;}
+/* 自定义 Select (History) */
+.side-window-select {
+  appearance: none;
+  width: 100%;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: white;
+  font-size: 13px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: all 0.2s;
+}
+.side-window-select:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.side-window-select:focus {
+  outline: none;
+  border-color: rgba(10, 132, 255, 0.5);
+}
+
+/***** 输入 / 输出区域标题 (Typography) *****/
+.section-container {
+  margin-bottom: 24px;
+  position: relative;
+}
+.section-container h3 {
+  margin: 0 0 8px 2px;
+  color: rgba(235, 235, 245, 0.6); /* Secondary Label Color */
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+}
 .input-item label,
-.output-item label{font-size:13px;color:var(--text-med);}
+.output-item label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 4px;
+  display: block;
+}
 
-/***** 结果指示器 *****/
-#result-indicator{padding:12px 0;font-size:14px;font-weight:500;}
-.success-message{color:var(--success);}
-.error-message  {color:var(--error);}
+/***** 结果指示器 (Beautiful Alert) *****/
+#result-indicator {
+  padding: 0;
+  margin: 0 20px; /* Align with content padding */
+  font-size: 13px;
+  font-weight: 500;
+}
+
+#result-message {
+  display: block;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-top: 16px;
+  line-height: 1.4;
+  animation: slideDownFade 0.3s ease-out;
+}
+
+/* 错误状态样式 - 动态添加 class 或通过 color 属性判断 */
+/* 这里我们假设 JS 会设置颜色，但我们可以强制覆盖或提供默认样式 */
+
+/* 如果内容包含 '错误' 或颜色是红色的通用处理 (JS通常直接设置 style.color) 
+   我们可以通过覆盖默认行为或者添加背景色来美化
+*/
+#result-message[style*="rgb(224, 72, 72)"], 
+#result-message[style*="red"] {
+  background: rgba(255, 69, 58, 0.15);
+  border: 1px solid rgba(255, 69, 58, 0.25);
+  color: #ff453a !important; /* iOS Red */
+}
+
+#result-message[style*="rgb(47, 191, 126)"],
+#result-message[style*="green"] {
+  background: rgba(48, 209, 88, 0.15);
+  border: 1px solid rgba(48, 209, 88, 0.25);
+  color: #30d158 !important; /* iOS Green */
+}
+
+@keyframes slideDownFade {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
 
 
 
@@ -213,6 +292,11 @@
     overflow-y: auto; /* 添加上下拖动的滚动条 */
     max-height: 400px; /* 设置长度上限 */
     border-radius: 10px;
+    background: rgba(255, 255, 255, 0.86);
+    backdrop-filter: blur(22px) saturate(180%);
+    -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18);
 }
 /* 定义旋转动画 */
 @keyframes spin {
@@ -295,127 +379,147 @@
  * LeftSideWindow 统一深色 + 抽屉滑入滑出 + 默认收起
  * =======================================================*/
 
-/* ───────── 抽屉主体 ───────── */
-.LeftSideWindow_side-window{
-  position:fixed;
-  top:32px;                             /* 顶部工具栏高度 */
-  left:0;                               /* 以 translate 隐藏 */
-  width:250px;
-  height:calc(100vh - 32px);
-  background:#1e1e1e;                   /* VS Code 深色 */
-  color:#ffffff;
-  border-right:1px solid #000;
-  padding:10px 8px;
-  overflow-y:auto;
-  overflow-x:hidden;
-  transform:translateX(-100%);          /* 默认完全隐藏 */
-  transition:transform 0.3s ease-in-out;
-}
-.LeftSideWindow_side-window.visible{
-  transform:translateX(0);              /* 显示时滑入 */
+/* =========================================================
+ * LeftSideWindow - Apple Minimalist Style
+ * =======================================================*/
+.LeftSideWindow_side-window {
+  position: fixed;
+  top: 56px;
+  bottom: 24px;
+  left: 24px;
+  width: 260px;
+  background: rgba(25, 25, 25, 0.8); /* 更深一点的背景，增加对比度 */
+  backdrop-filter: blur(25px) saturate(180%); /* 增强毛玻璃质感 */
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px; /* 更大的圆角 */
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+  color: rgba(255, 255, 255, 0.9);
+  transform: translateX(calc(-100% - 40px));
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1); /* 更丝滑的贝塞尔曲线 */
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; /* 强制苹果字体 */
+  padding-top: 12px; /* 顶部留白 */
 }
 
-/* ───────── 顶部搜索框 ───────── */
+.LeftSideWindow_side-window.visible {
+  transform: translateX(0);
+}
+
+/* ───────── 顶部搜索框 (Apple Style - Fixed) ───────── */
 .LeftSideWindow_side-window .search-input,
-#LeftSideWindow_search{                 /* 两种写法任选其一 */
-  width:100%;
-  padding:6px 10px;
-  margin:6px 0 12px;
-  border:none;
-  border-radius:4px;
-  font-size:13px;
-  background:#2f2f2f;
-  color:#fff;
-  outline:none;
-  transition:background .2s;
+#LeftSideWindow_search {
+  display: block;
+  width: calc(100% - 24px); /* 左右各 12px margin */
+  margin: 0 12px 16px 12px; /* 上0(由父padding提供) 左右12 下16 */
+  padding: 8px 12px 8px 32px; /* 左侧留出图标位置(虽然目前可能没图标，但这是规范) */
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 16px;
+  background: rgba(118, 118, 128, 0.24); /* macOS 标准搜索框底色 */
+  color: rgba(255, 255, 255, 0.9);
+  outline: none;
+  transition: background 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+  /* 模拟搜索图标 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.4)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'%3E%3C/line%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: 10px center;
 }
 .LeftSideWindow_side-window .search-input::placeholder,
-#LeftSideWindow_search::placeholder{
-  color:#aaaaaa;
+#LeftSideWindow_search::placeholder {
+  color: rgba(235, 235, 245, 0.6);
 }
 .LeftSideWindow_side-window .search-input:focus,
-#LeftSideWindow_search:focus{
-  background:#404040;
+#LeftSideWindow_search:focus {
+  background: rgba(118, 118, 128, 0.35);
+  box-shadow: none; /* macOS 风格通常聚焦无外发光，只有光标和背景变化，或者很微弱 */
 }
 
-/* ───────── 折叠节点标题行 ───────── */
-.LeftSideWindow_node{
-  background:#2a2a2a;
-  padding:8px;
-  margin-bottom:6px;
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  border-radius:4px;
-  font-weight:600;
-  user-select:none;
-  cursor:pointer;
-  transition:background .2s;
+/* ───────── 折叠节点 (Apple Style - Sidebar Row) ───────── */
+.LeftSideWindow_node {
+  background: transparent;
+  padding: 6px 12px; /* 紧凑但舒适的内边距 */
+  margin: 1px 12px;  /* 左右留白，类似 iPad 侧边栏 */
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-radius: 6px;
+  font-weight: 600; /* Semibold */
+  font-size: 12px;
+  letter-spacing: 0.01em;
+  color: rgba(235, 235, 245, 0.6); /* Secondary Label Color */
+  text-transform: uppercase; /* 很多 macOS 侧边栏分类是全大写的，如果不喜欢可以去掉 */
+  user-select: none;
+  cursor: pointer;
+  transition: color 0.15s;
 }
-.LeftSideWindow_node:hover{background:#3a3a3a;}
+.LeftSideWindow_node:hover {
+  color: rgba(255, 255, 255, 1);
+  /* 分类标题通常只有文字变亮，或者非常淡的背景 */
+  background: rgba(255, 255, 255, 0.04);
+}
 
 /* 展开 / 收起图标 */
-.LeftSideWindow_toggle-icon{
-  font-size:12px;
-  transition:transform .2s;
+.LeftSideWindow_toggle-icon {
+  font-size: 10px;
+  opacity: 0.6;
+  transition: transform 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
-.LeftSideWindow_node.collapsed .LeftSideWindow_toggle-icon{
-  transform:rotate(0deg);
+.LeftSideWindow_node.collapsed .LeftSideWindow_toggle-icon {
+  transform: rotate(0deg);
 }
-.LeftSideWindow_node.expanded .LeftSideWindow_toggle-icon{
-  transform:rotate(90deg);
+.LeftSideWindow_node.expanded .LeftSideWindow_toggle-icon {
+  transform: rotate(90deg);
 }
 
 /* ───────── 折叠内容区 ───────── */
-.LeftSideWindow_node-content{display:none;padding-left:14px;width:100%;}
-.LeftSideWindow_node.expanded + .LeftSideWindow_node-content{display:block;}
-
-/* ───────── 可拖拽条目 ───────── */
-.LeftSideWindow_draggable{
-  background:#3a3a3a;
-  margin:4px 0;
-  padding:6px 8px;
-  border-radius:4px;
-  cursor:move;
-  width:100%;
-  transition:background .2s;
+.LeftSideWindow_node-content {
+  display: none;
+  padding: 2px 0 8px 0;
+  width: 100%;
 }
-.LeftSideWindow_draggable:hover{background:#4d4d4d;}
-
-/* ───────── 信息浮窗 ───────── */
-.LeftSideWindow_floating-window{
-  position:absolute;
-  background:rgba(30,30,30,.95);
-  color:#fff;
-  padding:10px;
-  border-radius:6px;
-  box-shadow:0 4px 8px rgba(0,0,0,.4);
-  max-width:260px;
-  font-size:13px;
-  line-height:1.6;
-  z-index:10000;
-  pointer-events:none;
+.LeftSideWindow_node.expanded + .LeftSideWindow_node-content {
+  display: block;
+  /* animation: slideDown 0.2s ease-out; 暂时移除，避免闪烁 */
 }
 
-/* ───────── 滚动条美化 (WebKit) ───────── */
-.LeftSideWindow_side-window::-webkit-scrollbar{width:6px;}
-.LeftSideWindow_side-window::-webkit-scrollbar-track{background:#1e1e1e;}
-.LeftSideWindow_side-window::-webkit-scrollbar-thumb{background:#444;border-radius:3px;}
-.LeftSideWindow_side-window::-webkit-scrollbar-thumb:hover{background:#575757;}
-
-
-/* ───────── 可拖拽条目 ───────── */
-.LeftSideWindow_draggable{
-  background:#3a3a3a;
-  margin:4px 0;
-  padding:6px 8px;
-  border-radius:4px;
-  cursor:move;
-  width:100%;
-  transition:background var(--trans-fast);
+/* ───────── 可拖拽条目 (Apple Style - Sidebar Item) ───────── */
+.LeftSideWindow_draggable {
+  background: transparent;
+  margin: 1px 12px 1px 20px; /* Indented but contained */
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: grab;
+  width: auto;
+  font-size: 13px; /* Body size */
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.85);
+  transition: background 0.15s, color 0.15s;
+  border: none; /* Remove border */
+  display: flex; /* Ensure items align nicely */
+  align-items: center;
 }
-.LeftSideWindow_draggable:hover{
-  background:#4d4d4d;
+/* 图标（如果有的话，预留） */
+.LeftSideWindow_draggable::before {
+  content: '';
+  display: none;
+  /* 若需要显示图标，可在此处恢复 content 与 margin 设置 */
+}
+
+.LeftSideWindow_draggable:hover {
+  background: rgba(255, 255, 255, 0.1); /* Hover state */
+  color: white;
+  transform: none; /* Remove shift, keep it native */
+}
+.LeftSideWindow_draggable:active {
+    cursor: grabbing;
+    background: rgba(255, 255, 255, 0.15);
 }
 
 /* ───────── 信息浮窗 ───────── */
@@ -433,19 +537,19 @@
   pointer-events:none;
 }
 
-/* ───────── 滚动条美化 (仅 WebKit) ───────── */
-.LeftSideWindow_side-window::-webkit-scrollbar{
-  width:6px;
+/* ───────── Scrollbar (Apple Style) ───────── */
+.LeftSideWindow_side-window::-webkit-scrollbar {
+  width: 6px;
 }
-.LeftSideWindow_side-window::-webkit-scrollbar-track{
-  background:var(--c-bg-dark,#1e1e1e);
+.LeftSideWindow_side-window::-webkit-scrollbar-track {
+  background: transparent;
 }
-.LeftSideWindow_side-window::-webkit-scrollbar-thumb{
-  background:#444;
-  border-radius:3px;
+.LeftSideWindow_side-window::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
 }
-.LeftSideWindow_side-window::-webkit-scrollbar-thumb:hover{
-  background:#575757;
+.LeftSideWindow_side-window::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
 }
 /* 左侧窗口样式 */
 
@@ -638,55 +742,144 @@ html,body,#mountNode{
   width:100%;height:100%;
 }
 html,body{
-  margin:0;overflow-x:hidden;overflow-y:hidden;
-  font-family:"Poppins",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  background:var(--c-bg-body);
-  color:var(--c-text);
-  line-height:1.6;
-  letter-spacing:-.012em;
+  margin:0;
+  overflow-x:hidden;
+  overflow-y:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  background:#f2f2f7;
+  color:#111827;
+  line-height:1.5;
 }
 
-/* ===== 侧边栏 ===== */
-.side-window{
-  position:fixed;right:0;top:0;
-  width:360px;max-width:90vw;height:100%;
-  background:var(--c-bg-dark);
-  backdrop-filter:blur(14px);
-  border-left:1px solid var(--c-border);
-  box-shadow:-10px 0 24px rgba(0,0,0,.25);
-  display:none;overflow-y:auto;
-  z-index:1000;padding:24px 28px;
-  transition:var(--transition);
-}
-.side-window.visible{transform:translateX(0);}         /* 结合 JS 控制显示 */
-/* 滚动条美化 */
-.side-window::-webkit-scrollbar{width:6px}
-.side-window::-webkit-scrollbar-thumb{
-  background:rgba(255,255,255,.15);border-radius:3px;
+/* ===== Right Side Window - Apple Minimalist Style (Updated) ===== */
+.side-window {
+  position: fixed;
+  top: 56px; /* 统一对齐 Header 高度 */
+  bottom: 24px;
+  right: 24px;
+  width: 420px; /* 稍微窄一点，更精致 */
+  max-width: calc(100vw - 48px);
+  height: auto; 
+  background: rgba(30, 30, 32, 0.85); /* macOS Dark Mode Base */
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px; /* 统一圆角 */
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  z-index: 2000;
+  transform: translateX(calc(100% + 40px));
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
 }
 
-/* ===== 头部按钮 ===== */
-.side-header{
-  display:flex;gap:10px;
-  padding-bottom:16px;margin-bottom:24px;
-  border-bottom:1px solid var(--c-border);
+.side-window.visible {
+  transform: translateX(0);
 }
-.side-header button{
-  all:unset;cursor:pointer;
-  background:var(--c-bg-card);color:var(--c-text);
-  padding:10px 18px;border-radius:var(--radius);
-  font-size:14px;font-weight:500;
-  box-shadow:0 1px 4px rgba(0,0,0,.06);
-  transition:var(--transition);
+
+/* Fullscreen modifier */
+.side-window.fullscreen {
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 100vw;
+  max-width: 100vw;
+  border-radius: 0;
+  background: #1c1c1e; /* Solid background for fullscreen performance */
 }
-.side-header button:hover{
-  transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,.1);
+
+/* Scrollbar beautification */
+.side-window ::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
-.side-header button:active{transform:translateY(0);box-shadow:var(--shadow);}
-.primary-button{
-  background:var(--c-accent);color:#fff!important;
+.side-window ::-webkit-scrollbar-track {
+  background: transparent;
 }
-.primary-button:hover{background:#2563eb;}
+.side-window ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 3px;
+}
+.side-window ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ===== Side Header - Apple Style ===== */
+.side-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  margin-bottom: 0;
+  flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+.side-header .left-buttons {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.side-header button {
+  all: unset;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.9);
+  transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+  border: 0.5px solid rgba(255, 255, 255, 0.05);
+}
+
+.side-header button:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.side-header button:active {
+  transform: translateY(0) scale(0.98);
+  background: rgba(255, 255, 255, 0.15);
+}
+
+#run-button {
+    background: #007AFF;
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+}
+#run-button:hover {
+    background: #0062cc;
+    box-shadow: 0 4px 12px rgba(0, 122, 255, 0.4);
+}
+
+#close-button {
+    background: rgba(255, 69, 58, 0.15);
+    color: #ff453a;
+    border: 1px solid rgba(255, 69, 58, 0.2);
+}
+#close-button:hover {
+    background: rgba(255, 69, 58, 0.3);
+}
+
+#maximize-button {
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 16px;
+    padding: 4px;
+}
+#maximize-button:hover {
+    color: white;
+    background: transparent;
+    transform: scale(1.1);
+}
 
 /* ===== 输出项 ===== */
 .output-item{margin-bottom:24px;}
@@ -774,8 +967,10 @@ html,body{
 .drag-bar {
     height: 30px;
     width: 100%;
-    background-color: #00c788;
-    border-radius: 10px 10px 0 0;
+    background: linear-gradient(180deg, #e5e5ea 0%, #cfd0d4 100%);
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    box-shadow: inset 0 1px rgba(255, 255, 255, 0.8);
 }
 .column-AddNode {
     /* 圆形背景 */
@@ -840,18 +1035,15 @@ html,body{
 .Vessel {
     min-height: calc(100% - 250px);
     width: 100%;
-    background-color: #f1f3f4;
-    background-image: 
-        linear-gradient(30deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px),
-        linear-gradient(150deg, rgba(0, 0, 0, 0.03) 1px, transparent 1px);
-    background-size: 20px 20px;
+    background-color: #f9fafb;
+    background-image: none;
     position: absolute;
     display: flex;
     flex-direction: column;
     align-items: center;
     border-radius: 0 0 10px 10px;
     padding-bottom: 20px;
-    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
 }
 
 /* 新增 PromptColumn 的基本样式 *
@@ -860,20 +1052,24 @@ html,body{
     position: relative;
     width: 580px;
     min-height: 10px;
-    background-color: #a0a0a0;
-    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.9);
+    border-radius: 16px;
     margin-top: 5px;
     margin-bottom: 5px; /* 为了使相邻的.column元素之间保持20px的间隔 */
     display: flex;
     flex-direction: column;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
     }
 .column {
     position: relative;
     width: 580px;
     min-height: 10px;
     max-height: 400px;
-    background-color: #a0a0a0;
-    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.94);
+    border-radius: 16px;
     margin-top: 5px;
     margin-bottom: 5px;
     display: flex;
@@ -881,14 +1077,18 @@ html,body{
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 5px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 }
 .Promptcolumn {
     position: relative;
     width: 580px;
     min-height: 10px;
     /* 移除 max-height: 400px; */
-    background-color: #a0a0a0;
-    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.94);
+    border-radius: 16px;
     margin-top: 5px;
     margin-bottom: 5px;
     display: flex;
@@ -896,18 +1096,26 @@ html,body{
     overflow-y: auto;
     overflow-x: hidden;
     padding-right: 5px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 }
 
 .colsg {
     position: relative;
     width: 580px;
     min-height: 10px;
-    background-color: #a0a0a0;
-    border-radius: 10px;
+    background-color: rgba(255, 255, 255, 0.94);
+    border-radius: 16px;
     margin-top: 5px;
     margin-bottom: 5px; /* 为了使相邻的.column元素之间保持20px的间隔 */
     display: flex;
     flex-direction: column;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
 }
 
 /* 确保子元素不会被缩小，但允许它们自然扩展 */
@@ -1078,7 +1286,7 @@ html,body{
 
 .Detail-textarea {
     height: 25px;
-    width: 100px;
+  width: 130px;              /* 稍微加宽，完整显示 String 等文本 */
     appearance: none;
     -webkit-appearance: none;
     -moz-appearance: none;
@@ -1147,7 +1355,7 @@ html,body{
 
 .column-label {
     font-size: 14px; /* 调整字体大小 */
-    color: #ffffff; /* 字体颜色 */
+    color: #4b5563;  /* 更柔和的深灰文字 */
     margin-left: 10px; /* 与左边框的距离 */
     margin-top: 10px; /* 与顶部的距离 */
 }
@@ -1156,7 +1364,7 @@ html,body{
     height: 3;
     margin: 0;        /* 避免被全局 margin-bottom 撑高 */
     padding: 0;
-    background:rgba(255,0,0,.15);
+    background: transparent;
   }
   
   
@@ -1165,26 +1373,28 @@ html,body{
     margin: 10px 0;
     position: relative;
     max-height: 300px;
-    background: #565656;
+    background: rgba(255, 255, 255, 0.92);
     overflow-y: auto;
-    border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 5px rgba(0, 0, 0, 0.15); /* 增加阴影浓度 */
+    border-radius: 14px;
+    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
     padding: 12px;
     display: flex;
     flex-wrap: wrap;
     box-sizing: border-box;
     transition: box-shadow 0.3s ease; /* 添加过渡效果 */
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
 }
 
 /* 可以为不同的容器设置不同的样式区分 */
 .input-container {
-    background: linear-gradient(135deg, #464646, #3b3b3b); /* 渐变背景 */
-    border-left: 3px solid #8a8a8a;
+    background: rgba(255,255,255,0.95);
+    border-left: 3px solid rgba(0, 122, 255, 0.45);
 }
 
 .output-container {
-    background: linear-gradient(135deg, #505050, #4a4a4a); /* 渐变背景 */
-    border-left: 3px solid #3b3b3b;
+    background: rgba(255,255,255,0.95);
+    border-left: 3px solid rgba(120, 120, 128, 0.28);
 }
 
 /* 为内部元素设置合理的间距 */
@@ -1209,9 +1419,10 @@ html,body{
     grid-template-columns: 60px 1fr; /* 左列按钮，右列内容 */
     width: 100%;
     margin: 4px 0;
-    background: #3d3d3d;
+    background: #ffffff;
     border-radius: 6px;
-    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3); /* 添加轻微阴影 */
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
+    border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
   
@@ -1223,11 +1434,11 @@ html,body{
     height:28px;
     line-height:28px;
     text-align:center;
-    border:1px solid #888;
+    border:1px solid rgba(120, 120, 128, 0.4);
     border-radius:4px;
     cursor:pointer;
-    background:#222;
-    color:#fff;
+    background:#f2f2f7;
+    color:#111827;
   }
   
   /* 右侧内容区：行列表 + 新增按钮 */
@@ -1412,7 +1623,9 @@ h1 {
 
 .w-out {
     left: 4px;
-    background-color: #ff5f57;
+    background: radial-gradient(circle at 30% 30%, #ff8a80, #ff5f57);
+    border:1px solid rgba(0,0,0,0.2);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 4px rgba(0,0,0,0.25);
 }
 
 .w-out:hover:before {
@@ -1684,7 +1897,7 @@ h1 {
   left: 0;
   right: 0;
   height: 3px;
-  background: var(--ui-primary-gradient);
+  background: #000;
   border-radius: var(--ui-radius) var(--ui-radius) 0 0;
 }
 
@@ -1968,6 +2181,8 @@ input[type="number"] {
 /* ========= 11. 下拉选择优化 ========= */
 select {
   cursor: pointer;
+  min-height: 30px;                 /* 统一下拉高度（包含 Table 的下拉） */
+  line-height: 30px;
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
   background-position: right 12px center;
   background-repeat: no-repeat;
@@ -2084,3 +2299,279 @@ select {
 .tools-container::-webkit-scrollbar-thumb:hover {
     background: #999;
 }
+
+
+/* =========================================================
+ * 精简 UI 提升层次感（不改结构，只做配色/间距/控件统一）
+ * =======================================================*/
+
+/* 1. 全局背景：外深内浅，整体更稳重 */
+html,
+body {
+  background: #d1d5db; /* 略深的中灰，作为应用底色 */
+  color: #1f2937;
+}
+
+/* 2. 中间主画布与大面板层级 */
+.Vessel {
+  background-color: #e5e7eb; /* 比 body 稍浅，作为“白板”背景 */
+  box-shadow: none;          /* 作为静态画布，不再抢卡片的立体感 */
+}
+
+.column,
+.Jsoncolumn,
+.Promptcolumn,
+.colsg {
+  background-color: #f9fafb;              /* 接近白但略带灰，和白板拉开一档 */
+  border: 1px solid #d4d4d8;              /* 清晰的大块边界 */
+  box-shadow: 0 4px 10px rgba(15, 23, 42, 0.08); /* 只保留这一层的轻微阴影 */
+  margin-top: 12px;
+  margin-bottom: 12px;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+/* 3. 每个大块的标题条：标题区 vs 内容区 */
+.column-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #111827;
+  padding: 10px 16px 6px;
+  margin: 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+/* 4. 分组标题与标签字号体系 */
+.section-container h3 {
+  margin: 0 0 6px 2px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.input-item label,
+.output-item label,
+.setting-row label,
+.parameter label {
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+}
+
+/* 说明文字 / 副标题稍小且更浅 */
+.record-panel-subtitle {
+  font-size: 12px;
+  color: #9ca3af;
+}
+
+/* 5. 大块内部容器：收紧留白、强化分组 */
+.input-container,
+.output-container {
+  width: calc(100% - 24px);
+  margin: 8px 12px 12px;
+  padding: 8px 0 6px;
+  background: transparent;          /* 不再额外铺一层卡片底色 */
+  border-radius: 10px;              /* Inputs / Outputs 整块增加柔和倒角 */
+  border: none;
+  box-shadow: none;                 /* 去掉这一层的投影，避免“千层皮” */
+  position: relative;
+  overflow-y: auto;
+  display: flex;
+  flex-wrap: wrap;
+  box-sizing: border-box;
+  max-height: 320px;
+}
+
+.input-container > *,
+.output-container > * {
+  margin-bottom: 8px;
+}
+
+.input-container > *:last-child,
+.output-container > *:last-child {
+  margin-bottom: 0;
+}
+
+/* 只用一条色带做分组提示，不再整块高亮 */
+.input-container {
+  border-left: 3px solid rgba(59, 130, 246, 0.45);
+  padding-left: 12px;
+}
+
+.output-container {
+  border-left: 3px solid rgba(148, 163, 184, 0.9);
+  padding-left: 12px;
+}
+
+.input-container:hover,
+.output-container:hover {
+  background: rgba(255, 255, 255, 0.4); /* 轻微提亮即可 */
+}
+
+/* 避免 Output 内再出现一层“卡片感”的 Jsoncolumn/OriginalTextColumn */
+.column > .Jsoncolumn {
+  width: auto;
+  margin: 8px 12px 12px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  border-radius: 8px;
+}
+
+/* Json / OriginalText 模式下，加号统一在整个 Output 列的右上角 */
+
+/* 6. 统一中央区域输入控件皮肤（放弃系统默认白底黑边） */
+.column input[type="text"],
+.column input[type="number"],
+.column select,
+.column textarea,
+.Jsoncolumn input[type="text"],
+.Jsoncolumn input[type="number"],
+.Jsoncolumn select,
+.Jsoncolumn textarea,
+.Promptcolumn input[type="text"],
+.Promptcolumn textarea,
+.colsg input[type="text"],
+.colsg textarea {
+  background-color: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 6px 10px;
+
+  font-size: 13px;
+  color: #111827;
+  outline: none;
+  box-shadow: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+
+.column input[type="text"]:hover,
+.column input[type="number"]:hover,
+.column select:hover,
+.column textarea:hover,
+.Jsoncolumn input[type="text"]:hover,
+.Jsoncolumn input[type="number"]:hover,
+.Jsoncolumn select:hover,
+.Jsoncolumn textarea:hover {
+  border-color: #9ca3af;
+}
+
+.column input[type="text"]:focus,
+.column input[type="number"]:focus,
+.column select:focus,
+.column textarea:focus,
+.Jsoncolumn input[type="text"]:focus,
+.Jsoncolumn input[type="number"]:focus,
+.Jsoncolumn select:focus,
+.Jsoncolumn textarea:focus,
+.Promptcolumn input[type="text"]:focus,
+.Promptcolumn textarea:focus,
+.colsg input[type="text"]:focus,
+.colsg textarea:focus {
+  border-color: #3b82f6; /* 统一主色边框 */
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.20);
+  background-color: #ffffff;
+}
+
+/* 下拉框与数字框沿用同一体系，只区分宽度 */
+.column select,
+.Jsoncolumn select {
+  padding-right: 32px;
+}
+
+.column input[type="number"],
+.Jsoncolumn input[type="number"] {
+  text-align: left;
+}
+
+
+/* =========================================================
+ * LLM 设置区（model / temperature / 预设）视觉修正
+ * =======================================================*/
+
+/* 整块文字改为深色，适配浅色中间面板 */
+.llm-settings {
+  color: #111827;
+}
+
+.basic-settings {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 4px 10px 8px;
+}
+
+.model-selector,
+.temperature-setting,
+.preset-setting {
+  margin: 0;
+}
+
+/* 覆盖 JS 写入的白色字体，改成统一的中号标签色 */
+.temperature-setting label,
+.preset-setting label {
+  color: #374151 !important;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* 温度输入框沿用统一皮肤，但保证宽度适中且不“挤压” */
+.temperature-setting input[type="number"] {
+  min-width: 64px;
+}
+
+/* 预设下拉同一行更紧凑一些 */
+.preset-setting select {
+  min-width: 90px;
+}
+
+
+/* 展开按钮样式：小巧简洁、在浅色背景上可见 */
+.expand-button {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background-color: #e5e7eb;
+  color: #4b5563;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.expand-button:hover {
+  background-color: #d4d4d8;
+  border-color: #9ca3af;
+}
+
+.expand-button:active {
+  background-color: #e5e7eb;
+}
+
+
+/* Input / Output 标题与加号在同一水平线 */
+.column-label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding-right: 40px; /* 预留右侧加号空间 */
+}
+
+.column-AddNode {
+  top: 14px;
+  right: 18px;
+  left: auto;          /* 不再固定在左侧 */
+}
+
+/* Output 区域的加号现在与 Input 一致，统一由 .column 相对定位 */
+
+
+
+

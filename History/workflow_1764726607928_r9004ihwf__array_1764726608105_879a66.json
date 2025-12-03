@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但同属象科）。  \n在现存动物中，**非洲象**和**亚洲象**本身就是象科下的两个主要现存物种，彼此互为同科动物。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的现存动物是**非洲草原象**（Loxodonta africana）——如果所指的大象是**亚洲象**（Elephas maximus），那么非洲草原象就是它的同科近亲；反之亦然。  \n\n（注：猛犸象虽属象科，但已灭绝；若限定现存物种，则非洲象与亚洲象互为同科动物。）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但同属象科）。  \n在现存动物中，**非洲象**和**亚洲象**本身就是象科下的两个主要现存物种，彼此互为同科动物。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）——它是与非洲草原象和亚洲象同属象科的现存物种。  \n\n（目前象科现存三个物种：亚洲象、非洲草原象和非洲森林象，三者互为同科动物。）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的现存动物是**非洲草原象**（Loxodonta africana）——如果所指的大象是**亚洲象**（Elephas maximus），那么非洲草原象就是它的同科近亲；反之亦然。  \n\n（注：猛犸象虽属象科，但已灭绝；若限定现存物种，则非洲象与亚洲象互为同科动物。）"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='大象属于**象科**（Elephantidae）。\\n\\n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）——它是与非洲草原象和亚洲象同属象科的现存物种。  \\n\\n（目前象科现存三个物种：亚洲象、非洲草原象和非洲森林象，三者互为同科动物。）'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '大象'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['大象属于**象科**（Elephantidae）。\\n\\n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）——它是与非洲草原象和亚洲象同属象科的现存物种。  \\n\\n（目前象科现存三个物种：亚洲象、非洲草原象和非洲森林象，三者互为同科动物。）', '大象']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "大象"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）——它是与非洲草原象和亚洲象同属象科的现存物种。  \n\n（目前象科现存三个物种：亚洲象、非洲草原象和非洲森林象，三者互为同科动物。）"
+        }
+      ]
+    }
+  ]
+]

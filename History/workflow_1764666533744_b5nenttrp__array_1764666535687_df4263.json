@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "苍蝇属于**双翅目**（Diptera）中的**蝇科**（Muscidae）。\n\n一个与苍蝇同科（蝇科）的动物是：**家蝇**（Musca domestica）——其实我们通常所说的“苍蝇”就是指家蝇。\n\n如果你指的是更广义的“苍蝇”（泛指双翅目中的多种小型飞虫），那么严格来说，“蝇科”是双翅目下的一个科。另一个同属蝇科的动物还有**厩螫蝇**（Stomoxys calcitrans），它也是一种常见的蝇类，外形与家蝇相似，但会吸血。\n\n总结：  \n- 科：蝇科（Muscidae）  \n- 同科动物：家蝇（或厩螫蝇）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "苍蝇"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "苍蝇属于**蝇科**（Muscidae）。  \n一个同科的动物是：**厩螫蝇**（Stomoxys calcitrans）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "苍蝇属于**双翅目**（Diptera）中的**蝇科**（Muscidae）。\n\n一个与苍蝇同科（蝇科）的动物是：**家蝇**（Musca domestica）——其实我们通常所说的“苍蝇”就是指家蝇。\n\n如果你指的是更广义的“苍蝇”（泛指双翅目中的多种小型飞虫），那么严格来说，“蝇科”是双翅目下的一个科。另一个同属蝇科的动物还有**厩螫蝇**（Stomoxys calcitrans），它也是一种常见的蝇类，外形与家蝇相似，但会吸血。\n\n总结：  \n- 科：蝇科（Muscidae）  \n- 同科动物：家蝇（或厩螫蝇）"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "苍蝇属于**蝇科**（Muscidae）。  \n一个同科的动物是：**家蝇**（Musca domestica）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "苍蝇属于**蝇科**（Muscidae）。  \n一个同科的动物是：**厩螫蝇**（Stomoxys calcitrans）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='苍蝇属于**蝇科**（Muscidae）。  \\n一个同科的动物是：**家蝇**（Musca domestica）。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '苍蝇'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['苍蝇属于**蝇科**（Muscidae）。  \\n一个同科的动物是：**家蝇**（Musca domestica）。', '苍蝇']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "苍蝇"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "苍蝇属于**蝇科**（Muscidae）。  \n一个同科的动物是：**家蝇**（Musca domestica）。"
+        }
+      ]
+    }
+  ]
+]

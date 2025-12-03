@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个具体的动物物种，而是一大类已经灭绝的爬行动物的统称，因此它本身不是一个“科”（Family）级别的分类单位，而是包含多个目、科、属、种的庞大类群。\n\n不过，我们可以以某一种具体的恐龙为例来回答这个问题。例如：\n\n**动物：暴龙（Tyrannosaurus rex）**  \n- **科**：暴龙科（Tyrannosauridae）  \n- **同科的另一个动物**：艾伯塔龙（Albertosaurus）\n\n如果你只是泛泛地说“恐龙”，那么严格来说无法指定一个“科”。但如果你指的是某种特定的恐龙，请提供具体名称（如三角龙、腕龙、迅猛龙等），我可以给出准确的科名和同科动物。\n\n简要总结：  \n“恐龙”是多个科的集合，不是单一科。  \n举例：迅猛龙（伶盗龙）属于**驰龙科**，同科的还有小盗龙。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "恐龙"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "你说得非常准确！“恐龙”确实是一个包含众多物种的庞大类群，不是一个具体的科。为了符合“说出这动物是什么科，并给出一个同科的动物”的要求，我们可以选取一种广为人知的恐龙作为代表。\n\n以 **三角龙（Triceratops）** 为例：\n\n- **科**：角龙科（Ceratopsidae）  \n- **同科的另一个动物**：开角龙（Chasmosaurus）\n\n角龙科是一类具有大型头盾和角的植食性恐龙，主要生活在白垩纪晚期的北美洲。\n\n所以，回答如下：\n\n**三角龙属于角龙科，同科的动物有开角龙。**"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "“恐龙”并不是一个具体的动物物种，而是一大类已经灭绝的爬行动物的统称，因此它本身不是一个“科”（Family）级别的分类单位，而是包含多个目、科、属、种的庞大类群。\n\n不过，我们可以以某一种具体的恐龙为例来回答这个问题。例如：\n\n**动物：暴龙（Tyrannosaurus rex）**  \n- **科**：暴龙科（Tyrannosauridae）  \n- **同科的另一个动物**：艾伯塔龙（Albertosaurus）\n\n如果你只是泛泛地说“恐龙”，那么严格来说无法指定一个“科”。但如果你指的是某种特定的恐龙，请提供具体名称（如三角龙、腕龙、迅猛龙等），我可以给出准确的科名和同科动物。\n\n简要总结：  \n“恐龙”是多个科的集合，不是单一科。  \n举例：迅猛龙（伶盗龙）属于**驰龙科**，同科的还有小盗龙。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "三角龙属于角龙科，同科的动物有开角龙。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "你说得非常准确！“恐龙”确实是一个包含众多物种的庞大类群，不是一个具体的科。为了符合“说出这动物是什么科，并给出一个同科的动物”的要求，我们可以选取一种广为人知的恐龙作为代表。\n\n以 **三角龙（Triceratops）** 为例：\n\n- **科**：角龙科（Ceratopsidae）  \n- **同科的另一个动物**：开角龙（Chasmosaurus）\n\n角龙科是一类具有大型头盾和角的植食性恐龙，主要生活在白垩纪晚期的北美洲。\n\n所以，回答如下：\n\n**三角龙属于角龙科，同科的动物有开角龙。**"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='三角龙属于角龙科，同科的动物有开角龙。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '恐龙'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['三角龙属于角龙科，同科的动物有开角龙。', '恐龙']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "恐龙"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "三角龙属于角龙科，同科的动物有开角龙。"
+        }
+      ]
+    }
+  ]
+]

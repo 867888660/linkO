@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。\n\n一个同科的动物是**特暴龙**（Tarbosaurus bataar），它也是一种大型肉食性恐龙，主要发现于亚洲（如蒙古和中国），与霸王龙亲缘关系很近，外形和生态位也相似。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "霸王龙"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。  \n一个同科的动物是**特暴龙**（Tarbosaurus bataar）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。\n\n一个同科的动物是**特暴龙**（Tarbosaurus bataar），它也是一种大型肉食性恐龙，主要发现于亚洲（如蒙古和中国），与霸王龙亲缘关系很近，外形和生态位也相似。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。  \n一个同科的动物是**特暴龙**（Tarbosaurus bataar）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。  \n一个同科的动物是**特暴龙**（Tarbosaurus bataar）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "霸王龙"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "霸王龙（Tyrannosaurus rex）属于**暴龙科**（Tyrannosauridae）。  \n一个同科的动物是**特暴龙**（Tarbosaurus bataar）。"
+        }
+      ]
+    }
+  ]
+]

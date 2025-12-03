@@ -1,0 +1,112 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。\n\n一个同科的动物是**大白鼠**（也称褐家鼠，学名：Rattus norvegicus），它和常见的家鼠（如小家鼠 Mus musculus）都属于鼠科。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。  \n一个同科的动物是**仓鼠**（例如：金黄仓鼠，学名：Mesocricetus auratus），它也属于鼠科。  \n\n（注：虽然“仓鼠”常被归为仓鼠科（Cricetidae）的一部分，但在较广义的传统分类中，仓鼠类有时也被包含在鼠总科（Muroidea）下的鼠科范畴内。不过，根据现代主流分类系统，仓鼠通常属于**仓鼠科 Cricetidae**，而鼠科（Muridae）主要包括家鼠、大鼠等。因此，更准确的鼠科同科动物应为：**小家鼠**（Mus musculus）或**黑家鼠**（Rattus rattus）。）\n\n✅ 更严谨的回答：  \n老鼠（如褐家鼠）属于**鼠科**（Muridae）。  \n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。\n\n一个同科的动物是**大白鼠**（也称褐家鼠，学名：Rattus norvegicus），它和常见的家鼠（如小家鼠 Mus musculus）都属于鼠科。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠（如常见的褐家鼠）属于**鼠科**（Muridae）。  \n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。  \n一个同科的动物是**仓鼠**（例如：金黄仓鼠，学名：Mesocricetus auratus），它也属于鼠科。  \n\n（注：虽然“仓鼠”常被归为仓鼠科（Cricetidae）的一部分，但在较广义的传统分类中，仓鼠类有时也被包含在鼠总科（Muroidea）下的鼠科范畴内。不过，根据现代主流分类系统，仓鼠通常属于**仓鼠科 Cricetidae**，而鼠科（Muridae）主要包括家鼠、大鼠等。因此，更准确的鼠科同科动物应为：**小家鼠**（Mus musculus）或**黑家鼠**（Rattus rattus）。）\n\n✅ 更严谨的回答：  \n老鼠（如褐家鼠）属于**鼠科**（Muridae）。  \n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "读取文件失败: Error -3 while decompressing data: invalid distance too far back"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/工作簿1.xlsx"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "老鼠"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "老鼠（如常见的褐家鼠）属于**鼠科**（Muridae）。  \n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ]
+    }
+  ]
+]

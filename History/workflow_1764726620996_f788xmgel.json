@@ -1,0 +1,660 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "ArrayTrigger_DataBase",
+      "label": "DataBase_Array0",
+      "Outputs": [
+        {
+          "name": "Output1",
+          "Kind": "String",
+          "Context": ""
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles\\\\polymarket\\\\PolyMarketHistory.db"
+        },
+        {
+          "name": "Table",
+          "Kind": "String",
+          "Context": "测试"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。\n\n一个同科的动物是**大白鼠**（也称褐家鼠，学名：Rattus norvegicus），它和常见的家鼠（如小家鼠 Mus musculus）都属于鼠科。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（Muridaese）。\n\n一个同科的动物是**仓鼠**（例如：金黄仓鼠，学名：Mesocricetus auratus）。\n\n> 注：虽然“仓鼠”常被单独归入**仓鼠科**（Cricetidae），但在较新的分类系统中，仓鼠科有时被并入广义的鼠科（Muridae）中；不过传统分类中，鼠科（Muridae）和仓鼠科（Cricetidae）是两个并列的科。  \n>  \n> 为避免分类争议，更稳妥的同科动物例子是：**小家鼠**（Mus musculus）或**黑家鼠**（Rattus rattus），它们和褐家鼠（大白鼠）一样，都明确属于**鼠科（Muridae）**。\n\n✅ 因此，准确回答如下：\n\n**老鼠属于鼠科（Muridae）。一个同科的动物是小家鼠（Mus musculus）。**"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（学名：Muridae）。\n\n一个同科的动物是**大白鼠**（也称褐家鼠，学名：Rattus norvegicus），它和常见的家鼠（如小家鼠 Mus musculus）都属于鼠科。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（Muridaese）。\n\n一个同科的动物是**仓鼠**（例如：金黄仓鼠，学名：Mesocricetus auratus）。\n\n> 注：虽然“仓鼠”常被单独归入**仓鼠科**（Cricetidae），但在较新的分类系统中，仓鼠科有时被并入广义的鼠科（Muridae）中；不过传统分类中，鼠科（Muridae）和仓鼠科（Cricetidae）是两个并列的科。  \n>  \n> 为避免分类争议，更稳妥的同科动物例子是：**小家鼠**（Mus musculus）或**黑家鼠**（Rattus rattus），它们和褐家鼠（大白鼠）一样，都明确属于**鼠科（Muridae）**。\n\n✅ 因此，准确回答如下：\n\n**老鼠属于鼠科（Muridae）。一个同科的动物是小家鼠（Mus musculus）。**"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='老鼠属于**鼠科**（Muridae）。\\n\\n一个同科的动物是**小家鼠**（Mus musculus）。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '老鼠'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['老鼠属于**鼠科**（Muridae）。\\n\\n一个同科的动物是**小家鼠**（Mus musculus）。', '老鼠']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "老鼠"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "老鼠属于**鼠科**（Muridae）。\n\n一个同科的动物是**小家鼠**（Mus musculus）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但属于象科）；现存的同科动物还包括**非洲草原象**和**亚洲象**，它们本身就是象科下的不同种。如果要举另一个现存的同科不同种的例子，可以说：**非洲森林象**（Loxodonta cyclotis），它与非洲草原象（Loxodonta africana）同属象科，但为不同物种。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。\n\n一个同科的动物是**猛犸象**（虽然已灭绝，但属于象科）；现存的同科动物还包括**非洲草原象**和**亚洲象**，它们本身就是象科下的不同种。如果要举另一个现存的同科不同种的例子，可以说：**非洲森林象**（Loxodonta cyclotis），它与非洲草原象（Loxodonta africana）同属象科，但为不同物种。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**亚洲象**（Elephas maximus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**非洲森林象**（Loxodonta cyclotis）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='大象属于**象科**（Elephantidae）。  \\n一个同科的动物是**亚洲象**（Elephas maximus）。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '大象'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['大象属于**象科**（Elephantidae）。  \\n一个同科的动物是**亚洲象**（Elephas maximus）。', '大象']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "大象"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "大象属于**象科**（Elephantidae）。  \n一个同科的动物是**亚洲象**（Elephas maximus）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "鲸鱼并不是单一物种，而是一类海洋哺乳动物的统称，属于鲸目（Cetacea）。常见的“鲸鱼”可能指不同科的动物。例如：\n\n- 如果指的是**蓝鲸**或**座头鲸**，它们属于**须鲸科**（Balaenopteridae）。  \n  同科的动物：**长须鲸**（也是须鲸科）。\n\n- 如果指的是**虎鲸**（又称杀人鲸），它实际上属于**海豚科**（Delphinidae），是海豚家族中体型最大的成员。  \n  同科的动物：**宽吻海豚**。\n\n因此，以最常见的大型鲸鱼（如蓝鲸）为例：\n\n**鲸鱼（如蓝鲸）属于须鲸科，同科的动物有长须鲸。**"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鲸鱼"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "以蓝鲸为例：  \n**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有长须鲸。**"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "鲸鱼并不是单一物种，而是一类海洋哺乳动物的统称，属于鲸目（Cetacea）。常见的“鲸鱼”可能指不同科的动物。例如：\n\n- 如果指的是**蓝鲸**或**座头鲸**，它们属于**须鲸科**（Balaenopteridae）。  \n  同科的动物：**长须鲸**（也是须鲸科）。\n\n- 如果指的是**虎鲸**（又称杀人鲸），它实际上属于**海豚科**（Delphinidae），是海豚家族中体型最大的成员。  \n  同科的动物：**宽吻海豚**。\n\n因此，以最常见的大型鲸鱼（如蓝鲸）为例：\n\n**鲸鱼（如蓝鲸）属于须鲸科，同科的动物有长须鲸。**"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有座头鲸。**"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "以蓝鲸为例：  \n**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有长须鲸。**"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有座头鲸。**'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '鲸鱼'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有座头鲸。**', '鲸鱼']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "鲸鱼"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "**蓝鲸属于须鲸科（Balaenopteridae），同科的动物有座头鲸。**"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。\n\n一个同科的动物是**虎鲸**（又称杀人鲸，学名：Orcinus orca），它其实也是海豚科中体型最大的成员。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "海豚"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。  \n一个同科的动物是**中华白海豚**（学名：Sousa chinensis），它也是海豚科的一员，以其粉白色皮肤和濒危状态而闻名。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。\n\n一个同科的动物是**虎鲸**（又称杀人鲸，学名：Orcinus orca），它其实也是海豚科中体型最大的成员。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。  \n一个同科的动物是**虎鲸**（学名：Orcinus orca），它虽然常被称为“鲸”，但实际上也是海豚科中体型最大的成员。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。  \n一个同科的动物是**中华白海豚**（学名：Sousa chinensis），它也是海豚科的一员，以其粉白色皮肤和濒危状态而闻名。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='海豚属于**海豚科**（Delphinidae）。  \\n一个同科的动物是**虎鲸**（学名：Orcinus orca），它虽然常被称为“鲸”，但实际上也是海豚科中体型最大的成员。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '海豚'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['海豚属于**海豚科**（Delphinidae）。  \\n一个同科的动物是**虎鲸**（学名：Orcinus orca），它虽然常被称为“鲸”，但实际上也是海豚科中体型最大的成员。', '海豚']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "海豚"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "海豚属于**海豚科**（Delphinidae）。  \n一个同科的动物是**虎鲸**（学名：Orcinus orca），它虽然常被称为“鲸”，但实际上也是海豚科中体型最大的成员。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。\n\n一个同科的动物是**宽吻海豚**（Tursiops truncatus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "虎鲸"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。  \n一个同科的动物是**宽吻海豚**（*Tursiops truncatus*）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。\n\n一个同科的动物是**宽吻海豚**（Tursiops truncatus）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。  \n一个同科的动物是**真海豚**（*Delphinus delphis*）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。  \n一个同科的动物是**宽吻海豚**（*Tursiops truncatus*）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='虎鲸属于**海豚科**（Delphinidae）。  \\n一个同科的动物是**真海豚**（*Delphinus delphis*）。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '虎鲸'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['虎鲸属于**海豚科**（Delphinidae）。  \\n一个同科的动物是**真海豚**（*Delphinus delphis*）。', '虎鲸']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "虎鲸"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "虎鲸属于**海豚科**（Delphinidae）。  \n一个同科的动物是**真海豚**（*Delphinus delphis*）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B1",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。\n\n一个同科的动物是：**球蟒**（Python regius）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蟒蛇"
+        }
+      ]
+    },
+    {
+      "NodeKind": "IfNode",
+      "label": "IfNode4",
+      "Outputs": [
+        {
+          "name": "OutPut1",
+          "Kind": "Boolean",
+          "Boolean": true
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "Num",
+          "Num": 1
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py2",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。  \n一个同科的动物是：**缅甸蟒**（Python bivittatus）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。\n\n一个同科的动物是：**球蟒**（Python regius）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "LLm",
+      "label": "Qw72B.py3",
+      "Outputs": [
+        {
+          "name": "OriginalText",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。  \n一个同科的动物是：**球蟒**（Python regius）。"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "Input1",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。  \n一个同科的动物是：**缅甸蟒**（Python bivittatus）。"
+        }
+      ]
+    },
+    {
+      "NodeKind": "DataBase",
+      "label": "DataBase5",
+      "Outputs": [
+        {
+          "name": "Result",
+          "Kind": "String",
+          "Context": "测试 修改 -1 行 -> 分析='蟒蛇属于**蟒科**（Pythonidae）。  \\n一个同科的动物是：**球蟒**（Python regius）。'（SQLite）\n---- DEBUG DETAILS ----\n== Sheet [测试] 条件数: 1\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>]\ncontents types: [<class 'str'>]\nis_exact list:  [True]\ncombo_key: ('测试', (('名字', '蟒蛇'),), 'And', (True,))\n最终匹配行数: 1 / 21\n[SQL-UPD] table=测试 set 分析=? where= WHERE (\"名字\" = ? COLLATE NOCASE) params=['蟒蛇属于**蟒科**（Pythonidae）。  \\n一个同科的动物是：**球蟒**（Python regius）。', '蟒蛇']"
+        },
+        {
+          "name": "Output2",
+          "Kind": "String",
+          "Context": "修改完成（-1 行，已落库）"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "FilePath",
+          "Kind": "String_FilePath",
+          "Context": "F:/linkO/TempFiles/polymarket/PolyMarketHistory.db"
+        },
+        {
+          "name": "Input2",
+          "Kind": "String",
+          "Context": "蟒蛇"
+        },
+        {
+          "name": "Input3",
+          "Kind": "String",
+          "Context": "蟒蛇属于**蟒科**（Pythonidae）。  \n一个同科的动物是：**球蟒**（Python regius）。"
+        }
+      ]
+    }
+  ]
+]
