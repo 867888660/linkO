@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkO - 启动中心</title>
+    <link rel="stylesheet" href="/static/appindex.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="main-container">
+        <!-- 顶部导航 -->
+        <header class="top-header">
+            <div class="logo-section">
+                <i class="fas fa-rocket"></i>
+                <h1>LinkO</h1>
+                <span class="version">v1.13</span>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-monitor" id="openControlRoom">
+                    <i class="fas fa-satellite-dish"></i>
+                    <span>Control Room</span>
+                </button>
+                <button class="btn btn-primary" id="startNewInstanceBtn">
+                    <i class="fas fa-plus-circle"></i>
+                    <span>新建 App</span>
+                </button>
+                <button class="btn btn-success" id="startWorkTeam">
+                    <i class="fas fa-users"></i>
+                    <span>新建 WorkTeam</span>
+                </button>
+                <button class="btn btn-settings" id="settingsBtn">
+                    <i class="fas fa-cog"></i>
+                    <span>设置</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- 主内容区域 -->
+        <div class="content-wrapper">
+            <!-- 历史项目 -->
+            <section class="projects-section">
+                <div class="section-header">
+                    <h2>
+                        <i class="fas fa-history"></i>
+                        历史项目
+                    </h2>
+                    <div class="section-stats">
+                        <span id="historyCount">0</span> 项
+                    </div>
+                </div>
+                <div class="projects-grid">
+                    <ul id="projectList" class="project-list">
+                        <!-- 项目将动态插入这里 -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- WorkTeam 项目 -->
+            <section class="projects-section">
+                <div class="section-header">
+                    <h2>
+                        <i class="fas fa-users-cog"></i>
+                        WorkTeam 项目
+                    </h2>
+                    <div class="section-stats">
+                        <span id="workteamCount">0</span> 项
+                    </div>
+                </div>
+                <div class="projects-grid">
+                    <ul id="workTeamProjectList" class="project-list">
+                        <!-- 项目将动态插入这里 -->
+                    </ul>
+                </div>
+            </section>
+        </div>
+
+        <!-- 输出面板（隐藏） -->
+        <pre id="output" style="display: none;"></pre>
+    </div>
+
+    <!-- 设置菜单模态框 -->
+    <div id="settingsModal" class="settings-modal" style="display: none;">
+        <div class="settings-modal-content">
+            <div class="settings-header">
+                <div class="settings-header-left">
+                    <button class="settings-btn-add" id="settingsAddBtn" title="添加">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                    <button class="settings-btn-delete" id="settingsDeleteBtn" title="删除">
+                        <i class="fas fa-minus"></i>
+                    </button>
+                </div>
+                <button class="settings-btn-close" id="settingsCloseBtn">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="settings-body">
+                <div class="settings-sidebar">
+                    <div class="settings-menu-item active" data-section="secrets">
+                        <i class="fas fa-key"></i>
+                        <span>密钥</span>
+                    </div>
+                        <div class="settings-menu-item" data-section="llm-key">
+                            <i class="fas fa-code-branch"></i>
+                            <span>LLM Key</span>
+                        </div>
+                </div>
+                <div class="settings-content">
+                    <div id="secretsSection" class="settings-section">
+                        <h3>密钥管理</h3>
+                        <div id="secretsList" class="secrets-list">
+                            <!-- 密钥列表将动态插入这里 -->
+                        </div>
+                    </div>
+                        <div id="llmKeySection" class="settings-section" style="display: none;">
+                            <h3>LLM 密钥分配</h3>
+                            <div class="llm-key-list" id="llmKeyList">
+                                <!-- LLM 分配列表 -->
+                            </div>
+                        </div>
+                </div>
+            </div>
+            <div class="settings-footer">
+                <button class="btn btn-apply" id="settingsApplyBtn">应用</button>
+                <button class="btn btn-cancel" id="settingsCancelBtn">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/scripts.js"></script>
+</body>
+</html>

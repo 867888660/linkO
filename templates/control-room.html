@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Control Room - 实例监控</title>
+    <link rel="stylesheet" href="/static/control-room.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <div class="control-room">
+        <!-- 顶部导航栏 -->
+        <header class="top-bar">
+            <div class="logo">
+                <i class="fas fa-satellite-dish"></i>
+                <span>Control Room</span>
+            </div>
+            <div class="actions">
+                <button class="btn btn-primary" id="scanBtn">
+                    <i class="fas fa-radar"></i> 扫描端口
+                </button>
+                <button class="btn btn-success" id="newAppBtn">
+                    <i class="fas fa-plus"></i> 新建 App
+                </button>
+                <button class="btn btn-info" id="newWorkteamBtn">
+                    <i class="fas fa-users"></i> 新建 WorkTeam
+                </button>
+                <button class="btn btn-secondary" id="refreshBtn">
+                    <i class="fas fa-sync-alt"></i> 刷新
+                </button>
+            </div>
+        </header>
+
+        <!-- 统计信息栏 -->
+        <div class="stats-bar">
+            <div class="stat-item">
+                <i class="fas fa-server"></i>
+                <span>总实例: <strong id="totalCount">0</strong></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-play-circle"></i>
+                <span>运行中: <strong id="runningCount">0</strong></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-laptop-code"></i>
+                <span>App: <strong id="appCount">0</strong></span>
+            </div>
+            <div class="stat-item">
+                <i class="fas fa-users-cog"></i>
+                <span>WorkTeam: <strong id="workteamCount">0</strong></span>
+            </div>
+        </div>
+
+        <!-- 实例网格容器 -->
+        <div class="instances-grid" id="instancesGrid">
+            <!-- 实例卡片将动态插入这里 -->
+        </div>
+    </div>
+
+    <script src="/static/control-room.js"></script>
+</body>
+</html>
+

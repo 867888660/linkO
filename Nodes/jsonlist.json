@@ -265,7 +265,7 @@
     },
     {
         "Filename": "IfNode.py",
-        "Hash": "d8dd48133c7891613f5ec2a3b5e7e235842af81842ebe4ee8a123421ddbbb5e5",
+        "Hash": "25b0e9bed6922ed7da80cd753dd842958e7acfbf20dbb02e6f9edf512b5fc483",
         "NodeKind": "IfNode",
         "NodeFunction": "组件功能：这是一个条件判断节点，用于根据配置的多个判断条件对输入参数进行逻辑判断，并输出布尔值结果。\\n\\n代码功能摘要：该节点支持对String、Number、Boolean三种类型的输入参数进行多条件判断，通过配置判断主体、条件操作符和目标值，实现复杂的业务规则判断。支持And/Or两种逻辑组合方式，可以灵活处理多个条件的组合判断。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: boolean\\n    description: 条件判断的最终结果，true表示条件满足，false表示条件不满足\\n```\\n\\n运行逻辑：\\n- 清空并重新初始化输出数组，将所有输出的Boolean值设为False\\n- 遍历每个输出节点，提取其配置的判断条件参数：IfLogicSubjectArray（判断主体数组）、IfLogicConditionArray（判断条件数组）、IfLogicContentArray（判断内容数组）、IfLogicKind（逻辑组合方式）\\n- 对每组判断条件进行并行处理，根据最小数组长度确定实际处理的条件数量\\n- 对于每个判断条件，根据Subject名称在输入数组中查找对应的输入参数\\n- 根据输入参数的类型执行相应的判断逻辑：String类型支持include/exclude/empty/not empty判断；Number类型支持>/</==/!=/>=/<= 数值比较；Boolean类型支持true/false判断\\n- 收集所有单个条件的判断结果到multi_results数组中\\n- 根据IfLogicKind的值进行最终结果计算：'And'模式下所有条件都为true时结果才为true；'Or'模式下任一条件为true时结果就为true\\n- 将最终判断结果赋值给输出的Boolean字段，并设置输出类型为Boolean\\n- 返回处理完成的输出数组"
     },
