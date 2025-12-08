@@ -192,6 +192,13 @@ def _split_history_stem(stem: str):
         readable = ''
     label = stem[:match.start()] or stem
     return label, readable
+# 历史记录路径安全化（项目名转文件夹名）
+def _safe_project_dir(name: str) -> str:
+    try:
+        safe = re.sub(r"[^\w\.\-]+", "_", str(name)).strip("._")
+        return safe or "default"
+    except Exception:
+        return "default"
 @app.route('/save', methods=['POST'])
 def save():
     global project_data, project_name
@@ -1886,22 +1893,23 @@ def add_history():
     if not project_name:
         return jsonify({'error': 'ProjectName is required'}), 400
 
+    # 规范化项目目录，按项目名分文件夹
+    project_dir = Path('History') / _safe_project_dir(project_name)
+    project_dir.mkdir(parents=True, exist_ok=True)
+
     # 验证收到的数据是否为字典（JSON对象）
     if not isinstance(data, dict):
         return jsonify({'error': 'Invalid data format. Expected a JSON object.'}), 400
 
-    history_dir = 'History'
-    if not os.path.exists(history_dir):
-        os.makedirs(history_dir)
-    
-    # 确保文件名带有 .json 扩展名
-    file_path = os.path.join(history_dir, f'{project_name}.json')
+    # 按日期切分，避免单文件过大导致读取卡顿
+    today_label = datetime.now().strftime('%Y%m%d')
+    file_path = project_dir / f'{today_label}.json'
     print(f"📄 File path: {file_path}")
 
     # 使用独立锁串行化“读 -> 改 -> 写”流程，避免高并发下互相覆盖
     with history_lock:
         # 尝试读取现有的JSON文件
-        if os.path.exists(file_path):
+        if file_path.exists():
             for attempt in range(3):  # 添加重试机制
                 try:
                     with open(file_path, 'r', encoding='utf-8') as f:
@@ -1911,7 +1919,7 @@ def add_history():
                 except json.JSONDecodeError as e:
                     print(f"❌ JSON decode error: {e}")
                     # 如果文件损坏，创建备份
-                    if os.path.getsize(file_path) > 0:
+                    if file_path.stat().st_size > 0:
                         backup_path = f"{file_path}.backup.{int(time.time())}"
                         try:
                             os.rename(file_path, backup_path)
@@ -1977,28 +1985,79 @@ def get_history():
     project_name = request.args.get('ProjectName')
     if not project_name:
         return jsonify({'error': 'ProjectName is required'}), 400
-    history_dir = 'History'
-    file_path = os.path.join(history_dir, project_name)
-    # 检查文件是否存在
-    if not os.path.exists(file_path):
-        return jsonify([]), 200  # 如果文件不存在，返回空数组
+
+    # 允许指定文件名或使用最新文件
+    target_filename = request.args.get('filename') or request.args.get('run')
+    limit_param = request.args.get('limit', '200')  # 默认限制返回条数，防止过大
     try:
-        # 尝试以 UTF-8 编码读取文件
+        limit = int(limit_param) if limit_param is not None else None
+    except Exception:
+        limit = 200
+
+    project_dir = Path('History') / _safe_project_dir(project_name)
+    if not project_dir.exists():
+        # 兼容旧路径（History/项目名.json）
+        legacy_path = Path('History') / project_name
+        if legacy_path.exists():
+            try:
+                with open(legacy_path, 'r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+                return jsonify(json_data), 200
+            except Exception as e:
+                return jsonify({'error': f'读取旧版历史失败: {e}'}), 500
+        return jsonify([]), 200
+
+    # 选择目标文件
+    if target_filename:
+        file_path = project_dir / os.path.basename(target_filename)
+    else:
+        files = sorted(
+            [p for p in project_dir.glob('*.json') if "__array_" not in p.stem],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True
+        )
+        file_path = files[0] if files else None
+
+    if not file_path or not file_path.exists():
+        return jsonify([]), 200
+
+    try:
         with open(file_path, 'r', encoding='utf-8') as f:
             json_data = json.load(f)
     except UnicodeDecodeError:
         return jsonify({'error': 'File encoding is not UTF-8. Please ensure the file is saved as UTF-8.'}), 500
     except json.JSONDecodeError:
         return jsonify({'error': 'File content is not valid JSON.'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    # 仅返回最新若干条，避免前端加载过大
+    if limit and isinstance(json_data, list) and json_data:
+        try:
+            last_session = json_data[-1] if isinstance(json_data[-1], list) else json_data
+            if isinstance(last_session, list):
+                json_data = [last_session[-limit:]]
+        except Exception:
+            pass
+
     return jsonify(json_data), 200
+
+def _find_history_file_by_workflow(workflow_id: str):
+    history_dir = Path('History')
+    pattern = f"{workflow_id}.json"
+    # 优先在新结构（按项目分目录）中查找
+    matches = list(history_dir.rglob(pattern))
+    if matches:
+        return matches[0]
+    legacy = history_dir / pattern
+    return legacy if legacy.exists() else None
 
 @app.route("/workflow/history/<workflow_id>", methods=["GET"])
 def get_workflow_history_route(workflow_id):
     if not workflow_id:
         return jsonify([]), 200
-    history_dir = Path('History')
-    history_path = history_dir / f"{workflow_id}.json"
-    if not history_path.exists():
+    history_path = _find_history_file_by_workflow(workflow_id)
+    if not history_path:
         return jsonify([])
     try:
         with open(history_path, 'r', encoding='utf-8') as f:
@@ -2014,39 +2073,57 @@ def list_history_runs():
     project_name = (request.args.get('project_name') or '').strip()
     history_dir = Path('History')
     history_dir.mkdir(parents=True, exist_ok=True)
-    normalized = project_name.lower()
-    if normalized.endswith('.json'):
-        normalized = normalized[:-5]
-    if ':' in normalized:
-        normalized = normalized.split(':')[-1]
     records = []
-    for json_file in history_dir.glob('*.json'):
-        stem = json_file.stem
-        if project_name:
-            if not stem.lower().startswith(normalized):
+    target_projects = []
+    if project_name:
+        target_projects.append(history_dir / _safe_project_dir(project_name))
+    else:
+        target_projects.extend([p for p in history_dir.iterdir() if p.is_dir()])
+        # 兼容旧版：根目录下的 JSON 也列出来
+        target_projects.append(history_dir)
+
+    for proj_dir in target_projects:
+        if not proj_dir.exists():
+            continue
+        for json_file in proj_dir.glob('*.json'):
+            if "__array_" in json_file.stem:
+                # 跳过不需要的子数组工作流记录
                 continue
-        stat = json_file.stat()
-        label, ts_label = _split_history_stem(stem)
-        records.append({
-            'filename': json_file.name,
-            'label': label,
-            'time_label': ts_label,
-            'filesize': stat.st_size,
-            'modified_at': datetime.fromtimestamp(stat.st_mtime).isoformat()
-        })
+            stat = json_file.stat()
+            label, ts_label = _split_history_stem(json_file.stem)
+            records.append({
+                'filename': json_file.name,
+                'project': proj_dir.name if proj_dir != history_dir else '',
+                'path': str(json_file.relative_to(history_dir)),
+                'label': label,
+                'time_label': ts_label,
+                'filesize': stat.st_size,
+                'modified_at': datetime.fromtimestamp(stat.st_mtime).isoformat()
+            })
     records.sort(key=lambda item: item['modified_at'], reverse=True)
     return jsonify({'project': project_name, 'items': records})
 
 @app.route('/history/run', methods=['GET'])
 def get_history_run():
     filename = (request.args.get('filename') or '').strip()
+    project_name = (request.args.get('project_name') or '').strip()
     if not filename:
         return jsonify({'error': 'filename is required'}), 400
     safe_name = os.path.basename(filename)
     if safe_name != filename or '..' in safe_name:
         return jsonify({'error': 'Invalid filename'}), 400
-    history_path = Path('History') / safe_name
-    if not history_path.exists():
+    history_root = Path('History')
+    candidates = []
+    if project_name:
+        candidates.append(history_root / _safe_project_dir(project_name) / safe_name)
+    # 优先新结构，再兼容旧文件
+    candidates.append(history_root / safe_name)
+    if not project_name:
+        for proj_dir in history_root.iterdir():
+            if proj_dir.is_dir():
+                candidates.append(proj_dir / safe_name)
+    history_path = next((p for p in candidates if p.exists()), None)
+    if not history_path:
         return jsonify({'error': '记录不存在'}), 404
     try:
         with open(history_path, 'r', encoding='utf-8') as f:

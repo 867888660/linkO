@@ -2331,6 +2331,23 @@ function resetWorkflowTracking() {
   currentObservedWorkflowId = null;
 }
 
+// 解锁当前画布节点的 IsBlock，并刷新
+function unlockGraphBlocks() {
+  try {
+    if (typeof graph === 'undefined' || !graph || !graph.save) return;
+    const g = graph.save();
+    if (!g || !Array.isArray(g.nodes)) return;
+    g.nodes.forEach(n => {
+      if (n && typeof n === 'object') n.IsBlock = false;
+    });
+    ChangeDatas(g);
+    RefreshEdge?.();
+    console.warn('[GRAPH] 已解锁节点 IsBlock');
+  } catch (e) {
+    console.warn('[GRAPH] 解锁 IsBlock 失败:', e);
+  }
+}
+
 function resetRunButtonUI(text = '运行') {
   const btn = document.getElementById('runButton');
   if (btn) {
@@ -3380,6 +3397,39 @@ async function annotateRecordItemsWithErrorFlag(items) {
         );
         item.__hasError = !!hasError;
 
+        // 构建可搜索文本，包含 Inputs/Outputs/label/prompt 关键词
+        try {
+          const collectFields = [];
+          nodes.forEach(n => {
+            if (!n || typeof n !== 'object') return;
+            ['label', 'name', 'prompt', 'ExportPrompt', 'SystemPrompt'].forEach(k => {
+              if (n[k]) collectFields.push(String(n[k]));
+            });
+            if (Array.isArray(n.Inputs)) {
+              n.Inputs.forEach(inp => {
+                if (!inp) return;
+                collectFields.push(inp.name || '');
+                if (inp.Context) collectFields.push(inp.Context);
+                if (typeof inp.Num !== 'undefined' && inp.Num !== null) collectFields.push(String(inp.Num));
+                if (typeof inp.Boolean === 'boolean') collectFields.push(String(inp.Boolean));
+              });
+            }
+            if (Array.isArray(n.Outputs)) {
+              n.Outputs.forEach(out => {
+                if (!out) return;
+                collectFields.push(out.name || '');
+                if (out.Context) collectFields.push(out.Context);
+                if (typeof out.Num !== 'undefined' && out.Num !== null) collectFields.push(String(out.Num));
+                if (typeof out.Boolean === 'boolean') collectFields.push(String(out.Boolean));
+              });
+            }
+          });
+          const baseText = `${formatRecordLabel(item)} ${item.time_label || ''}`;
+          item.__searchText = `${baseText} ${collectFields.join(' ')}`.toLowerCase();
+        } catch (e) {
+          console.warn('[RECORD] build search text failed', e);
+        }
+
         // 根据结果更新对应按钮的样式
         const btnList = document.querySelectorAll('.record-panel-item');
         btnList.forEach(btn => {
@@ -3389,6 +3439,9 @@ async function annotateRecordItemsWithErrorFlag(items) {
               btn.classList.add('record-panel-item-error');
             } else {
               btn.classList.remove('record-panel-item-error');
+            }
+            if (item.__searchText) {
+              btn.dataset.searchText = item.__searchText;
             }
           }
         });
@@ -3458,6 +3511,8 @@ function renderRecordPanel(items) {
     btn.type = 'button';
     btn.className = 'record-panel-item';
     btn.dataset.filename = item.filename;
+    // 预置搜索文本（先用已有信息，后续异步补齐 Inputs/Outputs）
+    btn.dataset.searchText = (item.__searchText || formatRecordLabel(item)).toLowerCase();
     // 如果已经提前标记了是否有错误，则在渲染阶段直接加上对应样式
     if (item && item.__hasError) {
       btn.classList.add('record-panel-item-error');
@@ -3484,7 +3539,7 @@ function renderRecordPanel(items) {
       const q = (inputEl.value || '').trim().toLowerCase();
       const itemsEls = list.querySelectorAll('.record-panel-item');
       itemsEls.forEach(el => {
-        const text = (el.textContent || '').toLowerCase();
+        const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
         el.style.display = q ? (text.includes(q) ? '' : 'none') : '';
       });
     };
@@ -15564,42 +15619,18 @@ function runFunction() {
     const wfId = currentWorkflowId || monitoredWorkflowId;
     console.log('🛑 [STOP] 用户点击停止按钮，workflowId =', wfId);
 
-    const cleanupWorkflow = () => {
-      return fetch(`/workflow/cleanup/${wfId}`, { method: 'POST' })
-        .then(() => {
-          console.log(`[CLEANUP] 工作流 ${wfId} 已清理`);
-        })
-        .catch(err => {
-          console.warn(`[CLEANUP] 清理工作流 ${wfId} 失败:`, err);
-        });
-    };
-
-    fetch(`/workflow/stop/${wfId}`, { method: 'POST' })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) {
-          showMessage(`停止工作流失败: ${data.error}`, 'orange');
-          throw new Error(data.error);
-        } else {
-          showMessage('工作流已停止，开始清理资源', 'green');
-        }
-        return cleanupWorkflow();
-      })
-      .then(() => {
-        showMessage('后台资源已清理', '#00d4ff');
-      })
-      .catch(error => {
-        showMessage(`停止/清理工作流失败: ${error.message}`, 'red');
-      })
+    stopWorkflowAndChildren(wfId)
+      .then(() => showMessage('工作流已停止并清理', '#00d4ff'))
+      .catch(error => showMessage(`停止/清理工作流失败: ${error.message}`, 'red'))
       .finally(() => {
         stopAllAnimationsAndPolling();
         currentWorkflowId = null;
         monitoredWorkflowId = null;
         currentObservedWorkflowId = null;
+        // 停止后仍保持选择器可见，便于切换监控其他工作流
         setWorkflowPollingInterval(0);
-        if (workflowSelectElement) {
-          workflowSelectElement.style.display = 'none';
-        }
+        // 解锁前端节点，恢复可编辑
+        unlockGraphBlocks();
         updateWorkflowSelector();
         const runBtn = document.getElementById('runButton');
         if (runBtn) {
@@ -16543,7 +16574,13 @@ async function updateWorkflowSelector() {
     if (!res.ok) return;
     
     const data = await res.json();
-    const workflows = data.workflows || [];
+    // 优先将父工作流排在前面（is_child=false），避免自动选到子工作流
+    const workflows = (data.workflows || []).slice().sort((a, b) => {
+      const pa = a?.is_child ? 1 : 0;
+      const pb = b?.is_child ? 1 : 0;
+      if (pa !== pb) return pa - pb; // 父优先
+      return 0;
+    });
     
     if (!workflowSelectElement) return;
     
@@ -16574,16 +16611,17 @@ async function updateWorkflowSelector() {
       else if (statusText === 'error') statusText = '错误';
       else if (statusText === 'stopped') statusText = '已停止';
       const childText = formatChildSummaryText(wf.child_summary);
-      option.textContent = `${displayName} (${statusText})${childText}`;
+      const childMark = wf.is_child ? ' [子工作流]' : '';
+      option.textContent = `${displayName}${childMark} (${statusText})${childText}`;
       if (wf.id === currentObservedWorkflowId) {
         option.selected = true;
       }
       workflowSelectElement.appendChild(option);
     });
     
-    // 显示/隐藏选择器（仅监控模式显示）
-    const shouldShowSelector = (frontendMode === 'monitor' || frontendMode === 'monitor_completed');
-    if (workflows.length > 0 && shouldShowSelector) {
+    // 显示/隐藏选择器 —— 只要有工作流就显示，方便随时切换
+    const shouldShowSelector = workflows.length > 0;
+    if (shouldShowSelector) {
       // 强制显示选择器
       workflowSelectElement.style.display = 'inline-flex';
       workflowSelectElement.style.visibility = 'visible';
@@ -16597,22 +16635,19 @@ async function updateWorkflowSelector() {
       console.log('[WORKFLOW-SELECTOR] 隐藏选择器（非监控模式或无工作流）');
     }
     
-    // 如果有工作流但没有选中，默认选中第一个运行中的工作流（仅监控模式）
+    // 如果有工作流但没有选中，默认选中“父”工作流优先（仅监控模式）
     if (workflows.length > 0 && !currentObservedWorkflowId && shouldShowSelector) {
-      const runningWorkflows = workflows.filter(wf => wf.status === 'running');
-      if (runningWorkflows.length > 0) {
-        const firstWorkflowId = runningWorkflows[0].id;
-        currentObservedWorkflowId = firstWorkflowId;
-        monitoredWorkflowId = firstWorkflowId;
-        workflowSelectElement.value = firstWorkflowId;
-        console.warn(`[WORKFLOW-SELECTOR] 自动选中第一个运行中的工作流: ${firstWorkflowId}`);
-      } else if (workflows.length > 0) {
-        // 如果没有运行中的，选中第一个
-        const firstWorkflowId = workflows[0].id;
-        currentObservedWorkflowId = firstWorkflowId;
-        monitoredWorkflowId = firstWorkflowId;
-        workflowSelectElement.value = firstWorkflowId;
-        console.warn(`[WORKFLOW-SELECTOR] 自动选中第一个工作流: ${firstWorkflowId}`);
+      const runningParents = workflows.filter(wf => wf.status === 'running' && !wf.is_child);
+      const runningAny = workflows.filter(wf => wf.status === 'running');
+      const candidate =
+        (runningParents.length && runningParents[0]) ||
+        (runningAny.length && runningAny[0]) ||
+        workflows[0];
+      if (candidate) {
+        currentObservedWorkflowId = candidate.id;
+        monitoredWorkflowId = candidate.id;
+        workflowSelectElement.value = candidate.id;
+        console.warn(`[WORKFLOW-SELECTOR] 自动选中工作流: ${candidate.id}（父优先）`);
       }
     }
     
@@ -16652,6 +16687,18 @@ function switchToWorkflow(workflowId) {
   if (oldWfId && oldWfId !== workflowId) {
     console.warn(`[WORKFLOW-SELECTOR] 切换工作流，清空之前的图数据`);
     // 不立即清空，让轮询获取新数据后再更新
+    try {
+      // 切换时重置侧窗/快照相关缓存，避免显示上一条 workflow 的快照
+      window.__snapshotRing = { items: [], max: (window.__snapshotRing && window.__snapshotRing.max) || 20 };
+      window.lastActiveSnapshot = null;
+      window.__nodeFinalDigest = {};
+      window.__lastCompletedGraphData = null;
+      window.__shouldSaveCompletedGraph = false;
+      window.__sidewinSelectedGraphs = {};
+      window.__currentSideWindowNode = null;
+      window.__currentSideWindowIsCheckMode = false;
+      console.warn('[WORKFLOW-SELECTOR] 已重置本地快照/侧窗缓存');
+    } catch (_) {}
   }
   
   // 立即触发一次状态轮询，使用新的工作流ID
@@ -16660,6 +16707,27 @@ function switchToWorkflow(workflowId) {
   setTimeout(() => {
     pollWorkflowStatus();
   }, 100);
+}
+
+// 停止指定工作流及其子工作流
+async function stopWorkflowAndChildren(targetWorkflowId) {
+  try {
+    const listRes = await fetch('/workflow/list');
+    if (!listRes.ok) throw new Error(`list http ${listRes.status}`);
+    const listData = await listRes.json();
+    const workflows = listData.workflows || [];
+    const targets = workflows
+      .filter(wf => wf.status === 'running' && (wf.id === targetWorkflowId || wf.parent_id === targetWorkflowId))
+      .map(wf => wf.id);
+    if (!targets.includes(targetWorkflowId)) targets.push(targetWorkflowId);
+    console.warn('[STOP] 计划停止工作流集合:', targets);
+    for (const wid of targets) {
+      try { await fetch(`/workflow/stop/${wid}`, { method: 'POST' }); } catch (e) { console.warn('[STOP] stop failed', wid, e); }
+      try { await fetch(`/workflow/cleanup/${wid}`, { method: 'POST' }); } catch (e) { console.warn('[STOP] cleanup failed', wid, e); }
+    }
+  } catch (err) {
+    console.warn('[STOP] stopWorkflowAndChildren error:', err);
+  }
 }
 
 // ==================== 与后端 Workflow 状态同步运行按钮 + 当前工作流信息 ====================

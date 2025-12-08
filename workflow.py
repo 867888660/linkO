@@ -168,6 +168,14 @@ class WorkflowEngine:
                 wf["last_update"] = time.time()
         except Exception:
             pass
+
+    def _safe_project_dir(self, name: str) -> str:
+        """将项目名转为安全的目录名"""
+        try:
+            safe = re.sub(r"[^\w\.\-]+", "_", str(name)).strip("._")
+            return safe or "workflow"
+        except Exception:
+            return "workflow"
     
     def _add_history(self, workflow_id, node_data):
         """添加历史记录（与前端addHistory逻辑对齐）"""
@@ -227,16 +235,40 @@ class WorkflowEngine:
                 
                 print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
             
+            # 过滤不需要的 array 子工作流历史
+            if "__array_" in str(workflow_id):
+                try:
+                    skip_root = self.BASE_DIR / "History"
+                    for p in skip_root.rglob(f"{workflow_id}.json"):
+                        try:
+                            p.unlink()
+                        except Exception:
+                            pass
+                    print(f"⏭️ [HISTORY] 跳过并清理子数组工作流历史: {workflow_id}")
+                except Exception:
+                    pass
+                return
+
+            # 获取项目名（用于分目录存放）
+            try:
+                wf_meta = self.workflows.get(workflow_id) or {}
+                graph_data = wf_meta.get("graph_data") if isinstance(wf_meta, dict) else {}
+                project_name = None
+                if isinstance(graph_data, dict):
+                    project_name = graph_data.get("ProjectName") or graph_data.get("name")
+                project_dir = self._safe_project_dir(project_name or "workflow")
+            except Exception:
+                project_dir = "workflow"
+
             # 保存到历史文件（串行化读改写，避免高并发下记录丢失）
-            history_dir = 'History'
-            if not os.path.exists(history_dir):
-                os.makedirs(history_dir)
-            
-            file_path = os.path.join(history_dir, f'{workflow_id}.json')
+            history_root = self.BASE_DIR / "History"
+            history_dir = history_root / project_dir
+            history_dir.mkdir(parents=True, exist_ok=True)
+            file_path = history_dir / f'{workflow_id}.json'
 
             with self._history_lock:
                 # 读取现有数据
-                if os.path.exists(file_path):
+                if file_path.exists():
                     try:
                         with open(file_path, 'r', encoding='utf-8') as f:
                             json_data = json.load(f)
@@ -302,15 +334,15 @@ class WorkflowEngine:
             except Exception:
                 comp_safe = "workflow"
             ts = time.strftime("%Y%m%d_%H%M%S")
-            history_dir = (self.BASE_DIR / "History")
+            history_dir = self.BASE_DIR / "History" / comp_safe
             history_dir.mkdir(parents=True, exist_ok=True)
             # 为避免高并发同一秒内文件名冲突，这里追加一个短随机后缀
             try:
                 suffix = uuid.uuid4().hex[:6]
-                fp = history_dir / f"{comp_safe}_{ts}_{suffix}.json"
+                fp = history_dir / f"{ts}_{suffix}.json"
             except Exception:
                 # 兜底：仍然退化为旧命名方式
-                fp = history_dir / f"{comp_safe}_{ts}.json"
+                fp = history_dir / f"{ts}.json"
             payload = {"nodes": nodes}
             with open(fp, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -3279,6 +3311,29 @@ class WorkflowEngine:
                         node_states.append(f"{n.get('label')}({n.get('NodeKind', '?')[:3]})={state}")
                 if node_states:
                     print(f"[RESP-TO-FE] wf={workflow_id} nodes={' '.join(node_states)}")
+            except Exception:
+                pass
+
+            # 若数组队列或子工作流仍在运行，强制点亮 ArrayTrigger 节点，避免前端动画“全空闲”
+            try:
+                has_array_pending = array_q > 0
+                child_summary = workflow.get("child_summary") or {}
+                has_active_child = isinstance(child_summary, dict) and child_summary.get("active", 0) > 0
+                if has_array_pending or has_active_child:
+                    nodes = workflow["graph_data"].get("nodes", []) or []
+                    touched = False
+                    for n in nodes:
+                        if not isinstance(n, dict):
+                            continue
+                        nk = str(n.get("NodeKind", "")).lower()
+                        if "arraytrigger" in nk:
+                            if n.get("IsRunning") is not True:
+                                n["IsRunning"] = True
+                                n["isFinish"] = False
+                                n["IsError"] = False
+                                touched = True
+                    if touched:
+                        workflow["last_update"] = time.time()
             except Exception:
                 pass
 
