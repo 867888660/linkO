@@ -61,6 +61,7 @@ def get_llm_api_key():
 
 def run_node(node):
     Outputs.clear()
+
     for i in range(len(node['Outputs'])):
         Outputs.append(node['Outputs'][i])
     messages = node["messages"]

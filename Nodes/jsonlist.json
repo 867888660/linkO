@@ -427,7 +427,7 @@
     },
     {
         "Filename": "Qw72B.py",
-        "Hash": "e119de8b26ff408a5bfc2bd2a2491ffea4c26ac3c4f57e0f5fa455822117db71",
+        "Hash": "d65db62d9cfa17bd4e1e2c855e697788df0219cc8e1421171a9182a6432d768b",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },

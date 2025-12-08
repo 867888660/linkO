@@ -129,10 +129,13 @@
   box-shadow:inset 0 1px 0 rgba(255,255,255,.06);
 }
 .token-item{
-  color:rgba(255,255,255,.85);
+  color:rgba(255,255,255,.95); /* 提高 token 信息亮度 */
   font-size:13px;
   display:flex;
   justify-content:space-between;
+}
+.token-item span{
+  color:rgba(255,255,255,.9); /* 确保标签也清晰可见 */
 }
 
 /***** 内容区 (Updated) *****/
@@ -157,7 +160,7 @@
   margin-top: 8px;
   padding: 12px;
   background: rgba(255, 255, 255, 0.04);
-  color: rgba(245, 245, 247, 0.95);
+  color: rgba(255, 255, 255, 0.95); /* 提高文本亮度 */
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   font-family: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
@@ -183,7 +186,7 @@
 .input-textarea[readonly] {
   background: rgba(255, 255, 255, 0.02);
   border-color: rgba(255,255,255,0.04);
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.9);
   cursor: text;
 }
 
@@ -219,7 +222,7 @@
 }
 .section-container h3 {
   margin: 0 0 8px 2px;
-  color: rgba(235, 235, 245, 0.6); /* Secondary Label Color */
+  color: rgba(255, 255, 255, 0.85); /* 提高标题亮度 */
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -229,7 +232,7 @@
 .input-item label,
 .output-item label {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(255, 255, 255, 0.8); /* 提高标签亮度 */
   margin-bottom: 4px;
   display: block;
 }
@@ -400,7 +403,9 @@
   z-index: 2000;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  /* 允许垂直滚动（鼠标滚轮），横向仍然隐藏 */
+  overflow-x: hidden;
+  overflow-y: auto;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif; /* 强制苹果字体 */
   padding-top: 12px; /* 顶部留白 */
 }
@@ -579,13 +584,13 @@
 .record-panel-list{
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:6px;
 }
 .record-panel-item{
   width:100%;
   border:none;
-  border-radius:8px;
-  padding:10px 12px;
+  border-radius:6px;
+  padding:8px 10px;
   background:linear-gradient(135deg,#1a66ff,#0b468c);
   color:#fff;
   cursor:pointer;
@@ -595,6 +600,9 @@
   flex-direction:column;
   gap:6px;
 }
+.record-panel-item-error{
+  background:linear-gradient(135deg,#e53935,#b71c1c);
+}
 .record-panel-item:hover{
   transform:translateX(4px);
   box-shadow:0 6px 14px rgba(10,55,122,.35);
@@ -603,11 +611,11 @@
   box-shadow:0 0 0 2px rgba(255,255,255,.35);
 }
 .record-item-name{
-  font-size:14px;
+  font-size:13px;
   font-weight:600;
 }
 .record-item-time{
-  font-size:12px;
+  font-size:11px;
   color:rgba(255,255,255,.75);
 }
 .record-panel-loading{

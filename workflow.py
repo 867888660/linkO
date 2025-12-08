@@ -33,7 +33,10 @@ def retrieve_content_within_braces(text):
 class WorkflowEngine:
     def __init__(self, base_dir=None):
         self.base_dir = base_dir or Path(".")
+        # 全局状态锁（工作流字典等）
         self.lock = threading.Lock()
+        # 历史文件写入锁（避免并发读改写导致记录丢失/文件损坏）
+        self._history_lock = threading.Lock()
         self.workflows = {}  # 存储所有工作流的状态
         self.stop_events = {}  # 用于停止工作流的事件
         self._cleanup_timers = {}  # 延迟清理定时器
@@ -224,33 +227,34 @@ class WorkflowEngine:
                 
                 print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
             
-            # 保存到历史文件
+            # 保存到历史文件（串行化读改写，避免高并发下记录丢失）
             history_dir = 'History'
             if not os.path.exists(history_dir):
                 os.makedirs(history_dir)
             
             file_path = os.path.join(history_dir, f'{workflow_id}.json')
-            
-            # 读取现有数据
-            if os.path.exists(file_path):
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        json_data = json.load(f)
-                except (json.JSONDecodeError, Exception) as e:
-                    print(f"⚠️ [HISTORY] 读取历史文件失败: {e}")
+
+            with self._history_lock:
+                # 读取现有数据
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            json_data = json.load(f)
+                    except (json.JSONDecodeError, Exception) as e:
+                        print(f"⚠️ [HISTORY] 读取历史文件失败: {e}")
+                        json_data = []
+                else:
                     json_data = []
-            else:
-                json_data = []
-            
-            # 添加到历史记录
-            if not json_data or not isinstance(json_data[-1], list):
-                json_data.append([])
-            
-            json_data[-1].append(filtered_data)
-            
-            # 保存文件
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=2)
+                
+                # 添加到历史记录
+                if not json_data or not isinstance(json_data[-1], list):
+                    json_data.append([])
+                
+                json_data[-1].append(filtered_data)
+                
+                # 保存文件
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    json.dump(json_data, f, ensure_ascii=False, indent=2)
             
             print(f"✅ [HISTORY] 历史记录已保存到: {file_path}")
             
@@ -276,6 +280,16 @@ class WorkflowEngine:
                 "workflow"
             ]
             comp = next((x for x in name_candidates if x), "workflow")
+            # 如果是子任务（例如 “测试项目 · 子任务3”），按“条数”语义只取主项目名部分
+            try:
+                if isinstance(comp, str) and "子任务" in comp:
+                    # 约定格式："{base} · 子任务N" → 只保留 base
+                    split_tok = "· 子任务"
+                    idx = comp.find(split_tok)
+                    if idx != -1:
+                        comp = comp[:idx]
+            except Exception:
+                pass
             try:
                 import re
                 # 允许 Unicode 单词字符（含中文）+ . 与 -，其余替换为 _
@@ -290,7 +304,13 @@ class WorkflowEngine:
             ts = time.strftime("%Y%m%d_%H%M%S")
             history_dir = (self.BASE_DIR / "History")
             history_dir.mkdir(parents=True, exist_ok=True)
-            fp = history_dir / f"{comp_safe}_{ts}.json"
+            # 为避免高并发同一秒内文件名冲突，这里追加一个短随机后缀
+            try:
+                suffix = uuid.uuid4().hex[:6]
+                fp = history_dir / f"{comp_safe}_{ts}_{suffix}.json"
+            except Exception:
+                # 兜底：仍然退化为旧命名方式
+                fp = history_dir / f"{comp_safe}_{ts}.json"
             payload = {"nodes": nodes}
             with open(fp, "w", encoding="utf-8") as f:
                 json.dump(payload, f, ensure_ascii=False, indent=2)
@@ -1486,8 +1506,10 @@ class WorkflowEngine:
                         except Exception:
                             pass
                         self.workflows[workflow_id]["status"] = WorkflowStatus.COMPLETED
-                    # 最后兜底保存一次（若此前未保存且非 ArrayTrigger 周期已保存）
-                    if not saved_once and not saved_by_array:
+                    # 最后兜底保存一次：
+                    # - 仅针对“普通工作流”（没有 passivity / ArrayTrigger）
+                    # - 避免在数组模式下多出一条“父级总览”，保证“按条数保存”的直觉一致
+                    if not saved_once and not saved_by_array and not has_passivity_trigger and not has_array_trigger:
                         try:
                             self._save_simple_history(self.workflows[workflow_id].get("graph_data"))
                         except Exception:
@@ -1889,6 +1911,22 @@ class WorkflowEngine:
                 # 修复：与前端逻辑保持一致 - 检查 result.output 是否不为 None（而不是检查真值）
                 if isinstance(result, dict) and result.get("output") is not None:
                     original_outputs = result.get("output") or []
+                    # ===== 深度调试：记录原始 output 形状和每组内容摘要 =====
+                    try:
+                        raw = result.get("output")
+                        raw_len = len(raw) if isinstance(raw, list) else 1
+                        self._log_event(workflow_id, f"🔴 [ARRAY-TRACE] node={node.get('label', node.get('id'))} raw_type={type(raw)} raw_len={raw_len}")
+                        if isinstance(raw, list):
+                            for i, g in enumerate(raw):
+                                if isinstance(g, list):
+                                    self._log_event(workflow_id, f"   └─ raw[{i}] is list, size={len(g)}")
+                                elif isinstance(g, dict):
+                                    keys = list(g.keys())
+                                    self._log_event(workflow_id, f"   └─ raw[{i}] is dict, keys={keys}")
+                                else:
+                                    self._log_event(workflow_id, f"   └─ raw[{i}] type={type(g)} value_preview={str(g)[:80]}")
+                    except Exception:
+                        pass
                     # === 形状归一化（最小修） ===
                     def _looks_like_output_slot(x):
                         return (
@@ -1905,6 +1943,20 @@ class WorkflowEngine:
                     if original_outputs and all(_looks_like_output_slot(x) for x in original_outputs):
                         original_outputs = [original_outputs]
                         print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
+                    # 归一化后再输出一遍统计信息
+                    try:
+                        self._log_event(workflow_id, f"🔴 [ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
+                        for gi, g in enumerate(original_outputs):
+                            if isinstance(g, list):
+                                ids = []
+                                for it in g:
+                                    if isinstance(it, dict):
+                                        ids.append(it.get('Id') or it.get('name'))
+                                self._log_event(workflow_id, f"   └─ group[{gi}] size={len(g)} ids={ids}")
+                            else:
+                                self._log_event(workflow_id, f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
+                    except Exception:
+                        pass
                     self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
@@ -1921,6 +1973,11 @@ class WorkflowEngine:
                         item = {"outputData": group, "nodeId": node_id, "graph_data": copy.deepcopy(data_temp)}
 
                         if last_fp == fp:
+                            # 深度调试：指纹重复情况
+                            try:
+                                self._log_event(workflow_id, f"🌀 [ARRAY-FP] group[{idx}] fp={fp} 与上次相同 → 覆盖队列中该节点最后一条")
+                            except Exception:
+                                pass
                             # 覆盖队列中该节点的最后一条
                             for j in range(len(array_trigger_array)-1, -1, -1):
                                 if array_trigger_array[j].get("nodeId") == node_id:
@@ -1933,7 +1990,10 @@ class WorkflowEngine:
                         else:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp               # ← 新增
-                            self._log_event(workflow_id, f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)}")
+                            try:
+                                self._log_event(workflow_id, f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp}")
+                            except Exception:
+                                pass
                     
                     self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 总共入队 {len([x for x in original_outputs if x is not None])} 个数组组")
                 else:
@@ -2006,6 +2066,22 @@ class WorkflowEngine:
                 # 修复：与前端逻辑保持一致 - 检查 result.output 是否不为 None（而不是检查真值）
                 if isinstance(result, dict) and result.get("output") is not None:
                     original_outputs = result.get("output") or []
+                    # ===== 深度调试：记录原始 output 形状和每组内容摘要 =====
+                    try:
+                        raw = result.get("output")
+                        raw_len = len(raw) if isinstance(raw, list) else 1
+                        print(f"[ARRAY-TRACE] node={node.get('label', node.get('id'))} raw_type={type(raw)} raw_len={raw_len}")
+                        if isinstance(raw, list):
+                            for i, g in enumerate(raw):
+                                if isinstance(g, list):
+                                    print(f"   └─ raw[{i}] is list, size={len(g)}")
+                                elif isinstance(g, dict):
+                                    keys = list(g.keys())
+                                    print(f"   └─ raw[{i}] is dict, keys={keys}")
+                                else:
+                                    print(f"   └─ raw[{i}] type={type(g)} value_preview={str(g)[:80]}")
+                    except Exception:
+                        pass
                     # === 形状归一化（最小修） ===
                     def _looks_like_output_slot(x):
                         return (
@@ -2022,6 +2098,20 @@ class WorkflowEngine:
                     if original_outputs and all(_looks_like_output_slot(x) for x in original_outputs):
                         original_outputs = [original_outputs]
                         print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
+                    # 归一化后再输出一遍统计信息
+                    try:
+                        print(f"[ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
+                        for gi, g in enumerate(original_outputs):
+                            if isinstance(g, list):
+                                ids = []
+                                for it in g:
+                                    if isinstance(it, dict):
+                                        ids.append(it.get('Id') or it.get('name'))
+                                print(f"   └─ group[{gi}] size={len(g)} ids={ids}")
+                            else:
+                                print(f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
+                    except Exception:
+                        pass
                     print(f"[ARRAY-DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
@@ -2043,15 +2133,15 @@ class WorkflowEngine:
                             for j in range(len(array_trigger_array)-1, -1, -1):
                                 if array_trigger_array[j].get("nodeId") == node_id:
                                     array_trigger_array[j] = item
-                                    print("🌀 [RING:OVERWRITE] ArrayTrigger 覆盖上一条记录 (相同指纹)")
+                                    print(f"🌀 [RING:OVERWRITE] ArrayTrigger 覆盖上一条记录 (相同指纹) fp={fp} group_idx={idx}")
                                     break
                             else:
                                 array_trigger_array.append(item)
-                                print("✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环")
+                                print(f"✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环 fp={fp} group_idx={idx}")
                         else:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp               # ← 新增
-                            print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)}")
+                            print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp} group_idx={idx}")
                         
                         enqueued_count += 1
                     
@@ -2202,14 +2292,6 @@ class WorkflowEngine:
             workflow_state["queue_lengths"]["array"] = len(array_trigger_array)
             workflow_state["last_update"] = time.time()
             self._log_event(workflow_id, f"   └─ POP → Aq={len(array_trigger_array)}")
-            # 数组队列处理一次后保存一次简单历史（仅 nodes）
-            try:
-                self._save_simple_history(workflow_state.get("graph_data"))
-                # 标记本轮运行已由 ArrayTrigger 保存过，最终完成时可避免再保存一次
-                # （如果希望最终再保存一份，可移除此标记）
-                saved_by_array = True
-            except Exception:
-                pass
             
 
         else:

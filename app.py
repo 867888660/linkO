@@ -178,7 +178,10 @@ def extract_node_function(file_path: str) -> str:
     return "Unknown"
 
 def _split_history_stem(stem: str):
-    match = re.search(r'_(\d{8})_(\d{6})$', stem)
+    # 兼容两种命名：
+    # 1) name_YYYYmmdd_HHMMSS
+    # 2) name_YYYYmmdd_HHMMSS_xxxxxx （高并发下带随机后缀防止重名）
+    match = re.search(r'_(\d{8})_(\d{6})(?:_.+)?$', stem)
     if not match:
         return stem, ''
     ymd, hms = match.groups()
@@ -1006,7 +1009,11 @@ def get_node_code(node):
     except Exception as e:
         print(f"Error reading file {script_path}: {e}")
         return ""
+
+# 全局锁：用于脚本加载等需要串行化的操作
 lock = Lock()
+# 历史文件写入锁：避免 /addHistory 在高并发下出现“读旧数据再覆盖新数据”的情况
+history_lock = Lock()
 # ==== 2. 占位符解析函数 ====
 def _resolve_tempfiles(ctx: str) -> str:
     """
@@ -1891,56 +1898,58 @@ def add_history():
     file_path = os.path.join(history_dir, f'{project_name}.json')
     print(f"📄 File path: {file_path}")
 
-    # 尝试读取现有的JSON文件
-    if os.path.exists(file_path):
-        for attempt in range(3):  # 添加重试机制
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    json_data = json.load(f)
-                print(f"✅ Existing data loaded from {file_path}")
-                break
-            except json.JSONDecodeError as e:
-                print(f"❌ JSON decode error: {e}")
-                # 如果文件损坏，创建备份
-                if os.path.getsize(file_path) > 0:
-                    backup_path = f"{file_path}.backup.{int(time.time())}"
-                    try:
-                        os.rename(file_path, backup_path)
-                        print(f"📦 Created backup of corrupted file: {backup_path}")
-                    except Exception as e:
-                        print(f"⚠️ Failed to create backup: {e}")
-                json_data = []
-                break
-            except Exception as e:
-                print(f"❌ Read attempt {attempt + 1} failed: {e}")
-                if attempt == 2:  # 最后一次尝试失败
+    # 使用独立锁串行化“读 -> 改 -> 写”流程，避免高并发下互相覆盖
+    with history_lock:
+        # 尝试读取现有的JSON文件
+        if os.path.exists(file_path):
+            for attempt in range(3):  # 添加重试机制
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        json_data = json.load(f)
+                    print(f"✅ Existing data loaded from {file_path}")
+                    break
+                except json.JSONDecodeError as e:
+                    print(f"❌ JSON decode error: {e}")
+                    # 如果文件损坏，创建备份
+                    if os.path.getsize(file_path) > 0:
+                        backup_path = f"{file_path}.backup.{int(time.time())}"
+                        try:
+                            os.rename(file_path, backup_path)
+                            print(f"📦 Created backup of corrupted file: {backup_path}")
+                        except Exception as e:
+                            print(f"⚠️ Failed to create backup: {e}")
                     json_data = []
-                else:
-                    time.sleep(0.5)  # 等待后重试
-    else:
-        print(f"ℹ️ No existing data. Initializing new data array.")
-        json_data = []
+                    break
+                except Exception as e:
+                    print(f"❌ Read attempt {attempt + 1} failed: {e}")
+                    if attempt == 2:  # 最后一次尝试失败
+                        json_data = []
+                    else:
+                        time.sleep(0.5)  # 等待后重试
+        else:
+            print(f"ℹ️ No existing data. Initializing new data array.")
+            json_data = []
 
-    # 确保 json_data 是一个列表
-    if not isinstance(json_data, list):
-        print("⚠️ json_data is not a list. Initializing as empty list.")
-        json_data = []
+        # 确保 json_data 是一个列表
+        if not isinstance(json_data, list):
+            print("⚠️ json_data is not a list. Initializing as empty list.")
+            json_data = []
 
-    # 将数据添加到现有的最后一个数组中
-    if not json_data or not isinstance(json_data[-1], list):
-        print("📝 Appending new sublist to json_data.")
-        json_data.append([])
+        # 将数据添加到现有的最后一个数组中
+        if not json_data or not isinstance(json_data[-1], list):
+            print("📝 Appending new sublist to json_data.")
+            json_data.append([])
 
-    print(f"➕ Adding data to json_data[-1]: {data}")
-    json_data[-1].append(data)
+        print(f"➕ Adding data to json_data[-1]: {data}")
+        json_data[-1].append(data)
 
-    # 使用安全写入函数保存数据
-    if safe_write_json(file_path, json_data):
-        print("✅ Data added successfully.")
-        return jsonify({'message': 'Data added successfully'}), 200
-    else:
-        print("❌ Failed to write data after multiple attempts")
-        return jsonify({'error': 'Failed to save data after multiple attempts'}), 500
+        # 使用安全写入函数保存数据
+        if safe_write_json(file_path, json_data):
+            print("✅ Data added successfully.")
+            return jsonify({'message': 'Data added successfully'}), 200
+        else:
+            print("❌ Failed to write data after multiple attempts")
+            return jsonify({'error': 'Failed to save data after multiple attempts'}), 500
 
 def is_process_running(script_name):
     """检查指定的脚本是否正在运行"""

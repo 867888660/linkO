@@ -3273,7 +3273,14 @@ async function enterRecordMode() {
       }
       // 更新 TempMessageNode
       TempMessageNode = structuredClone({ nodes: graphDataToLoad.nodes });
+      // 🔥 关键修复：保存当前图数据到记录模式专用变量，供 sidewindow 使用
+      window.__recordModeCurrentGraph = structuredClone(graphDataToLoad);
       console.log('[RECORD] 图数据已加载，节点数:', graphDataToLoad.nodes?.length || 0);
+    } else {
+      // 非 monitor_completed 模式：使用当前图数据
+      const currentGraph = graph.save();
+      window.__recordModeCurrentGraph = structuredClone(currentGraph);
+      console.log('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
     }
     
     backupGraphForRecordMode();
@@ -3322,6 +3329,12 @@ async function loadRecordItems() {
     const data = await response.json();
     console.log('[RECORD] 后端返回数据:', data);
     recordItemsCache = Array.isArray(data.items) ? data.items : [];
+    // 如果后端已经返回了是否出错的标记，则直接复用，避免重复解析
+    recordItemsCache.forEach(item => {
+      if (item && typeof item.has_error === 'boolean' && typeof item.__hasError === 'undefined') {
+        item.__hasError = !!item.has_error;
+      }
+    });
     console.log('[RECORD] 记录数量:', recordItemsCache.length);
     if (recordItemsCache.length > 0) {
       console.log('[RECORD] 记录列表:', recordItemsCache.map(item => item.filename || item.name || item));
@@ -3332,8 +3345,58 @@ async function loadRecordItems() {
   } finally {
     renderRecordSelectOptions(recordItemsCache);
     renderRecordPanel(recordItemsCache);
+    // 异步标记是否存在错误节点，用于控制记录条目的底色（红/蓝）
+    try {
+      annotateRecordItemsWithErrorFlag(recordItemsCache);
+    } catch (e) {
+      console.warn('[RECORD] annotate error flag schedule failed', e);
+    }
     setRecordLoadingIndicator(false);
   }
+}
+
+async function annotateRecordItemsWithErrorFlag(items) {
+  if (!Array.isArray(items) || !items.length) return;
+
+  // 只对还未知状态的记录做补充检查，避免重复请求
+  const pendingItems = items.filter(item =>
+    item && item.filename && typeof item.__hasError === 'undefined'
+  );
+  if (!pendingItems.length) return;
+
+  await Promise.all(
+    pendingItems.map(async (item) => {
+      try {
+        const resp = await fetch(`/history/run?filename=${encodeURIComponent(item.filename)}`);
+        if (!resp.ok) return;
+        const payload = await resp.json();
+        // payload.nodes 可能是数组，也可能是 { nodes: [...] }
+        let nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+        if (!nodes.length && payload && payload.nodes && Array.isArray(payload.nodes.nodes)) {
+          nodes = payload.nodes.nodes;
+        }
+        const hasError = Array.isArray(nodes) && nodes.some(n =>
+          n && (n.IsError === true || n.isError === true)
+        );
+        item.__hasError = !!hasError;
+
+        // 根据结果更新对应按钮的样式
+        const btnList = document.querySelectorAll('.record-panel-item');
+        btnList.forEach(btn => {
+          if (!btn.dataset) return;
+          if (btn.dataset.filename === item.filename) {
+            if (item.__hasError) {
+              btn.classList.add('record-panel-item-error');
+            } else {
+              btn.classList.remove('record-panel-item-error');
+            }
+          }
+        });
+      } catch (err) {
+        console.warn('[RECORD] annotate error flag failed for', item && item.filename, err);
+      }
+    })
+  );
 }
 
 function renderRecordSelectOptions(items) {
@@ -3395,6 +3458,10 @@ function renderRecordPanel(items) {
     btn.type = 'button';
     btn.className = 'record-panel-item';
     btn.dataset.filename = item.filename;
+    // 如果已经提前标记了是否有错误，则在渲染阶段直接加上对应样式
+    if (item && item.__hasError) {
+      btn.classList.add('record-panel-item-error');
+    }
     btn.innerHTML = `
       <span class="record-item-name">${formatRecordLabel(item)}</span>
       <span class="record-item-time">${item.time_label || ''}</span>
@@ -3522,6 +3589,23 @@ async function applyRecordSnapshot(filename) {
     TempMessageNode = structuredClone({ nodes: nextGraph.nodes });
     RefreshEdge();
     
+    // 🔥 关键修复：在记录模式下，保存当前加载的记录图数据，供 sidewindow 使用
+    // 这样可以避免 sidewindow 被运行时的数据"霸占"
+    window.__recordModeCurrentGraph = structuredClone(nextGraph);
+    console.log('[RECORD] 已保存记录图数据到 __recordModeCurrentGraph，节点数:', nextGraph.nodes?.length || 0);
+    
+    // 🔥 自动刷新 sidewindow（如果已打开）
+    try {
+      const sideWindow = document.getElementById('side-window');
+      if (sideWindow && sideWindow.classList.contains('visible') && window.__currentSideWindowNode) {
+        console.log('[RECORD] 检测到 sidewindow 已打开，自动刷新节点:', window.__currentSideWindowNode.id);
+        // 重新创建 sidewindow，使用当前加载的记录数据
+        createSideWindow(window.__currentSideWindowNode, window.__currentSideWindowIsCheckMode || false);
+      }
+    } catch (e) {
+      console.warn('[RECORD] 自动刷新 sidewindow 失败:', e);
+    }
+    
     // 🔥 手动触发节点更新，确保边框正确显示
     try {
       nextGraph.nodes.forEach(node => {
@@ -3588,6 +3672,8 @@ function exitRecordMode(isFallback = false) {
   toggleToolbarSelect(false);
   disableEditorButtons(false);
   recordModeCurrentFilename = '';
+  // 🔥 清理记录模式专用的图数据
+  window.__recordModeCurrentGraph = null;
   if (recordModeBaseGraph && !isFallback) {
     ChangeDatas(recordModeBaseGraph);
     RefreshEdge();
@@ -11932,11 +12018,31 @@ function createSideWindow(item, isCheckMode = false) {
   } catch(_) {}
 
   // 数据源优先级：
+  // - 记录模式：优先使用 window.__recordModeCurrentGraph（当前加载的记录数据），避免被运行时数据"霸占"
   // - monitor_completed 模式：优先使用 window.__lastCompletedGraphData（包含完整的 Outputs）
   // - 其他模式：activeGraph → TempMessageNode → graph.save（与"历史/最新"选择保持一致）
   function findNodeFromSources(nodeId) {
-    // 🔥 关键修复：在 monitor_completed 模式下，优先使用保存的完整图数据
-    if (frontendMode === 'monitor_completed' && window.__lastCompletedGraphData) {
+    // 🔥 关键修复：在记录模式下，优先使用当前加载的记录图数据，避免被运行时的数据"霸占"
+    if (isRecordMode && window.__recordModeCurrentGraph) {
+      const recordArr = (window.__recordModeCurrentGraph && window.__recordModeCurrentGraph.nodes) || [];
+      const fromRecord = Array.isArray(recordArr) ? recordArr.find(n => n && n.id === nodeId) : null;
+      if (fromRecord) {
+        console.warn('[SIDEWIN:SOURCE] use __recordModeCurrentGraph (record mode)');
+        // 打印节点的 Outputs 信息，用于调试
+        if (fromRecord.Outputs && Array.isArray(fromRecord.Outputs)) {
+          console.log(`[SIDEWIN:OUTPUTS] 节点 ${fromRecord.label || fromRecord.id} 的 Outputs:`, fromRecord.Outputs.map(o => ({
+            name: o.name,
+            Context: o.Context ? (o.Context.length > 50 ? o.Context.substring(0, 50) + '...' : o.Context) : '',
+            Num: o.Num,
+            Boolean: o.Boolean
+          })));
+        }
+        return fromRecord;
+      }
+    }
+    
+    // 🔥 关键修复：在 monitor_completed 模式下，优先使用保存的完整图数据（但不在记录模式下）
+    if (!isRecordMode && frontendMode === 'monitor_completed' && window.__lastCompletedGraphData) {
       const completedArr = (window.__lastCompletedGraphData && window.__lastCompletedGraphData.nodes) || [];
       const fromCompleted = Array.isArray(completedArr) ? completedArr.find(n => n && n.id === nodeId) : null;
       if (fromCompleted) {
@@ -11954,6 +12060,19 @@ function createSideWindow(item, isCheckMode = false) {
       }
     }
     
+    // 在记录模式下，跳过 activeGraph（可能包含运行时的数据），直接使用 TempMessageNode 和 graph.save()
+    // 因为它们已经被 applyRecordSnapshot 更新为记录数据
+    if (isRecordMode) {
+      const liveArr   = (TempMessageNode && TempMessageNode.nodes) || [];
+      const graphArr  = (graph.save() && graph.save().nodes) || [];
+      const fromLive = Array.isArray(liveArr) ? liveArr.find(n => n && n.id === nodeId) : null;
+      if (fromLive) { console.warn('[SIDEWIN:SOURCE] use TempMessageNode (record mode)'); return fromLive; }
+      const fromGraph = Array.isArray(graphArr) ? graphArr.find(n => n && n.id === nodeId) : null;
+      if (fromGraph) { console.warn('[SIDEWIN:SOURCE] use graph.save() (record mode)'); return fromGraph; }
+      return null;
+    }
+    
+    // 非记录模式的正常流程
     const liveArr   = (TempMessageNode && TempMessageNode.nodes) || [];
     const activeArr = (activeGraph && activeGraph.nodes) || [];
     const graphArr  = (graph.save() && graph.save().nodes) || [];
@@ -12239,6 +12358,10 @@ function createSideWindow(item, isCheckMode = false) {
     const outputsCount = Array.isArray(tempNode && tempNode.Outputs) ? tempNode.Outputs.length : 0;
     console.log(`[SIDEWIN:DATA] inputs=${inputsCount} outputs=${outputsCount} debugLen=${debugText.length}`);
   } catch(_) {}
+
+  // 🔥 保存当前打开的节点信息，用于记录模式下的自动刷新
+  window.__currentSideWindowNode = item;
+  window.__currentSideWindowIsCheckMode = isCheckMode;
 
   // 显示侧边窗口 (Apple Style Animation)
   const sideWindow = document.getElementById('side-window');
@@ -12531,6 +12654,10 @@ function createSideWindow(item, isCheckMode = false) {
       setTimeout(() => {
         sideWindow.style.display = 'none';
       }, 500);
+      
+      // 🔥 清理当前打开的节点信息
+      window.__currentSideWindowNode = null;
+      window.__currentSideWindowIsCheckMode = false;
       
       if (!isCheckMode && runButton._clickHandler) {
           runButton.removeEventListener('click', runButton._clickHandler);
@@ -12964,6 +13091,7 @@ let prevFrontendMode = 'edit'; // 跟踪之前的模式，用于检测模式切�
 
 // 统一设置工作流状态轮询间隔
 function setWorkflowPollingInterval(ms) {
+  console.warn('[WFDBG:POLL:SET]', { ms, existing: !!workflowStatusInterval, currentMs: workflowStatusIntervalMs });
   // ms <= 0 表示关闭轮询
   if (!ms || ms <= 0) {
     if (workflowStatusInterval) {
@@ -12976,6 +13104,7 @@ function setWorkflowPollingInterval(ms) {
 
   // 与当前间隔一致则不重复创建
   if (workflowStatusInterval && workflowStatusIntervalMs === ms) {
+    console.warn('[WFDBG:POLL:SET] skip (same interval)');
     return;
   }
 
@@ -12984,11 +13113,12 @@ function setWorkflowPollingInterval(ms) {
   }
   workflowStatusIntervalMs = ms;
   workflowStatusInterval = setInterval(pollWorkflowStatus, ms);
+  console.warn('[WFDBG:POLL:SET] started interval', { ms, id: workflowStatusInterval });
 }
 
 // 统一清理所有动画和轮询的函数
 function stopAllAnimationsAndPolling() {
-  console.log('[DEBUG] 清理所有动画和轮询');
+  console.warn('[WFDBG:STOP] 清理所有动画和轮询');
   
   // 清理工作流状态轮询
   setWorkflowPollingInterval(0);
@@ -13758,6 +13888,13 @@ function updateUIFromBackendStatus(statusData) {
 // 使用async/await重构轮询函数（唯一的状态同步入口）
 async function pollWorkflowStatus() {
   try {
+    console.warn('[WFDBG:SELECT]', {
+      currentObservedWorkflowId,
+      monitoredWorkflowId,
+      currentWorkflowId,
+      frontendMode,
+      inPreheat: !!window.inPreheat
+    });
     // 如果处于 monitor_completed 模式，停止轮询（已完成状态已锁定）
     if (frontendMode === 'monitor_completed') {
       return;
@@ -13772,6 +13909,7 @@ async function pollWorkflowStatus() {
     if (!wfId) {
       const currentRes = await fetch('/workflow/status/current');
       if (!currentRes.ok) {
+        console.warn('[WFDBG:STATUS:current] /workflow/status/current not ok', currentRes.status);
         return;
       }
       const currentData = await currentRes.json();
@@ -13782,8 +13920,10 @@ async function pollWorkflowStatus() {
         wfId = currentData.workflow_id;
         monitoredWorkflowId = wfId;
         currentObservedWorkflowId = wfId;
+        console.warn('[WFDBG:STATUS:current] adopt current workflow', wfId);
       } else {
         // 后端也没有活跃工作流，本轮无需再查具体状态
+        console.warn('[WFDBG:STATUS:current] idle, no active workflow');
         return;
       }
     }
@@ -13794,6 +13934,7 @@ async function pollWorkflowStatus() {
     
     // 检查响应是否成功
     if (!response.ok) {
+      console.warn('[WFDBG:STATUS] response not ok', response.status, 'wfId=', wfId);
       // 如果工作流不存在，可能是已完成或被清理，尝试更新选择器
       if (response.status === 404 && currentObservedWorkflowId === wfId) {
         console.warn(`[WORKFLOW-SELECTOR] 工作流 ${wfId} 不存在，更新选择器`);
@@ -13816,6 +13957,47 @@ async function pollWorkflowStatus() {
     // 解析JSON响应
     let data = await response.json();
     const status = data.status || 'idle';
+    console.warn('[WFDBG:RESP]', { wfId, status, hasGraph: !!data.graph_data, queues: data.queues, queue_lengths: data.queue_lengths });
+    try {
+      const nodesRaw = data?.graph_data?.nodes || [];
+      const running = nodesRaw.filter(n => n && n.IsRunning === true).map(n => n.label || n.id);
+      const finished = nodesRaw.filter(n => n && n.isFinish === true).map(n => n.label || n.id);
+      const errored = nodesRaw.filter(n => n && n.IsError === true).map(n => n.label || n.id);
+      console.warn('[WFDBG:RESP:NODES]', {
+        wfId,
+        total: nodesRaw.length,
+        runningCount: running.length,
+        finishedCount: finished.length,
+        errorCount: errored.length,
+        sampleRunning: running.slice(0, 5),
+        sampleFinished: finished.slice(0, 5),
+        sampleError: errored.slice(0, 5)
+      });
+    } catch (_) {}
+
+    // 若当前观测的工作流已停止/完成/出错，自动切到其他 running 的工作流
+    if (status === 'stopped' || status === 'completed' || status === 'error') {
+      try {
+        const listRes = await fetch('/workflow/list');
+        if (listRes.ok) {
+          const listData = await listRes.json();
+          const runningList = (listData.workflows || []).filter(w => w.status === 'running' && w.id !== wfId);
+          if (runningList.length > 0) {
+            const nextWf = runningList[0];
+            console.warn('[WFDBG:SWITCH] current non-running, switch to', nextWf.id);
+            currentWorkflowId = nextWf.id; // 将当前工作流也切到新的运行实例，便于动画和按钮同步
+            switchToWorkflow(nextWf.id);
+            return; // 等下一轮轮询按新ID取状态
+          } else {
+            console.warn('[WFDBG:SWITCH] no other running workflow to switch');
+          }
+        } else {
+          console.warn('[WFDBG:SWITCH] /workflow/list not ok', listRes.status);
+        }
+      } catch (e) {
+        console.warn('[WFDBG:SWITCH] list error', e);
+      }
+    }
     
     // 确保使用的工作流ID与当前观察的一致
     if (currentObservedWorkflowId && currentObservedWorkflowId !== wfId) {
@@ -13930,9 +14112,9 @@ async function pollWorkflowStatus() {
           if ((pass === 0 || !Number.isFinite(pass)) && Array.isArray(window.passivityTriggerArray)) pass = Math.max(pass, window.passivityTriggerArray.length|0);
           if ((arr === 0 || !Number.isFinite(arr)) && Array.isArray(window.ArrayTriggerArray))     arr  = Math.max(arr,  window.ArrayTriggerArray.length|0);
           backendQueueLengths = { passivity: pass, array: arr };
-          try { if (window.LOG && window.LOG.wf) console.warn('[WFDBG:QUEUE] set from status: P=', pass, ' A=', arr); } catch(_) {}
+          try { console.warn('[WFDBG:QUEUE] set from status', { pass, arr, wfId }); } catch(_) {}
         } else {
-          try { if (window.LOG && window.LOG.wf) console.warn('[WFDBG:QUEUE] no q in status'); } catch(_) {}
+          console.warn('[WFDBG:QUEUE] no q in status', { wfId });
         }
       } catch(err) {
         try { if (window.LOG && window.LOG.wf) console.warn('[WFDBG:QUEUE] parse error:', err); } catch(_) {}
@@ -14371,6 +14553,25 @@ async function pollWorkflowStatus() {
       
       // 刷新边状态以反映节点运行状态
       RefreshEdge();
+      try {
+        const btnText = document.getElementById('runButton')?.textContent;
+        const nodesRef = (TempMessageNode?.nodes) || (data.graph_data?.nodes) || [];
+        const runningNodes = (nodesRef || []).filter(n => n && n.IsRunning).map(n => n.label || n.id);
+        const isWorkflowRunning = (btnText === '运行中...' || btnText === '接收中...' || !!currentWorkflowId || runningNodes.length > 0);
+        console.warn('[WFDBG:ANIM]', {
+          wfId,
+          btnText,
+          runningNodes,
+          backendQueueLengths,
+          isWorkflowRunning
+        });
+        // 前端当前画布的运行节点（用于确认图是否切到子workflow）
+        try {
+          const gNodes = (graph && graph.save && graph.save().nodes) ? graph.save().nodes : [];
+          const gRunning = gNodes.filter(n => n && n.IsRunning).map(n => n.label || n.id);
+          console.warn('[WFDBG:ANIM:GRAPH]', { runningInGraph: gRunning, totalGraphNodes: gNodes.length });
+        } catch(_) {}
+      } catch(_) {}
 
       // 同步后端队列长度（用于标题动画，优先 queues 回退 queue_lengths）
       (function(){
