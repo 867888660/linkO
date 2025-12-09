@@ -97,15 +97,13 @@
 
 /***** 状态区域 *****/
 .status-area{
+  display:none;
+  align-items:center;
+  gap:12px;
   height:var(--status-h);
-  display:flex; align-items:center;
   padding:0 24px;
-  background:rgba(10,10,10,.78);
-  backdrop-filter:blur(14px);
-  border-bottom:1px solid rgba(255,255,255,.06);
-  font-size:12.5px;
-  color:rgba(255,255,255,.55);
-  letter-spacing:0.02em;
+  background:transparent;
+  border:none;
 }
 #loading-indicator{color:var(--accent);}
 .loader{
@@ -141,13 +139,13 @@
 /***** 内容区 (Updated) *****/
 #content-area {
   padding: 20px;
-  height: calc(100% - var(--header-h) - var(--status-h) - 48px);
+  height: calc(100% - var(--header-h));
   overflow-y: overlay;
   overflow-x: hidden;
   background: rgba(0,0,0,.25);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
-  border-top: 1px solid rgba(255,255,255,.04);
+  border-top: none;
   box-sizing: border-box;
 }
 
@@ -295,7 +293,7 @@
     overflow-y: auto; /* 添加上下拖动的滚动条 */
     max-height: 400px; /* 设置长度上限 */
     border-radius: 10px;
-    background: rgba(255, 255, 255, 0.86);
+    background: rgba(43, 43, 43, 0.86);
     backdrop-filter: blur(22px) saturate(180%);
     -webkit-backdrop-filter: blur(22px) saturate(180%);
     border: 1px solid rgba(0, 0, 0, 0.08);
@@ -368,6 +366,37 @@
     border-radius: 50%; /* 使其变成圆形 */
     bottom: 8px;
     animation: spin 1s linear infinite; /* 应用旋转动画 */
+}
+
+/* Select Path 按钮：轻量毛玻璃风格 */
+.path-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  height: 32px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #0f172a;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  backdrop-filter: blur(12px) saturate(130%);
+  -webkit-backdrop-filter: blur(12px) saturate(130%);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.path-button:hover {
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 10px 22px rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+}
+
+.path-button:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.14);
 }
 
 #content-area input[type="text"],
@@ -768,12 +797,12 @@ html,body{
   width: 420px; /* 稍微窄一点，更精致 */
   max-width: calc(100vw - 48px);
   height: auto; 
-  background: rgba(30, 30, 32, 0.85); /* macOS Dark Mode Base */
-  backdrop-filter: blur(25px) saturate(180%);
-  -webkit-backdrop-filter: blur(25px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(17, 24, 39, 0.55); /* 深色玻璃底 */
+  backdrop-filter: blur(24px) saturate(160%);
+  -webkit-backdrop-filter: blur(24px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 16px; /* 统一圆角 */
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255,255,255,0.08);
   display: flex;
   flex-direction: column;
   z-index: 2000;
@@ -820,8 +849,8 @@ html,body{
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
   margin-bottom: 0;
   flex-shrink: 0; /* Prevent header from shrinking */
 }
@@ -975,10 +1004,10 @@ html,body{
 .drag-bar {
     height: 30px;
     width: 100%;
-    background: linear-gradient(180deg, #e5e5ea 0%, #cfd0d4 100%);
+    background: linear-gradient(180deg, #505050 0%, #353535 100%);
     border-radius: 12px 12px 0 0;
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    box-shadow: inset 0 1px rgba(255, 255, 255, 0.8);
+    box-shadow: inset 0 1px rgba(54, 54, 54, 0.8);
 }
 .column-AddNode {
     /* 圆形背景 */
@@ -1905,7 +1934,7 @@ h1 {
   left: 0;
   right: 0;
   height: 3px;
-  background: #000;
+  background: #ffffff;
   border-radius: var(--ui-radius) var(--ui-radius) 0 0;
 }
 
@@ -2322,8 +2351,12 @@ body {
 
 /* 2. 中间主画布与大面板层级 */
 .Vessel {
-  background-color: #e5e7eb; /* 比 body 稍浅，作为“白板”背景 */
-  box-shadow: none;          /* 作为静态画布，不再抢卡片的立体感 */
+  /* 毛玻璃质感：轻透明+模糊，保持与底色区分 */
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 20px 48px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(16px) saturate(120%);
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
 }
 
 .column,
@@ -2416,6 +2449,133 @@ body {
 .input-container:hover,
 .output-container:hover {
   background: rgba(255, 255, 255, 0.4); /* 轻微提亮即可 */
+}
+
+/* 输入 / 输出名称输入框：与面板一致的玻璃质感 */
+.input-container input[type="text"],
+.input-container input:not([type]),
+.output-container input[type="text"],
+.output-container input:not([type]) {
+  min-width: 180px;
+  height: 34px;
+  padding: 8px 12px;
+  margin-right: 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.input-container input[type="text"]:hover,
+.input-container input:not([type]):hover,
+.output-container input[type="text"]:hover,
+.output-container input:not([type]):hover {
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.input-container input[type="text"]:focus,
+.input-container input:not([type]):focus,
+.output-container input[type="text"]:focus,
+.output-container input:not([type]):focus {
+  border-color: rgba(59, 130, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16), 0 12px 30px rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.98);
+  outline: none;
+}
+
+/* 输入 / 输出下拉框与输入框对齐 */
+.input-container select,
+.output-container select {
+  height: 34px;
+  padding: 6px 32px 6px 12px;
+  margin-right: 10px;
+  margin-bottom: 8px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 10px;
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.1);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  transition: box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.input-container select:hover,
+.output-container select:hover {
+  border-color: rgba(15, 23, 42, 0.18);
+  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.14);
+}
+
+.input-container select:focus,
+.output-container select:focus {
+  border-color: rgba(59, 130, 246, 0.65);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.16), 0 12px 30px rgba(15, 23, 42, 0.18);
+  background: rgba(255, 255, 255, 0.98);
+  outline: none;
+}
+
+/* Output 区域“组”标签：简洁对齐 */
+.output-group-label {
+  flex: 0 0 auto;
+  margin: 6px 8px 8px 0;
+  color: #4b5563;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Output 行整体：收紧留白、轻底色 */
+.output-container {
+  align-items: flex-start;
+  gap: 8px 10px;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 12px;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+  flex-wrap: wrap;
+}
+
+/* Output 内部文字与控件对齐 */
+.output-container label {
+  color: #4b5563 !important;
+  font-weight: 600;
+  font-size: 13px;
+  margin: 6px 6px 4px 0;
+}
+
+.output-container textarea {
+  width: 100%;
+  min-height: 68px;
+}
+
+/* Output 行内主控件统一尺寸，避免挤压或超行 */
+.output-container > input[type="text"],
+.output-container > select {
+  min-width: 130px;
+  width: 130px;
+  height: 34px;
+  box-sizing: border-box;
+}
+
+/* 逻辑区占满行宽，不与上方控件混排 */
+.output-container .logic-container,
+.output-container .Description-textarea {
+  width: 100%;
+}
+
+/* 逻辑行的控件最小宽度，防止拥挤 */
+.output-container .logic-row select,
+.output-container .logic-row input {
+  min-width: 120px;
 }
 
 /* 避免 Output 内再出现一层“卡片感”的 Jsoncolumn/OriginalTextColumn */

@@ -2237,7 +2237,20 @@ class WorkflowEngine:
             
             # 如果 ParallelLimit > 1，进行并行处理
             if parallel_limit > 1 and len(array_trigger_array) > 0:
-                batch_size = min(parallel_limit, len(array_trigger_array))
+                # 根据当前活跃子工作流数量动态限流
+                with self.lock:
+                    summary = self._ensure_child_summary(workflow_id) or {}
+                    active_children = summary.get("active", 0)
+                available_slots = max(0, parallel_limit - active_children)
+
+                if available_slots <= 0:
+                    # 当前已满负荷，保持队列不动，等待下一轮
+                    self._log_event(workflow_id, f"⏸ [CHILD] 并行上限={parallel_limit}，活跃={active_children}，暂不新增")
+                    workflow_state["pending_array_count"] = len(array_trigger_array)
+                    self._refresh_parent_array_queue(workflow_id, len(array_trigger_array))
+                    return
+
+                batch_size = min(available_slots, len(array_trigger_array))
                 batch_data = array_trigger_array[:batch_size]
                 launched = 0
                 for idx, batch_item in enumerate(batch_data):
@@ -2425,6 +2438,9 @@ class WorkflowEngine:
             workflow_state["traceback"] = traceback.format_exc()
             self._log_event(child_id, f"❌ [CHILD] 子工作流执行失败: {e}")
         finally:
+            # 守护：避免长时间保持 RUNNING，未被正常收敛时强制标记完成
+            if workflow_state.get("status") == WorkflowStatus.RUNNING:
+                workflow_state["status"] = WorkflowStatus.COMPLETED
             workflow_state["last_update"] = time.time()
             try:
                 self._save_simple_history(workflow_state.get("graph_data"))

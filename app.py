@@ -2558,7 +2558,13 @@ def list_workflows_route():
             if not (wf_data and isinstance(wf_data, dict)):
                 continue
             status = wf_data.get("status", "")
-            if status not in (WorkflowStatus.RUNNING, WorkflowStatus.PAUSED):
+            is_child = wf_data.get("is_child", False)
+
+            # 允许子工作流在“已完成/错误/已停止”状态下短暂展示，便于前端显示“运行完成”
+            allowed_statuses = {WorkflowStatus.RUNNING, WorkflowStatus.PAUSED}
+            if is_child:
+                allowed_statuses |= {WorkflowStatus.COMPLETED, WorkflowStatus.ERROR, WorkflowStatus.STOPPED}
+            if status not in allowed_statuses:
                 continue
             graph_data = wf_data.get("graph_data", {})
             project_name = graph_data.get("ProjectName") or graph_data.get("name") or wf_id
@@ -2576,7 +2582,7 @@ def list_workflows_route():
                 "status": status,
                 "project_name": project_name,
                 "display_name": display_name,
-                "is_child": wf_data.get("is_child", False),
+                "is_child": is_child,
                 "parent_id": wf_data.get("parent_id"),
                 "child_summary": wf_data.get("child_summary") or {},
                 "queue_lengths": {

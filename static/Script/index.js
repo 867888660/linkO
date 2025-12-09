@@ -4685,12 +4685,35 @@ function CreatDetaile(Item)
     NameId.value = label; // 设置输入框的初始值为 id
     NameId.style.cssText = `
         position: absolute;
-        left: 24px; // 使用 px，因为这是 CSS 中的单位
-        top: 30px; // 使用 px
-        width: 200px; // 可以根据需要调整宽度
-        height: 30px; // 可以根据需要调整高度
+        left: 30px;
+        top: 3px;
+        width: 200px;
+        height: 26px;
+        z-index: 100;
+        background: #505050; /* 黑灰色高质感背景 */
+        border: 1px solid rgba(255, 255, 255, 0.08); /* 极细微边框 */
+        border-left: 3px solid #00d4ff; /* 科技蓝侧边条 */
+        border-radius: 2px;
+        color: #e0e0e0;
+        padding-left: 10px;
+        font-family: 'Consolas', 'Monaco', monospace; /* 科技感字体 */
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: 0.5px;
+        outline: none;
+        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        backdrop-filter: blur(12px); /* 强毛玻璃 */
+        
     `;
     NameId.addEventListener('focus', function() {
+        this.style.background = '#505050';
+        this.style.borderLeftColor = '#fff';
+        this.style.color = '#fff';
+    });
+    NameId.addEventListener('blur', function() {
+        this.style.background = '#505050';
+        this.style.borderLeftColor = '#00d4ff';
+        this.style.color = '#e0e0e0';
     });
 
     // 当输入框失去焦点时触发
@@ -4747,7 +4770,7 @@ function CreatDetaile(Item)
 
     // 添加灰色背景和宽度自适应样式
     ResetColumn.style.cssText = `
-        background:rgb(163, 163, 163) !important;  /* 灰色背景 */
+        background:rgb(238, 238, 238) !important;  /* 灰色背景 */
         width: fit-content !important;   /* 宽度自适应内容 */
         min-width: 580px;               /* 最小宽度 */
         max-width: 580px;               /* 最大宽度（可选） */
@@ -5573,7 +5596,7 @@ function CreatDetaile(Item)
       outputColumn.className = 'column';
       const addNode1 = document.createElement('div');
       addNode1.className = 'column-AddNode'; // 使用之前定义的样式类
-      addNode1.style.left = '60px'; // 设置左边距
+       // 设置左边距
       outputColumn.appendChild(addNode1);
       const outputLabel = document.createElement('div');
       outputLabel.textContent = 'Output'; // 设置文本
@@ -5801,6 +5824,7 @@ function CreatDetaile(Item)
                 if (isOk) {
                   if (index == 0) {
                       let pathButton = inputContainer.querySelector('button'); 
+                      if (pathButton) pathButton.classList.add('path-button');
                       pathButton.innerHTML = 'Select Path <span class="circle-loader"></span>';
                       let filePath = labelTextarea.value;
               
@@ -6080,6 +6104,7 @@ function CreatDetaile(Item)
                 if (!existingPathButton) {
                     let pathButton = document.createElement('button'); // 创建按钮
                     pathButton.textContent = 'Select Path'; // 设置按钮文本
+  pathButton.classList.add('path-button');
 
                     // 文件选择逻辑
                     pathButton.addEventListener('click', function () {
@@ -6206,10 +6231,10 @@ function CreatDetaile(Item)
       const outputContainer = document.createElement('div');
       outputContainer.className = 'output-container';
       outputContainer.style.display = 'flex';
-      outputContainer.style.alignItems = 'flex-start'; // Content aligned at top
+      outputContainer.style.alignItems = 'center'; // 同行居中
       outputContainer.style.flexWrap = 'wrap'; // Allow child elements to wrap
       outputContainer.style.marginBottom = '10px'; // Increase line spacing
-      outputContainer.style.maxHeight = '300px'; // Set maximum height
+      outputContainer.style.maxHeight = '320px'; // Set maximum height
       outputContainer.style.overflowY = 'auto'; // Add vertical scrollbar when needed
     
       // 创建一个 input 来显示/编辑 output name
@@ -6231,8 +6256,7 @@ function CreatDetaile(Item)
       // Label1 + Select1：“组”下拉
       const Label1 = document.createElement('label');
       Label1.textContent = '组';
-      Label1.style.flex = '0 0 auto';
-      Label1.style.color = '#FFFFFF';
+      Label1.classList.add('output-group-label');
       outputContainer.appendChild(Label1);
     
       const Select1 = document.createElement('select');
@@ -6460,7 +6484,7 @@ const database = graph.save();
     
         const SubNode = document.createElement('div');
         SubNode.className = 'column-SubNode';
-        SubNode.style.left = '112px';
+        SubNode.style.left = '440px';
         outputContainer.appendChild(SubNode);
     
         SubNode.onmousedown = function() {
@@ -6585,7 +6609,7 @@ const database = graph.save();
     outputColumn.className = 'column';
     const addNode1 = document.createElement('div');
     addNode1.className = 'column-AddNode'; // 使用之前定义的样式类
-    addNode1.style.left = '60px'; // 设置左边距
+     // 设置左边距
     outputColumn.appendChild(addNode1);
     const outputLabel = document.createElement('div');
     outputLabel.textContent = 'Output'; // 设置文本
@@ -6940,7 +6964,10 @@ const database = graph.save();
                 if (isOk) {
                   if (index == 0) {
                       let pathButton = inputContainer.querySelector('button'); 
-                      pathButton.innerHTML = 'Select Path <span class="circle-loader"></span>';
+                      if (pathButton) {
+                        pathButton.classList.add('path-button');
+                        pathButton.innerHTML = 'Select Path <span class="circle-loader"></span>';
+                      }
                       let filePath = labelTextarea.value;
               
                       fetch('/read_DataBase', {
@@ -6953,7 +6980,9 @@ const database = graph.save();
                       .then(response => response.json())
                       .then(data => {
                           if (data.status === 'success') {
-                              pathButton.innerHTML = 'Select Path <span style="color: green;">(Load Success)</span>';
+                              if (pathButton) {
+                                pathButton.innerHTML = 'Select Path <span style="color: green;">(Load Success)</span>';
+                              }
                               let dataTemp=graph.save();
                               dataTemp.nodes.forEach((node) => {
                                 if(node.id == id)
@@ -7094,12 +7123,16 @@ const database = graph.save();
                               }         
                           } else {
                               console.error('Error:', data.message,data);
-                              pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
+                              if (pathButton) {
+                                pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
+                              }
                           }
                       })
                       .catch(error => {
                           console.error('Error:', error,data);
-                          pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
+                          if (pathButton) {
+                            pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
+                          }
                       });
                   }
                   ChangeAnchorValue(id, labelTextarea.value, 'Input', input.Id); // 假定 id 和 ChangeNodeLabel 已定义
@@ -7273,26 +7306,24 @@ const database = graph.save();
       outputContainer.style.display = 'flex';
       outputContainer.style.alignItems = 'flex-start'; // Content aligned at top
       outputContainer.style.flexWrap = 'wrap'; // Allow child elements to wrap
-      outputContainer.style.marginBottom = '10px'; // Increase line spacing
-      outputContainer.style.maxHeight = '300px'; // Set maximum height
-      outputContainer.style.overflowY = 'auto'; // Add vertical scrollbar when needed
+      outputContainer.style.marginBottom = '8px'; // 收紧行距
+      outputContainer.style.maxHeight = 'none'; // 不再限制高度
+      outputContainer.style.overflowY = 'visible'; // 不强制滚动
       // Create an input box to display the output name
       const outputName = document.createElement('input');
       outputName.value = output.name;
-      outputName.style.width = '100px'; // 设置固定宽度
-      outputName.style.marginBottom = '5px'; // 增加10px的下边距，增加行距
+      outputName.style.width = '150px'; // 统一宽度，保持对齐
+      outputName.style.marginBottom = '6px';
       outputContainer.appendChild(outputName);
       outputName.addEventListener('input', function() {
         ChangeAnchorLabel(id, outputName.value, index, IdTemp, false);
       })
-      // 添加一个宽度为100%的透明div来强制换行
-      const newLineDiv1 = document.createElement('div');
-      newLineDiv1.style.width = '3%'; // 设置宽度为100%
-      newLineDiv1.style.height = '0'; // 高度设置为0，使其不影响视觉效果
-      outputContainer.appendChild(newLineDiv1);
-
       
       if (index != 0) {
+        const newLineDiv = document.createElement('div');
+        newLineDiv.style.width = '100%';
+        newLineDiv.style.height = '0';
+        outputContainer.appendChild(newLineDiv);
         const Label5 = document.createElement('label');
         Label5.textContent = '类型';
         Label5.style.flex = '0 0 auto';
@@ -7312,11 +7343,6 @@ const database = graph.save();
           Select5.appendChild(optionElement);
         });
       
-        const newLineDiv = document.createElement('div');
-        newLineDiv.style.width = '25%'; 
-        newLineDiv.style.height = '0'; 
-        
-      
         // 组(Label + Select1)
         const Label1 = document.createElement('label');
         Label1.textContent = '组';
@@ -7325,7 +7351,7 @@ const database = graph.save();
         outputContainer.appendChild(Label1);
       
         const Select1 = document.createElement('select');
-        Select1.style.width = '100px';
+        Select1.style.width = '120px';
         outputContainer.appendChild(Select1);
         // 标记以便全局事件处理器能精准找到并刷新
         try {
@@ -7333,7 +7359,7 @@ const database = graph.save();
           Select1.setAttribute('data-node-id', id);
           Select1.setAttribute('data-output-id', IdTemp);
         } catch (_) {}
-        outputContainer.appendChild(newLineDiv);
+        
         const logicContainer = document.createElement('div');
         logicContainer.className = 'logic-container';
         outputContainer.appendChild(logicContainer);   // ⬅ 逻辑区放在 outputContainer 里
@@ -7605,7 +7631,6 @@ const database = graph.save();
             const prev = child.previousElementSibling;
             if (
               child !== outputName &&
-              child !== newLineDiv1 &&
               child !== Label5 &&
               child !== Select5 &&
               child.className !== 'column-SubNode' &&
@@ -7653,8 +7678,8 @@ const database = graph.save();
           // 创建一个小的可点击区域来删除此输出
           const SubNode = document.createElement('div');
           SubNode.className = 'column-SubNode';
-          SubNode.style.left = '390px';
-          SubNode.style.top = '11px';
+          SubNode.style.left = '500px';
+          SubNode.style.top = '20px';
           outputContainer.appendChild(SubNode);
       
           SubNode.onmousedown = function () {
@@ -8063,7 +8088,7 @@ const database = graph.save();
               // 在进入下一个循环前保存上一个元素
               const prev = child.previousElementSibling;
               // 检查当前元素是否不是 Select1 和 Label1
-              if (child !== outputName && child !== newLineDiv1  &&child !==Label5 &&child !==Select5 && child.className!=='column-SubNode' &&child !== Select1 && child !== Label1&& child !== newLineDiv) {
+              if (child !== outputName  &&child !==Label5 &&child !==Select5 && child.className!=='column-SubNode' &&child !== Select1 && child !== Label1&& child !== newLineDiv) {
                   outputContainer.removeChild(child);
               }
 
@@ -9101,7 +9126,7 @@ const database = graph.save();
         const modelSelector = document.createElement('div');
         modelSelector.className = 'model-selector';
         modelSelector.textContent = 'Model';
-        modelSelector.style.color='white'
+        modelSelector.style.color='Black'
 
         // 过滤出 NodeKind 为 'LLm' 的文件，并去掉 '.py' 后缀
         const filteredFiles = fileList
@@ -9766,18 +9791,19 @@ const database = graph.save();
       const OutputSelect = document.createElement('select');
       OutputSelect.style.width = '75px'; // 设置固定宽度
       OutputSelect.style.position = 'absolute'; // 设置相对定位
-      OutputSelect.style.marginLeft = '-10px'; // 设置左边距
-      OutputSelect.style.marginTop = '10px'; // 设置上边距
+      OutputSelect.style.left = '88px'; // 略向左移
+      OutputSelect.style.top = '6px';   // 略向上移
+      OutputSelect.style.height = '34px';
+      OutputSelect.style.padding = '6px 28px 6px 12px';
       
       const optionJson = document.createElement('option');
+      optionJson.style.top='0px';
       optionJson.value = 'Json';
       optionJson.text = 'Json';
       const optionOriginalText = document.createElement('option');
       optionOriginalText.value = 'OriginalText';
       optionOriginalText.text = 'OriginalText';
-      OutputSelect.style.left = '100px'; // 设置左边距
       OutputSelect.style.width = '100px'; // 设置固定宽度
-      OutputSelect.style.marginTop = '13px'; // 设置上边距
       OutputSelect.appendChild(optionJson);
       OutputSelect.appendChild(optionOriginalText);
       OutputSelect.value = OriginalTextSelector;
@@ -10333,12 +10359,12 @@ const database = graph.save();
         // Create an input box to display the output name
         const outputName = document.createElement('input');
         outputName.value = output.name;
-        outputName.style.width = '100px'; // Allow it to grow
+        outputName.style.width = '160px'; // 更宽，便于看清
         outputContainer.appendChild(outputName);
 
         // Create type selection box
         const Select1 = document.createElement('select');
-        Select1.style.width = '105px'; // Set a fixed width
+        Select1.style.width = '120px'; // 稍宽
         const optionContext = document.createElement('option');
         optionContext.value = 'String';
         optionContext.text = 'String';
@@ -10730,7 +10756,7 @@ const database = graph.save();
         });
         const SubNode = document.createElement('div');
         SubNode.className = 'column-SubNode'; // 使用之前定义的样式类
-        SubNode.style.left = '400px'; // 设置与标签之间的间距
+        SubNode.style.left = '470px'; // 设置与标签之间的间距
         SubNode.style.marginTop = '-2px'; // 设置上边距
         inputContainer.appendChild(SubNode);
         SubNode.onmousedown = function() {//删除这个矛点
@@ -11077,7 +11103,7 @@ const database = graph.save();
         outputColumn.className = 'column';
         const addNode1 = document.createElement('div');
         addNode1.className = 'column-AddNode'; // 使用之前定义的样式类
-        addNode1.style.left = '60px'; // 设置左边距
+         // 设置左边距
         outputColumn.appendChild(addNode1);
         const outputLabel = document.createElement('div');
         outputLabel.textContent = 'Output'; // 设置文本
@@ -11211,7 +11237,7 @@ const database = graph.save();
           {
             const SubNode = document.createElement('div');
             SubNode.className = 'column-SubNode'; // 使用之前定义的样式类
-            SubNode.style.right = '230px'; // 设置与 Description 之间的间距
+            SubNode.style.right = '90px'; // 设置与 Description 之间的间距
             outputContainer.appendChild(SubNode);
             SubNode.onmousedown = function() {//删除这个矛点
               let data=graph.save();
@@ -11521,7 +11547,7 @@ const database = graph.save();
           );
           const SubNode = document.createElement('div');
           SubNode.className = 'column-SubNode'; // 使用之前定义的样式类
-          SubNode.style.left = '410px'; // 设置与标签之间的间距
+          SubNode.style.left = '440px'; // 设置与标签之间的间距
           inputContainer.appendChild(SubNode);
           SubNode.onmousedown = function() {//删除这个矛点
             let data=graph.save();
@@ -12597,6 +12623,8 @@ function createSideWindow(item, isCheckMode = false) {
   // 设置按钮和状态显示
   const runButton = document.getElementById('run-button');
   runButton.style.display = isCheckMode ? 'none' : 'block';
+  const statusArea = document.querySelector('.status-area');
+  if (statusArea) statusArea.style.display = 'none';
 
   const resultIndicator = document.getElementById('result-indicator');
   const resultMessage = document.getElementById('result-message');
@@ -12629,8 +12657,10 @@ function createSideWindow(item, isCheckMode = false) {
       console.log('🔍 [SIDEWIN:DEBUG] 可用的节点ID列表:', Tempnodes.map(n => n.id));
     }
     
+    const statusArea = document.querySelector('.status-area');
     const loadingIndicator = document.getElementById('loading-indicator');
     const resultIndicator = document.getElementById('result-indicator');
+    if (statusArea) statusArea.style.display = 'flex';
     
     console.log('🔍 [SIDEWIN:DEBUG] DOM 元素状态:');
     console.log('  - loadingIndicator:', !!loadingIndicator);
@@ -12717,6 +12747,12 @@ function createSideWindow(item, isCheckMode = false) {
       if (!isCheckMode && runButton._clickHandler) {
           runButton.removeEventListener('click', runButton._clickHandler);
       }
+      const statusArea = document.querySelector('.status-area');
+      const loadingIndicator = document.getElementById('loading-indicator');
+      const resultIndicator = document.getElementById('result-indicator');
+      if (statusArea) statusArea.style.display = 'none';
+      if (loadingIndicator) loadingIndicator.style.display = 'none';
+      if (resultIndicator) resultIndicator.style.display = 'none';
   };
 
  const maximizeButton = document.getElementById('maximize-button');
@@ -12789,9 +12825,11 @@ function setupRunButton(node) {
           // 单节点运行前重置一次性打印标记，保证本次也会生成汇总/快照
           try { window.__RUN_SUMMARY_PRINTED__ = false; window.__RUN_PROGRESS_PRINTED__ = false; } catch(_) {}
           // 显示加载指示器
+          const statusArea = document.querySelector('.status-area');
           const loadingIndicator = document.getElementById('loading-indicator');
           const resultIndicator = document.getElementById('result-indicator');
           const resultMessage = document.getElementById('result-message');
+          if (statusArea) statusArea.style.display = 'flex';
           loadingIndicator.style.display = 'block';
           resultIndicator.style.display = 'none';
 
@@ -16610,9 +16648,26 @@ async function updateWorkflowSelector() {
       else if (statusText === 'completed') statusText = '已完成';
       else if (statusText === 'error') statusText = '错误';
       else if (statusText === 'stopped') statusText = '已停止';
+
+      // 子工作流使用简化的三态文案与颜色
+      const childStatusInfo = (() => {
+        if (!wf.is_child) return null;
+        const st = (wf.status || '').toLowerCase();
+        if (st === 'running') return { text: '运行中', color: '#1e90ff', prefix: '🔵', suffix: '🔄' };
+        if (st === 'completed') return { text: '运行完成', color: '#16a34a', prefix: '✅' };
+        return { text: '待运行', color: '#f97316', prefix: '🟠' };
+      })();
+
       const childText = formatChildSummaryText(wf.child_summary);
       const childMark = wf.is_child ? ' [子工作流]' : '';
-      option.textContent = `${displayName}${childMark} (${statusText})${childText}`;
+      if (childStatusInfo) {
+        const prefix = childStatusInfo.prefix ? `${childStatusInfo.prefix} ` : '';
+        const suffix = childStatusInfo.suffix ? ` ${childStatusInfo.suffix}` : '';
+        option.textContent = `${prefix}${displayName}${childMark} (${childStatusInfo.text})${childText}${suffix}`;
+        option.style.color = childStatusInfo.color;
+      } else {
+        option.textContent = `${displayName}${childMark} (${statusText})${childText}`;
+      }
       if (wf.id === currentObservedWorkflowId) {
         option.selected = true;
       }
