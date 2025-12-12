@@ -582,15 +582,8 @@ class WorkflowEngine:
                 and any(inp.get("Context", "").lower().endswith(ext) for ext in image_extensions)
             ]
 
-        # 2.2 system_prompt 生成
-        system_prompt = f"{node.get('SystemPrompt', '')}\n{node.get('ExprotAfterPrompt', '')}"
-        if node.get("OriginalTextSelector") == "OriginalText":
-            system_prompt = node.get("SystemPrompt", "")
-
-        # 直接使用节点的 prompt 作为 ExportPrompt（不做模板替换）
-           # ---------- 2.2.1 处理 prompt 模板替换（关键步骤！） ----------
-        # 构建 ExprotAfterPrompt（如果需要）
-        if node_kind == "LLm" and not node.get('ExprotAfterPrompt'):
+        # 2.2 构建 ExprotAfterPrompt（每次重建，避免沿用旧模板/描述）
+        if node_kind == "LLm":
             export_after_prompt = 'Please ensure the output is in JSON format\n{\n'
             for output in node.get("Outputs", []):
                 output_kind = ''
@@ -603,6 +596,14 @@ class WorkflowEngine:
                 export_after_prompt += f'"{output.get("Id", "")}": "{output.get("Description", "")}" (you need output type:{output_kind})\n'
             export_after_prompt += '}\n'
             node['ExprotAfterPrompt'] = export_after_prompt
+
+        # 2.3 system_prompt 生成
+        system_prompt = f"{node.get('SystemPrompt', '')}\n{node.get('ExprotAfterPrompt', '')}"
+        if node.get("OriginalTextSelector") == "OriginalText":
+            system_prompt = node.get("SystemPrompt", "")
+
+        # 直接使用节点的 prompt 作为 ExportPrompt（不做模板替换）
+           # ---------- 2.2.1 处理 prompt 模板替换（关键步骤！） ----------
 
         # 替换 ExportPrompt/Prompt 中的占位符（同时兼容两种来源）
         template_text = node.get("prompt") or node.get("ExportPrompt", "") or ""

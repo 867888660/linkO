@@ -5608,12 +5608,20 @@ function CreatDetaile(Item)
         data.nodes.forEach((node) => {
           if(node.id == id && node.TempColumns!=undefined && node.TempColumns!=null && node.TempColumns.length!=0)
           {
-            IdTemp='Output' + (node.Outputs.length + 1).toString();
-            let TempName = 'Output' + (node.Outputs.length + 1).toString();
+            // 生成唯一 Id，避免删除后复用导致串改
+            const baseCount = node.Outputs.length + 1;
+            const makeId = () => `Output${baseCount}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            IdTemp = makeId();
+            while (node.Outputs.some(output => output.Id === IdTemp)) {
+              IdTemp = makeId();
+            }
+
+            // 生成唯一 name
+            let TempName = 'Output' + baseCount.toString();
             let counter = 1; // 新增一个计数器
             // 检查是否重名，如果重名则+1继续检查
             while (node.Outputs.some(output => output.name === TempName)) {
-                TempName = 'Output' + (node.Outputs.length + 1 + counter).toString(); // 使用计数器调整名称
+                TempName = 'Output' + (baseCount + counter).toString(); // 使用计数器调整名称
                 counter++; // 每次循环递增计数器
             }
             node.Outputs.push({
@@ -5808,7 +5816,7 @@ function CreatDetaile(Item)
                 this.style.height = `${this.scrollHeight}px`;
                 let isOk = true; // 假定输入有效
                 if (input.Kind == 'Num') {
-                    if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) {
+                    if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) {
                         isOk = true; // 如果是数字，将 isOk 设置为 true
                     } else {
                         // 如果不符合条件，则弹出提示
@@ -6015,21 +6023,49 @@ function CreatDetaile(Item)
               labelTextarea.style.verticalAlign = 'top'; // 输入行字符居上
               labelTextarea.style.lineHeight = '20px'; // 设置行高以匹配初始高度
               labelTextarea.style.resize = 'vertical';
+
+              // 安全获取 TempColumns，避免未加载时报错
+              const getTempColumns = (node) => {
+                return (node && node.TempColumns && typeof node.TempColumns === 'object')
+                  ? node.TempColumns
+                  : {};
+              };
+              // 添加占位选项，防止误选旧值
+              const appendPlaceholder = (selectEl, text, disabledFlag) => {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.text = text;
+                opt.disabled = !!disabledFlag;
+                opt.selected = true;
+                selectEl.appendChild(opt);
+              };
+              // 用最新列信息重建下拉
+              const rebuildOptions = (selectEl, columns) => {
+                while (selectEl.firstChild) {
+                  selectEl.removeChild(selectEl.firstChild);
+                }
+                const keys = Object.keys(columns || {});
+                if (!keys.length) {
+                  appendPlaceholder(selectEl, '未加载', true);
+                  return keys;
+                }
+                appendPlaceholder(selectEl, '请选择', true);
+                keys.forEach((key) => {
+                  const option = document.createElement('option');
+                  option.value = key;
+                  option.text = key;
+                  selectEl.appendChild(option);
+                });
+                return keys;
+              };
+
               let database = graph.save();
               // 假设 labelTextarea 是一个 <select> 或 <textarea> 元素
               for (let i = 0; i < database.nodes.length; i++) {
                 if (database.nodes[i].id == id) {
-                  // ① 原先这里是 const TempOutPuts = database.nodes[i].TempOutPuts;
-                  //    改用 TempColumns
-                  const TempColumns = database.nodes[i].TempColumns;
-
-                  // ② 遍历 TempColumns 的 key 生成下拉选项
-                  Object.keys(TempColumns).forEach((key) => {
-                    const option = document.createElement('option');
-                    option.value = key;
-                    option.text = key;
-                    labelTextarea.appendChild(option);
-                  });
+                  const TempColumns = getTempColumns(database.nodes[i]);
+                  rebuildOptions(labelTextarea, TempColumns);
+                  break;
                 }
               }
 
@@ -6038,19 +6074,25 @@ function CreatDetaile(Item)
 
                 for (let i = 0; i < database.nodes.length; i++) {
                   if (database.nodes[i].id == id) {
-                    // 用于后续比对的标识
                     let isDifferent = false;
 
-                    // ③ 这里同样由 TempOutPuts 换成 TempColumns
-                    const TempColumns1 = database.nodes[i].TempColumns;
+                    const TempColumns1 = getTempColumns(database.nodes[i]);
+                    const keys1 = Object.keys(TempColumns1);
 
-                    // 从第 1 个选项开始检查(如果第 0 个是“placeholder”或其他)
+                    // 如果尚未加载列数据，保持占位并退出，避免加载错误值
+                    if (!keys1.length) {
+                      rebuildOptions(labelTextarea, TempColumns1);
+                      labelTextarea.value = '';
+                      return;
+                    }
+
+                    // 从第 1 个选项开始检查(第 0 个是占位)
                     for (let j = 1; j < labelTextarea.options.length; j++) {
                       let currentValue = labelTextarea.options[j].value;
                       isDifferent = true; // 默认先认为不匹配
 
                       // 遍历 TempColumns1 的所有 key
-                      for (let key of Object.keys(TempColumns1)) {
+                      for (let key of keys1) {
                         if (currentValue === key) {
                           isDifferent = false; // 找到相同键，说明没变
                           break;
@@ -6060,37 +6102,35 @@ function CreatDetaile(Item)
                     }
 
                     // 如果元素数量也不一致，则视为不同
-                    if (labelTextarea.options.length !== Object.keys(TempColumns1).length + 1) {
+                    if (labelTextarea.options.length !== keys1.length + 1) {
                       isDifferent = true;
                     }
 
                     // 如果检测到不一致，则先清空所有选项
                     if (isDifferent) {
-                      while (labelTextarea.firstChild) {
-                        labelTextarea.removeChild(labelTextarea.firstChild);
-                      }
+                      rebuildOptions(labelTextarea, TempColumns1);
                     }
-
-                    // ④ 再次填充最新的列信息
-                    const TempColumns2 = database.nodes[i].TempColumns;
-                    Object.keys(TempColumns2).forEach((key) => {
-                      const option = document.createElement('option');
-                      option.value = key;
-                      option.text = key;
-                      labelTextarea.appendChild(option);
-                    });
                   }
                 }
 
-                // 回填到 input.Context
-                labelTextarea.value = input.Context;
+                // 只在当前列存在时回填 Context，避免加载错误的值
+                const nodeForValue = graph.save().nodes.find(n => n.id == id);
+                const validKeys = getTempColumns(nodeForValue);
+                if (input.Context && Object.prototype.hasOwnProperty.call(validKeys, input.Context)) {
+                  labelTextarea.value = input.Context;
+                } else {
+                  labelTextarea.value = '';
+                }
               });
 
               labelTextarea.addEventListener('change', function () {
                 ChangeAnchorValue(id, labelTextarea.value, 'Input', input.Id);
               });
-              if(input.Context!=null)
+              if (input.Context && labelTextarea.querySelector(`option[value="${input.Context}"]`)) {
                 labelTextarea.value = input.Context;
+              } else {
+                labelTextarea.value = '';
+              }
             }
             //
             let uniqueClass = `unique-textarea-${id}-${input.Id}`; // 使用 input.Id 生成唯一的类名
@@ -6228,6 +6268,7 @@ function CreatDetaile(Item)
       inputColumn.appendChild(inputContainer);
     }
     function CreatOutputs(output, index, IdTemp) {
+      const realId = IdTemp || output.Id;
       const outputContainer = document.createElement('div');
       outputContainer.className = 'output-container';
       outputContainer.style.display = 'flex';
@@ -6244,7 +6285,7 @@ function CreatDetaile(Item)
       outputName.style.marginBottom = '5px';
       outputContainer.appendChild(outputName);
       outputName.addEventListener('input', function() {
-        ChangeAnchorLabel(id, outputName.value, index, IdTemp, false);
+        ChangeAnchorLabel(id, outputName.value, index, realId, false);
       });
     
       // 分隔用的小空div
@@ -6265,8 +6306,8 @@ function CreatDetaile(Item)
       try {
         Select1.classList.add('db-output-group-select');
         Select1.setAttribute('data-node-id', id);
-        Select1.setAttribute('data-output-id', IdTemp);
-        console.warn('[DB] CreatOutputs: Select1 created', { nodeId: id, outId: IdTemp });
+        Select1.setAttribute('data-output-id', realId);
+        console.warn('[DB] CreatOutputs: Select1 created', { nodeId: id, outId: realId });
       } catch(_) {}
     
       // 获取当前节点的 TempColumns（原本是 TempOutPuts）
@@ -6290,6 +6331,30 @@ const database = graph.save();
           } catch(_) {}
         }
       }
+
+      // 工具：占位 & 回填
+      const ensurePlaceholder = () => {
+        const existing = Select1.querySelector('option[value=""]');
+        if (!existing) {
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.text = '请选择';
+          opt.disabled = true;
+          opt.selected = true;
+          Select1.insertBefore(opt, Select1.firstChild);
+        } else {
+          existing.disabled = true;
+        }
+      };
+      const restoreSavedValue = () => {
+        const tempOutput = SearchOutput(id, realId);
+        const saved = tempOutput && tempOutput.selectBox1;
+        if (saved && Select1.querySelector(`option[value="${saved}"]`)) {
+          Select1.value = saved;
+        } else {
+          Select1.value = '';
+        }
+      };
     
       // 如果需要根据某个 key(如 Inputs[1].Context) 去定位 TempColumns 的“表”或“列数据”，则如下写:
       // 注意：只有在 TempColumns[Inputs[1].Context] 是数组或可遍历的结构时，这些操作才有意义
@@ -6309,7 +6374,7 @@ const database = graph.save();
             data.nodes.forEach((node) => {
               if (node.id == id) {
                 node.Outputs.forEach((out, idx) => {
-                  if (out.Id == IdTemp && out.selectBox4 != null) {
+                  if (out.Id == realId && out.selectBox4 != null) {
                     Select1.value = out.selectBox4;
                   }
                 });
@@ -6319,7 +6384,8 @@ const database = graph.save();
         }
       }
     
-      // 增加一行 "All" 选项
+      // 增加占位与 "All" 选项（All 不默认选中）
+      ensurePlaceholder();
       const optionAll = document.createElement('option');
       optionAll.value = 'All';
       optionAll.text = 'All';
@@ -6338,13 +6404,11 @@ const database = graph.save();
       
     
       // 如果之前保存过 selectBox1，就回填
-      let TempOutput = SearchOutput(id, IdTemp);
-      if (TempOutput.selectBox1 != null) {
-        Select1.value = TempOutput.selectBox1;
-      }
+      restoreSavedValue();
     
       // 当 Select1 改变时，清除多余元素并更新输出配置
       Select1.addEventListener('change', function() {
+        if (Select1.value === '') return; // 占位不写回
         let data = graph.save();
         let child = outputContainer.lastElementChild;
     
@@ -6367,7 +6431,7 @@ const database = graph.save();
         data.nodes.forEach((node) => {
           if (node.id == id) {
             node.Outputs.forEach((out) => {
-              if (out.Id == IdTemp) {
+              if (out.Id == realId) {
                 out.selectBox1 = Select1.value;
                 // out.selectBox5 = null; // 若需要可保留
                 out.selectKind = null;
@@ -6378,18 +6442,21 @@ const database = graph.save();
         ChangeDatas(data);
       });
     
-      // 为了让它在初始化时也执行一次 change
-      setTimeout(function() {
-        Select1.dispatchEvent(new Event('change'));
-      }, 1000);
-      Select1.dispatchEvent(new Event('change'));
+      // 为了让它在初始化时也执行一次 change（仅当有有效值）
+      const triggerChange = () => {
+        if (Select1.value !== '') {
+          Select1.dispatchEvent(new Event('change'));
+        }
+      };
+      setTimeout(triggerChange, 1000);
+      triggerChange();
     
       // 点击 Select1 时，检测与 TempColumns.keys() 是否一致
       Select1.addEventListener('click', function() {
         let isDifferent = false;
         let data = graph.save();
         let Tempnode = data.nodes.filter(n => n.id == id);
-        let CurrentCols = Tempnode[0].TempColumns; // 原先用 TempOutPuts
+        let CurrentCols = Tempnode[0].TempColumns || {}; // 原先用 TempOutPuts
     
         // 数量 +1 (因为前面插了 "All")
         const optionsLength = Select1.options.length;
@@ -6417,6 +6484,7 @@ const database = graph.save();
         // 若有差异，则重置下拉内容
         if (isDifferent) {
           Select1.innerHTML = '';
+          ensurePlaceholder();
           // 先插入 "All"
           const optAll = document.createElement('option');
           optAll.value = 'All';
@@ -6439,7 +6507,7 @@ const database = graph.save();
                 data2.nodes.forEach((node2) => {
                   if (node2.id == id) {
                     node2.Outputs.forEach((out2) => {
-                      if (out2.Id == IdTemp && out2.selectBox4 != null) {
+                      if (out2.Id == realId && out2.selectBox4 != null) {
                         Select1.value = out2.selectBox4;
                       }
                     });
@@ -6455,12 +6523,9 @@ const database = graph.save();
             option.text = k;
             Select1.appendChild(option);
           });
-    
-          // 回填之前选中的值
-          let TempOutput = SearchOutput(id, IdTemp);
-          if (TempOutput.selectBox1 != null) {
-            Select1.value = TempOutput.selectBox1;
-          }
+
+          // 回填之前选中的值（不存在则留在占位）
+          restoreSavedValue();
         }
       });
     
@@ -6472,7 +6537,7 @@ const database = graph.save();
         data.nodes.forEach((node) => {
           if (node.id == id) {
             node.Outputs.forEach((out) => {
-              if (out.Id == IdTemp && out.Isnecessary == true) {
+              if (out.Id == realId && out.Isnecessary == true) {
                 // 如果该输出是必要的，就不创建可删区域
                 IsBreak = true;
                 return;
@@ -6493,7 +6558,7 @@ const database = graph.save();
             if (node.id == id) {
               // 通过 IdTemp 删除此 Output
               node.Outputs.forEach((out, idx) => {
-                if (out.Id == IdTemp) {
+                if (out.Id == realId) {
                   node.Outputs.splice(idx, 1);
                 }
               });
@@ -6616,21 +6681,27 @@ const database = graph.save();
     outputLabel.className = 'column-label'; // 设置样式类
     outputColumn.appendChild(outputLabel);
     // 将输入和输出列添加到节点容器中
-    addNode1.onmousedown = function() {
+      addNode1.onmousedown = function() {
       let data = graph.save();
       data.nodes.forEach((node) => {
         if (node.id == id) {
           // 构造唯一 Id 和默认 name
           const baseCount = node.Outputs.length + 1;
-          let IdTemp   = 'Output' + baseCount + Date.now();
           let TempName = 'Output' + baseCount;
-          // 保证 name 不重复
+          // 确保 name 不重复
           let counter = 1;
           while (node.Outputs.some(o => o.name === TempName)) {
             TempName = 'Output' + (baseCount + counter);
             counter++;
           }
-    
+
+          // 确保 Id 全局唯一，避免后续操作串改其它输出
+          const makeId = () => `Output${baseCount}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          let IdTemp = makeId();
+          while (node.Outputs.some(o => o.Id === IdTemp)) {
+            IdTemp = makeId();
+          }
+          // 保证 name 不重复
           // 推入新的 output 配置，带上三个新字段
           node.Outputs.push({
             Num: 0,
@@ -6948,7 +7019,7 @@ const database = graph.save();
             labelTextarea.addEventListener('input', function () {
                 let isOk = true; // 假定输入有效
                 if (input.Kind == 'Num') {
-                    if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) {
+                    if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) {
                         isOk = true; // 如果是数字，将 isOk 设置为 true
                     } else {
                         // 如果不符合条件，则弹出提示
@@ -7472,8 +7543,8 @@ const database = graph.save();
           'SelectedLabel_', 'Select4_', 'ModifyLabel_',
           'Input6_', 'newlineDiv3_', 'newlineDiv4_'
         ];
-        const outputTemp   = SearchOutput(id, IdTemp);
-        const outputKey    = output.name;  
+        const outputTemp   = SearchOutput(id, realId);
+        const outputKey    = realId;
         // ---------- 清理旧节点 ----------
         prefixes.forEach(p => {
           const node = document.getElementById(p + outputKey);
@@ -7539,7 +7610,7 @@ const database = graph.save();
         }
 
         /* ④ --------- 重新填充下拉框选项（与旧逻辑一致） --------- */
-        const OutputTemp = SearchOutput(id, IdTemp);
+        const OutputTemp = SearchOutput(id, realId);
         const Table      = OutputTemp.selectBox1;
 
         // 清空并重建选项
@@ -7565,7 +7636,7 @@ const database = graph.save();
           data.nodes.forEach(node => {
             if (node.id === id) {
               node.Outputs.forEach(out => {
-                if (out.Id === IdTemp) {
+                if (out.Id === realId) {
                   out.selectKind = 'Str';
                   out.selectBox4 = Select4.value;
                   out.selectNum3 = Select4.value;
@@ -7585,7 +7656,7 @@ const database = graph.save();
         data.nodes.forEach(node => {
           if (node.id === id) {
             node.Outputs.forEach(out => {
-              if (out.Id === IdTemp) {
+              if (out.Id === realId) {
                 out.selectKind = 'Num';
                 out.selectBox2 = value;
                 out.selectNum2 = value;
@@ -7995,7 +8066,7 @@ const database = graph.save();
             if (currentIndex >= 0 && currentIndex < itemsList.length) {
               Select3.value = itemsList[currentIndex];
               dropdown.style.display = 'none';
-              ChangeAnchorLabel(id, Select3.value, "selectBox3", output.Id, false);
+              ChangeAnchorLabel(id, Select3.value, "selectBox3", realId, false);
             }
           }
 
@@ -8098,7 +8169,7 @@ const database = graph.save();
           data.nodes.forEach((node) => {
             if (node.id == id) {
               node.Outputs.forEach((output,index) => {
-                if (output.Id == IdTemp) {
+                if (output.Id == realId) {
                   output.selectBox5 = value;
                   CreatCondition(output.selectBox1)
                 }
@@ -8227,7 +8298,7 @@ const database = graph.save();
                     labelTextarea.addEventListener('input', function() {
                     let isOk = true; // 假定输入无效
                     if(input.Kind == 'Num') {
-                      if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                      if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                       {
                         isOk = true; // 如果是，将isOk设置为true，表示输入有
                       }
@@ -8549,7 +8620,7 @@ const database = graph.save();
                   labelTextarea.addEventListener('input', function() {
                   let isOk = true; // 假定输入无效
                   if(input.Kind == 'Num') {
-                    if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                    if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                     {
                       isOk = true; // 如果是，将isOk设置为true，表示输入有
                     }
@@ -8664,7 +8735,7 @@ const database = graph.save();
                     labelTextarea.addEventListener('input', function() {
                     let isOk = true; // 假定输入无效
                     if(input.Kind == 'Num') {
-                      if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                      if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                       {
                         isOk = true; // 如果是，将isOk设置为true，表示输入有
                       }
@@ -8791,7 +8862,7 @@ const database = graph.save();
                       labelTextarea.addEventListener('input', function() {
                       let isOk = true; // 假定输入无效
                       if(input.Kind == 'Num') {
-                        if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                        if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                         {
                           isOk = true; // 如果是，将isOk设置为true，表示输入有
                         }
@@ -9070,12 +9141,20 @@ const database = graph.save();
             data.nodes.forEach((node) => {
               if(node.id == id)
               {
-                IdTemp='Output' + (node.Outputs.length + 1).toString();
-                let TempName = 'Output' + (node.Inputs.length + 1).toString();
+                // 唯一 Id，避免删除后复用
+                const baseCount = node.Outputs.length + 1;
+                const makeId = () => `Output${baseCount}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+                IdTemp = makeId();
+                while (node.Outputs.some(output => output.Id === IdTemp)) {
+                  IdTemp = makeId();
+                }
+
+                // 唯一 name
+                let TempName = 'Output' + baseCount.toString();
                 let counter = 1; // 新增一个计数器
                 // 检查是否重名，如果重名则+1继续检查
                 while (node.Outputs.some(output => output.name === TempName)) {
-                    TempName = 'Input' + (node.Outputs.length + 1 + counter).toString(); // 使用计数器调整名称
+                    TempName = 'Output' + (baseCount + counter).toString(); // 使用计数器调整名称
                     counter++; // 每次循环递增计数器
                 }
                 node.Outputs.push({
@@ -10064,12 +10143,20 @@ const database = graph.save();
         data.nodes.forEach((node) => {
           if(node.id == id)
           {
-            IdTemp='Output' + (node.Outputs.length + 1).toString();
-            let TempName = 'Output' + (node.Outputs.length + 1).toString();
+            // 唯一 Id，避免删除后复用
+            const baseCount = node.Outputs.length + 1;
+            const makeId = () => `Output${baseCount}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+            IdTemp = makeId();
+            while (node.Outputs.some(output => output.Id === IdTemp)) {
+              IdTemp = makeId();
+            }
+
+            // 唯一 name
+            let TempName = 'Output' + baseCount.toString();
             let counter = 1; // 新增一个计数器
             // 检查是否重名，如果重名则+1继续检查
             while (node.Outputs.some(output => output.name === TempName)) {
-                TempName = 'Output' + (node.Outputs.length + 1 + counter).toString(); // 使用计数器调整名称
+                TempName = 'Output' + (baseCount + counter).toString(); // 使用计数器调整名称
                 counter++; // 每次循环递增计数器
             }
             node.Outputs.push({
@@ -10336,18 +10423,19 @@ const database = graph.save();
       }
 
       function CreatOutputs(output, index,IdTemp) {
-        // 去重：若已存在相同 name 的容器，先移除再创建，防止重复渲染
+        const realId = IdTemp || output.Id;
+        // 去重：若已存在相同 Id 的容器，先移除再创建，防止重复渲染
         try {
-          const containerId = `outputContainer_s_${output.name}`;
+          const containerId = `outputContainer_s_${realId}`;
           const existed = outputColumn.querySelector(`#${CSS.escape(containerId)}`);
           if (existed && existed.parentNode) {
             existed.parentNode.removeChild(existed);
-            console.warn('[CreatOutputs] removed duplicated container for', output.name);
+            console.warn('[CreatOutputs] removed duplicated container for', realId);
           }
         } catch(_) {}
         const outputContainer = document.createElement('div');
         outputContainer.className = 'output-container';
-        outputContainer.id = `outputContainer_s_${output.name}`;
+        outputContainer.id = `outputContainer_s_${realId}`;
         outputContainer.style.display = 'flex';
         outputContainer.style.alignItems = 'flex-start'; // Content aligned at top
         outputContainer.style.flexWrap = 'wrap'; // Allow child elements to wrap
@@ -10385,7 +10473,7 @@ const database = graph.save();
             if (node.id == id) {
               //切断跟它output有关的边
               node.Outputs.forEach((output,index) => {
-                if (output.Id == IdTemp) {
+                if (output.Id == realId) {
                   output.Kind = this.value;
                 }
               }
@@ -10427,7 +10515,7 @@ const database = graph.save();
             {
               //通过IdTemp删除这个矛点
               node.Outputs.forEach((output,index) => {
-                  if(output.Id == IdTemp)
+                  if(output.Id == realId)
                   {
                     node.Outputs.splice(index,1);
                   }
@@ -10457,7 +10545,7 @@ const database = graph.save();
           this.style.height = `${this.scrollHeight}px`;
         });
         outputName.addEventListener('input', function() {
-          ChangeAnchorLabel(id, outputName.value, index,output.Id,false); // 假定 id 和 ChangeNodeLabel 已定义
+          ChangeAnchorLabel(id, outputName.value, index,realId,false); // 假定 id 和 ChangeNodeLabel 已定义
       });
 
         // suggestions.js
@@ -10606,7 +10694,7 @@ const database = graph.save();
               // 无论当前是 Json 还是 OriginalText 模式，始终写入 JsonOutputs
               const targetOutputs = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : node.Outputs;
               targetOutputs.forEach((output,index) => {
-                  if(output.Id == IdTemp)
+                  if(output.Id == realId)
                     output.Description = Description.value;
                   let Kind='';
                   if(output.Kind.includes('String'))
@@ -10650,7 +10738,7 @@ const database = graph.save();
                   Temp+='{\n';
               const targetOutputs = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : node.Outputs;
               targetOutputs.forEach((output,index) => {
-                  if(output.Id == IdTemp)
+                  if(output.Id == realId)
                     output.Description = Description.value;
                   let Kind='';
                   if(output.Kind.includes('String'))
@@ -10875,7 +10963,7 @@ const database = graph.save();
                 labelTextarea.addEventListener('input', function() {
                 let isOk = true; // 假定输入无效
                 if(input.Kind == 'Num') {
-                  if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                  if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                   {
                     isOk = true; // 如果是，将isOk设置为true，表示输入有
                   }
@@ -11110,17 +11198,25 @@ const database = graph.save();
         outputLabel.className = 'column-label'; // 设置样式类
         outputColumn.appendChild(outputLabel);
         // 将输入和输出列添加到节点容器中
-        addNode1.onmousedown = function() {
+          addNode1.onmousedown = function() {
           let data=graph.save();
           data.nodes.forEach((node) => {
             if(node.id == id)
             {
-              IdTemp='Output' + (node.Outputs.length + 1).toString();
-              let TempName = 'Output' + (node.Outputs.length + 1).toString();
+              // 唯一 Id，避免删除后复用
+              const baseCount = node.Outputs.length + 1;
+              const makeId = () => `Output${baseCount}_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+              IdTemp = makeId();
+              while (node.Outputs.some(output => output.Id === IdTemp)) {
+                IdTemp = makeId();
+              }
+
+              // 唯一 name
+              let TempName = 'Output' + baseCount.toString();
               let counter = 1; // 新增一个计数器
               // 检查是否重名，如果重名则+1继续检查
               while (node.Outputs.some(output => output.name === TempName)) {
-                  TempName = 'Output' + (node.Outputs.length + 1 + counter).toString(); // 使用计数器调整名称
+                  TempName = 'Output' + (baseCount + counter).toString(); // 使用计数器调整名称
                   counter++; // 每次循环递增计数器
               }
               node.Outputs.push({
@@ -11152,6 +11248,7 @@ const database = graph.save();
         vessel.appendChild(outputColumn);
         // 添加元素到 DOM
         function CreatOutputs(output, index,IdTemp) {
+          const realId = IdTemp || output.Id;
           const outputContainer = document.createElement('div');
           outputContainer.className = 'output-container';
           outputContainer.style.display = 'flex';
@@ -11169,7 +11266,7 @@ const database = graph.save();
           outputName.style.marginBottom = '5px'; // 增加10px的下边距，增加行距
           outputContainer.appendChild(outputName);
           outputName.addEventListener('input', function() {
-            ChangeAnchorLabel(id, outputName.value, index,IdTemp,false); // 假定 id 和 ChangeNodeLabel 已定义
+            ChangeAnchorLabel(id, outputName.value, index,realId,false); // 假定 id 和 ChangeNodeLabel 已定义
           })
           // 添加一个宽度为100%的透明div来强制换行
          
@@ -11199,7 +11296,7 @@ const database = graph.save();
             data.nodes.forEach((node) => {
               if (node.id == id) {
                 node.Outputs.forEach((output,index) => {
-                    if (output.Id == IdTemp) {
+                    if (output.Id == realId) {
                       output.TriggerKind = 'STOP';
                     }
                   }
@@ -11214,7 +11311,7 @@ const database = graph.save();
             data.nodes.forEach((node) => {
               if (node.id == id) {
                 node.Outputs.forEach((output,index) => {
-                    if (output.Id == IdTemp) {
+                    if (output.Id == realId) {
                       output.TriggerKind = this.value;
                     }
                   }
@@ -11246,7 +11343,7 @@ const database = graph.save();
                 {
                   //通过IdTemp删除这个矛点
                   node.Outputs.forEach((output,index) => {
-                      if(output.Id == IdTemp)
+                      if(output.Id == realId)
                       {
                         node.Outputs.splice(index,1);
                       }
@@ -11659,7 +11756,7 @@ const database = graph.save();
                   labelTextarea.addEventListener('input', function() {
                   let isOk = true; // 假定输入无效
                   if(input.Kind == 'Num') {
-                    if (labelTextarea.value.match(/^[0-9]+(\.[0-9]+)?$/)) 
+                    if (labelTextarea.value.match(/^-?[0-9]+(\.[0-9]+)?$/)) 
                     {
                       isOk = true; // 如果是，将isOk设置为true，表示输入有
                     }
@@ -15828,6 +15925,17 @@ function runFunction() {
       nodez.IsStartNode = false;
       nodez.firstRun = true;
       nodez.inputStatus = Array(nodez.Inputs?.length || 0).fill(false);
+      // 清空旧的输出/调试，避免历史输出混入新一轮全局运行
+      if (Array.isArray(nodez.Outputs)) {
+        nodez.Outputs.forEach(o => {
+          if (!o) return;
+          if ('Context' in o) o.Context = '';
+          if ('Num' in o) o.Num = null;
+          if ('Boolean' in o) o.Boolean = false;
+          ['prompt_tokens','completion_tokens','total_tokens'].forEach(k => { if (k in o) delete o[k]; });
+        });
+      }
+      if ('debug' in nodez) nodez.debug = '';
     });
     
     // 验证连接

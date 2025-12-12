@@ -162,6 +162,12 @@
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于 DeepSeek API 的大语言模型节点，支持文本和图像输入的多模态对话功能。该组件可以处理用户的文本提示和图像文件，通过 DeepSeek Reasoner 模型生成智能回复。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n核心功能包括图像文件的 Base64 编码转换、多模态消息构建、DeepSeek API 调用、响应内容的 JSON 格式化处理，以及输出结果的结构化封装。支持原始文本和 JSON 两种输出格式。\\n\\n参数\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容\\n```\\n\\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测文件路径类型的输入\\n- 将图像文件转换为 Base64 编码格式\\n- 根据原始文本选择器处理导出提示词\\n- 构建包含文本和图像的多模态消息数组\\n- 使用 DeepSeek API 密钥初始化 OpenAI 客户端\\n- 限制最大令牌数不超过 8192\\n- 调用 deepseek-reasoner 模型进行对话生成\\n- 提取 API 响应中的内容文本\\n- 根据输出格式选择器处理响应内容\\n- 如果选择 JSON 格式，则解析并格式化 JSON 数据\\n- 将处理后的结果分配给相应的输出节点\\n- 记录 API 调用的令牌使用统计信息\\n- 返回包含生成内容和统计信息的输出数组"
     },
     {
+        "Filename": "Deepseek_ali.py",
+        "Hash": "88f9ade4f01196ac5c4a3f41dc80ddba043e6b9bd1e5cc15b65fb389a19005cd",
+        "NodeKind": "LLm",
+        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
+    },
+    {
         "Filename": "Deepseek_r1_ali.py",
         "Hash": "9703d352f0d9997c76f70de39495b875bc128c70637da5f10cb6a7530f1a7c07",
         "NodeKind": "LLm",
@@ -391,7 +397,7 @@
     },
     {
         "Filename": "polymarket_transaction.py",
-        "Hash": "b16b9e5302680dfb89d4340e3d15403df288c036360d2b17589e621d47d6b3e4",
+        "Hash": "941a8ff6f30495e4e6b2e0f7a605cf45efdbe1ab10a79ed4849b5e4ae276bc0c",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单或撤单流程，完成 API 凭据生成、构建订单对象、发送订单或执行撤单操作，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.01\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单\n- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n- 返回包含 Result 和 DeBugging 的 Outputs 数组"
     },

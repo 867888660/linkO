@@ -3,9 +3,10 @@
     grid-template-columns: 1fr auto 1fr;
     align-items: center;
     padding: 10px 20px;
-    background-color: #f5f5f5;
-    border-bottom: 1px solid #ddd;
+    background-color: #111111;
+    border-bottom: 1px solid #222222;
     gap: 20px;
+    color: #e0e0e0;
 }
 
 .left-section {
@@ -24,66 +25,69 @@
 }
 
 .openagents-btn {
-    padding: 6px 15px;
-    background: #17a2b8;
-    color: white;
+    padding: 6px 14px;
+    background: #2f3640;
+    color: #f5f5f5;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
+    letter-spacing: 0.4px;
 }
 
 .openagents-btn:hover {
-    background: #138496;
+    background: #3a3f47;
 }
 
 .message-select {
     padding: 6px 10px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    font-size: 14px;
-    background: white;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
+    font-size: 13px;
+    background: #121212;
+    color: #e0e0e0;
 }
 
 .message-btn {
-    padding: 6px 15px;
-    background: #4a90e2;
-    color: white;
+    padding: 6px 14px;
+    background: #2f3640;
+    color: #f5f5f5;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 14px;
-    transition: background 0.2s;
+    transition: background 0.2s, transform 0.1s;
 }
 
 .message-btn:hover {
-    background: #357abd;
+    background: #3a3f47;
 }
 
 #createMessageBtn {
-    background: #28a745;
+    background: #2d7eff;
 }
 
 #createMessageBtn:hover {
-    background: #218838;
+    background: #2463cc;
 }
 
 #saveMessageBtn {
-    background: #ffc107;
-    color: #212529;
+    background: #444444;
+    color: #f5f5f5;
 }
 
 #saveMessageBtn:hover {
-    background: #e0a800;
+    background: #555555;
 }
 
 .agent-item {
     display: flex;
     flex-direction: column;
-    background: #ffffff;
-    border-radius: 8px;
-    padding: 10px 16px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    background: linear-gradient(145deg, #181b2a, #121421);
+    border-radius: 12px;
+    padding: 10px 14px;
+    box-shadow: 0 10px 26px rgba(0, 0, 0, 0.85);
+    border: 1px solid rgba(15, 23, 42, 0.7);
     width: 100%; /* 确保占满容器宽度 */
 }
 .agent-name {
@@ -125,18 +129,18 @@
 }
 
 .run-btn {
-    background-color: #4CAF50;
-    color: white;
+    background-color: #2d7eff;
+    color: #ffffff;
 }
 
 .delete-btn, .delete-icon-btn {
-    background-color: #F44336;
-    color: white;
+    background-color: #a33a3a;
+    color: #ffffff;
 }
 
 .confirms-btn {
-    background-color: #2196F3;
-    color: white;
+    background-color: #3c3c3c;
+    color: #ffffff;
 }
 
 .run-btn:hover, 
@@ -148,8 +152,9 @@ body, html {
     height: 100%;
     margin: 0;
     padding: 0;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background-color: #f0f4f8;
+    font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+    color: #e0e0e0;
 }
 .app-container {
     display: flex;
@@ -163,33 +168,35 @@ body, html {
 }
 .sidebar {
     width: 1100px;
-    background-color: #ffffff;
-    padding: 20px;
+    background: rgba(30, 30, 40, 0.92);
+    padding: 24px 22px;
     flex: 0 0 600px; /* 调整宽度as needed */
-    box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+    box-shadow: 0 18px 40px rgba(0,0,0,0.85);
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
     overflow-y: auto;
 }
 
 h1 {
     font-size: 28px;
-    color: #2c3e50;
+    color: #ffffff;
     margin-top: 0;
     margin-bottom: 20px;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+    text-shadow: 0 0 12px rgba(0, 0, 0, 0.8);
 }
 
 .section {
-    margin-bottom: 30px;
-    background-color: #f8f9fa;
-    border-radius: 8px;
-    padding: 15px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+    margin-bottom: 24px;
+    background-color: rgba(20, 24, 40, 0.98);
+    border-radius: 16px;
+    padding: 16px 18px;
+    box-shadow: 0 14px 32px rgba(0,0,0,0.8);
+    border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 h2 {
     font-size: 20px;
-    color: #34495e;
-    border-bottom: 2px solid #3498db;
+    color: #f3f4f6;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.45);
     padding-bottom: 10px;
     margin-top: 0;
     display: flex;
@@ -198,7 +205,7 @@ h2 {
 }
 
 .create-btn {
-    background-color: #2ecc71;
+    background-color: #2d7eff;
     color: white;
     border: none;
     width: 28px;
@@ -213,7 +220,7 @@ h2 {
 }
 
 .create-btn:hover {
-    background-color: #27ae60;
+    background-color: #2463cc;
 }
 
 /* 外层容器样式 */
@@ -226,8 +233,8 @@ h2 {
 }
 
 .item {
-    background-color: #ffffff;
-    border: 1px solid #e0e0e0;
+    background-color: rgba(16, 20, 35, 0.98);
+    border: 1px solid rgba(31, 41, 55, 0.9);
     padding: 12px;
     margin-top: 10px;
     border-radius: 6px;
@@ -235,7 +242,7 @@ h2 {
 }
 
 .item:hover {
-    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    box-shadow: 0 14px 32px rgba(0,0,0,0.9);
 }
 
 .agent-item, .limit-item {
@@ -249,9 +256,11 @@ h2 {
     flex: 1;
     margin-right: 8px;
     padding: 8px;
-    border: 1px solid #bdc3c7;
-    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
     transition: border-color 0.3s ease;
+    background: #101010;
+    color: #e0e0e0;
 }
 .suggestions-up {
     border-bottom: none;
@@ -260,56 +269,58 @@ h2 {
 }
 
 .agent-item input:focus, .limit-item input:focus {
-    border-color: #3498db;
+    border-color: #00d4ff;
     outline: none;
 }
 
 .limit-item span {
     margin: 0 8px;
-    color: #7f8c8d;
+    color: #9aa0a6;
 }
 
 .chat-section {
     flex-grow: 1;
     display: flex;
     flex-direction: column;
-    padding: 20px;
-    background-color: #ecf0f1;
+    padding: 24px;
+    background: radial-gradient(circle at top left, #1b1f34 0%, #050509 55%, #000000 100%);
 }
 
 #chatBox {
     flex-grow: 1;
-    border: 1px solid #bdc3c7;
+    border: 1px solid rgba(15, 23, 42, 0.9);
     padding: 15px;
     overflow-y: auto;
-    background-color: #ffffff;
-    border-radius: 8px;
-    margin-bottom: 15px;
-    box-shadow: inset 0 2px 5px rgba(0,0,0,0.05);
+    background-color: rgba(10, 13, 25, 0.98);
+    border-radius: 18px;
+    margin-bottom: 18px;
+    box-shadow: inset 0 0 14px rgba(0, 0, 0, 0.8);
 }
 .chat-input {
     display: flex;
     align-items: flex-start;
-    background-color: #ffffff;
+    background-color: #101010;
     padding: 10px;
-    border-radius: 8px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    border-radius: 10px;
+    box-shadow: 0 6px 18px rgba(0,0,0,0.7);
 }
 
 #toInput {
     width: 80px;
     padding: 10px;
-    border: 1px solid #bdc3c7;
-    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
     margin-right: 10px;
     transition: border-color 0.3s ease;
+    background: #101010;
+    color: #e0e0e0;
 }
 
 #messageInput {
     flex-grow: 1;
     padding: 10px;
-    border: 1px solid #bdc3c7;
-    border-radius: 4px;
+    border: 1px solid #2a2a2a;
+    border-radius: 6px;
     margin-right: 10px;
     transition: border-color 0.3s ease, height 0.3s ease;
     resize: none; /* 移除拖动角 */
@@ -320,8 +331,8 @@ h2 {
 
 #sendMessageBtn {
     align-self: flex-start;
-    background-color: #3498db;
-    color: white;
+    background: #2d7eff;
+    color: #ffffff;
     border: none;
     padding: 10px 20px;
     border-radius: 4px;
@@ -355,12 +366,12 @@ h2 {
 }
 
 #sendMessageBtn:hover {
-    background-color: #2980b9;
+    background: #2463cc;
 }
 
 
 #toInput:focus, #messageInput:focus {
-    border-color: #3498db;
+    border-color: #2d7eff;
     outline: none;
 }
 
@@ -369,7 +380,7 @@ h2 {
     justify-content: space-between;
     align-items: center;
     padding: 10px;
-    background-color: #f0f0f0;
+    background-color: #111111;
 }
 .info-bar {
     display: flex;
@@ -385,12 +396,12 @@ h2 {
 .port-info {
     display: inline-block;
     padding: 2px 8px;
-    background-color: #e0e0e0;
+    background-color: #1f1f1f;
     border-radius: 4px;
 }
 .save-btn, .openagents-btn {
-    background-color: #4CAF50;
-    color: white;
+    background-color: #2d7eff;
+    color: #ffffff;
     border: none;
     padding: 5px 10px;
     text-align: center;
@@ -403,15 +414,15 @@ h2 {
 }
 
 .save-btn:hover {
-    background-color: #45a049;
+    background-color: #2463cc;
 }
 
 .openagents-btn {
-    background-color: #059fcf;
+    background: #2f3640;
     margin-left: 10px; /* 只保留左边距 */
 }
 .openagents-btn:hover {
-    background-color: #006478;
+    background: #3a3f47;
 }
 .modal {
     display: none;
@@ -425,7 +436,7 @@ h2 {
     background-color: rgba(0,0,0,0.4);
 }
 .modal-content {
-    background-color: #fefefe;
+    background-color: #141414;
     margin: 15% auto;
     padding: 20px;
     border: 1px solid #888;
@@ -470,16 +481,16 @@ h2 {
 }
 
 ::-webkit-scrollbar-track {
-    background: #f1f1f1;
+    background: #111111;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #95a5a6;
+    background: #3a3f47;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #7f8c8d;
+    background: #4a525c;
 }
 .suggestions-container {
     overflow-y: auto;
@@ -519,6 +530,7 @@ h2 {
     max-width: 70%;
     position: relative;
     transition: transform 0.2s, box-shadow 0.2s;
+    color: #f0f0f0;
 }
 
 /* 消息方向 */
@@ -598,13 +610,13 @@ h2 {
 
 /* 消息内容组件样式保持不变 */
 .message-bubble .header {
-    color: white;
+    color: #ffffff;
     padding: 10px 15px;
     font-size: 14px;
     font-weight: bold;
 }
 .message-bubble .content {
-    background-color: #f8f9fa;
+    background-color: #121212;
     padding: 15px;
     font-size: 15px;
     line-height: 1.5;
@@ -612,7 +624,7 @@ h2 {
 
 .message-bubble .timestamp {
     font-size: 12px;
-    color: #888;
+    color: #9aa0a6;
     text-align: right;
     padding: 4px 8px;
     font-style: italic;
@@ -625,7 +637,7 @@ h2 {
 
 .message-bubble.limited .message-inner {
     position: relative;
-    background-color: #fff5f5;
+    background-color: #1f1517;
     border: 2px solid #ff4757;
     border-radius: 8px;  /* 确保圆角完整显示 */
     overflow: visible;   /* 允许内容和边框完全显示 */
@@ -656,7 +668,7 @@ h2 {
 
 /* 内容区域样式 */
 .message-bubble.limited .content {
-    background-color: #fff5f5;
+    background-color: #2b1619;
     padding: 15px;
     padding-bottom: 35px;  /* 为底部警告文本留空间 */
     position: relative;
@@ -675,7 +687,7 @@ h2 {
 
 /* 时间戳样式 */
 .message-bubble.limited .timestamp {
-    color: #ff4757;
+    color: #ff808a;
     padding: 5px 15px;
 }
 
@@ -687,8 +699,8 @@ h2 {
     display: inline-flex;
     align-items: center;
     font-family: monospace;
-    color: #2980b9;
-    background: #f8f9fa;
+    color: #d0d0d0;
+    background: #1a1a1a;
     padding: 2px 8px;
     border-radius: 4px;
     margin: 0 2px;
@@ -702,9 +714,9 @@ h2 {
 }
 
 .file-path:hover {
-    background: #e9ecef;
-    border-color: #dee2e6;
-    color: #2c3e50;
+    background: #232323;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
 }
 
 .file-path i {
@@ -723,8 +735,8 @@ h2 {
 .url-link {
     display: inline-flex;
     align-items: center;
-    color: #2980b9;
-    background: #f8f9fa;
+    color: #d0d0d0;
+    background: #1a1a1a;
     padding: 2px 8px;
     border-radius: 4px;
     margin: 0 2px;
@@ -737,16 +749,16 @@ h2 {
 }
 
 .url-link:hover {
-    background: #e9ecef;
-    border-color: #dee2e6;
-    color: #2c3e50;
+    background: #232323;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
     text-decoration: none;
 }
 
 .url-link i {
     margin-right: 8px;
     font-size: 14px;
-    color: #3498db;
+    color: #9fa6ad;
 }
 
 
@@ -784,9 +796,9 @@ h2 {
 }
 /* 新增：内层容器样式 */
 .message-bubble .message-inner {
-    border-radius: 12px;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.8);
 }
 /* 按钮样式 */
 .action-btn {
@@ -855,7 +867,7 @@ h2 {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    background: white;
+    background: #151515;
     padding: 25px;
     border-radius: 15px;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
@@ -872,7 +884,7 @@ h2 {
 /* 表单输入框 */
 .edit-form input,
 .editable-div {
-    border: 1px solid #ccc;
+    border: 1px solid rgba(255, 255, 255, 0.16);
     padding: 8px;
     min-height: 100px;
     white-space: pre-wrap;
@@ -916,14 +928,14 @@ h2 {
     display: flex;
     flex-direction: column;
     padding: 40px 10px 10px 10px;
-    background-color: #ecf0f1;
+    background-color: #050505;
     border-radius: 8px;
     box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.05);
 }
 
 
 #dropZone {
-    border: 2px dashed #ccc;
+    border: 2px dashed rgba(255, 255, 255, 0.25);
     border-radius: 20px;
     width: 100%;
     margin: 20px 0;
@@ -936,8 +948,8 @@ h2 {
 
 #dropZone.highlight {
     border-color: #333;
-    background-color: #f0f0f0;
-    color: #333;
+    background-color: #101010;
+    color: #a0a0a0;
 }
 #dragOverlay {
     position: fixed;
@@ -953,7 +965,7 @@ h2 {
 }
 
 #dragOverlay div {
-    background-color: white;
+    background-color: #141414;
     padding: 20px;
     border-radius: 10px;
     font-size: 24px;
@@ -961,11 +973,11 @@ h2 {
 }
 
 .chat-box {
-    border: 1px solid #aaa;
+    border: 1px solid #222222;
     padding: 10px;
     flex-grow: 1;
     overflow-y: auto;
-    background-color: #e0e0e0;
+    background-color: #0b0b0b;
     border-radius: 10px;
     box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
     width: calc(100% - 100px); /* 保持两边各50px的间距 */
@@ -975,7 +987,7 @@ h2 {
 .message {
     margin: 20px 0; /* 增加聊天气泡之间的垂直间隔 */
     border-radius: 10px;
-    background-color: #f0f0f0;
+    background-color: #101010;
     border-top: 30px solid;
     box-shadow: 0px 4px 12px rgba(0, 0, 0, 0.2);
     position: relative;
@@ -1011,7 +1023,7 @@ h2 {
 .message-header {
     font-weight: bold;
     margin: 0;
-    color: white;
+    color: #ffffff;
     padding: 5px;
     position: absolute;
     top: -30px;
@@ -1069,5 +1081,277 @@ h2 {
     text-align: center;
     font-weight: bold;
     margin: 20px 0;
-    color: #333;
+    color: #e0e0e0;
 }
+
+/* ==================================================
+   Tech-Themed Refinement (视觉强化，不改结构/逻辑)
+   --------------------------------------------------
+   - 只做视觉覆盖，保持原有布局、尺寸和交互逻辑不变
+   - 深色科技风基调 + 统一按钮高光
+   ================================================== */
+
+/* 全局基调：更深的太空背景 + 细腻发光 */
+body, html {
+    background: radial-gradient(circle at 0% 0%, #1b2740 0%, #050814 40%, #02030a 100%);
+    color: #e5e9f0;
+}
+
+.app-container {
+    backdrop-filter: blur(14px);
+}
+
+/* 顶部信息栏：细边框 + 玻璃拟物 */
+.info-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, rgba(7, 12, 24, 0.96), rgba(12, 19, 40, 0.96));
+    border-bottom: 1px solid rgba(88, 166, 255, 0.28);
+    box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.85),
+        0 0 0 1px rgba(15, 23, 42, 0.7);
+}
+
+.port-info {
+    background: rgba(15, 23, 42, 0.9);
+    color: #9ca3af;
+    border-radius: 999px;
+    font-size: 12px;
+    border: 1px solid rgba(56, 189, 248, 0.5);
+}
+
+/* 侧边栏与聊天区域：更清晰的层级感 */
+.sidebar {
+    background: radial-gradient(circle at top left, rgba(15, 23, 42, 0.96), rgba(3, 7, 18, 0.98));
+    border-right: 1px solid rgba(31, 41, 55, 0.9);
+}
+
+.section {
+    background: radial-gradient(circle at 0% 0%, #121827 0%, #050816 60%);
+    box-shadow:
+        0 18px 40px rgba(0, 0, 0, 0.95),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.chat-section {
+    background: radial-gradient(circle at top right, #111827 0%, #020617 50%, #000000 100%);
+}
+
+#chatBox {
+    background: radial-gradient(circle at top, #020617 0%, #020617 40%, #020617 100%);
+    border-radius: 18px;
+    border: 1px solid rgba(30, 64, 175, 0.6);
+}
+
+.chat-input {
+    background: linear-gradient(135deg, rgba(15, 23, 42, 0.9), rgba(15, 118, 110, 0.2));
+    border: 1px solid rgba(56, 189, 248, 0.4);
+}
+
+#toInput,
+#messageInput {
+    background: rgba(0, 0, 0, 0.65);
+    color: #e5e9f0;
+    border-radius: 10px;
+    border: 1px solid rgba(37, 99, 235, 0.5);
+}
+
+#toInput::placeholder,
+#messageInput::placeholder {
+    color: #6b7280;
+}
+
+/* 按钮统一科技风样式 -------------------------------- */
+.save-btn,
+.openagents-btn,
+.message-btn,
+.create-btn,
+.run-btn,
+.delete-btn,
+.confirms-btn,
+.visibility-btn,
+.visibilitys-btn,
+.delete-icon-btn,
+#sendMessageBtn {
+    position: relative;
+    overflow: hidden;
+    border-radius: 999px;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+    border: 1px solid transparent;
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #38bdf8, #6366f1);
+    background-origin: border-box;
+    background-clip: padding-box, border-box;
+    box-shadow:
+        0 0 0 1px rgba(15, 23, 42, 0.8),
+        0 10px 30px rgba(15, 23, 42, 0.9);
+    transition:
+        transform 0.16s ease-out,
+        box-shadow 0.16s ease-out,
+        filter 0.16s ease-out,
+        background-position 0.2s ease-out;
+}
+
+.save-btn::before,
+.openagents-btn::before,
+.message-btn::before,
+.create-btn::before,
+.run-btn::before,
+.delete-btn::before,
+.confirms-btn::before,
+.visibility-btn::before,
+.visibilitys-btn::before,
+.delete-icon-btn::before,
+#sendMessageBtn::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    background: radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.32), transparent 60%);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+}
+
+.save-btn:hover,
+.openagents-btn:hover,
+.message-btn:hover,
+.create-btn:hover,
+.run-btn:hover,
+.delete-btn:hover,
+.confirms-btn:hover,
+.visibility-btn:hover,
+.visibilitys-btn:hover,
+.delete-icon-btn:hover,
+#sendMessageBtn:hover {
+    transform: translateY(-1px);
+    box-shadow:
+        0 0 0 1px rgba(59, 130, 246, 0.7),
+        0 18px 40px rgba(30, 64, 175, 0.95);
+    filter: brightness(1.06);
+}
+
+.save-btn:hover::before,
+.openagents-btn:hover::before,
+.message-btn:hover::before,
+.create-btn:hover::before,
+.run-btn:hover::before,
+.delete-btn:hover::before,
+.confirms-btn:hover::before,
+.visibility-btn:hover::before,
+.visibilitys-btn:hover::before,
+.delete-icon-btn:hover::before,
+#sendMessageBtn:hover::before {
+    opacity: 1;
+    transform: translate3d(10%, 10%, 0);
+}
+
+/* 主功能按钮的配色微调 */
+.save-btn {
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #22c55e, #4ade80);
+}
+
+.openagents-btn {
+    padding-inline: 18px;
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #38bdf8, #6366f1);
+}
+
+.message-btn {
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #8b5cf6, #6366f1);
+}
+
+#sendMessageBtn {
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #38bdf8, #22d3ee);
+    font-weight: 500;
+}
+
+.create-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.create-btn i {
+    font-size: 14px;
+}
+
+/* 危险/删除类按钮维持红色但更干净 */
+.delete-btn,
+.delete-icon-btn {
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #f97373, #ef4444);
+}
+
+.confirms-btn {
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #22c55e, #4ade80);
+}
+
+.visibility-btn,
+.visibilitys-btn {
+    min-width: 34px;
+    padding-inline: 10px;
+    background-image:
+        linear-gradient(135deg, #020617, #020617),
+        linear-gradient(135deg, #38bdf8, #4f46e5);
+}
+
+/* Agent 卡片更简洁、统一 */
+.item {
+    background: radial-gradient(circle at 0% 0%, rgba(15, 23, 42, 0.98), rgba(15, 23, 42, 0.96));
+    border-radius: 16px;
+    border: 1px solid rgba(31, 41, 55, 0.9);
+    box-shadow:
+        0 16px 40px rgba(0, 0, 0, 0.95),
+        0 0 0 1px rgba(15, 23, 42, 0.9);
+}
+
+.agent-name {
+    color: #e5e9f0;
+}
+
+.agent-select {
+    background: rgba(15, 23, 42, 0.95);
+    border-radius: 10px;
+    border: 1px solid rgba(55, 65, 81, 0.9);
+    color: #e5e9f0;
+}
+
+.agent-item input,
+.limit-item input {
+    background: rgba(3, 7, 18, 0.9);
+    border-radius: 10px;
+    border: 1px solid rgba(55, 65, 81, 0.9);
+}
+
+/* 消息气泡：稍微减弱阴影，更偏“终端”感 */
+.message-bubble .message-inner {
+    box-shadow:
+        0 14px 30px rgba(0, 0, 0, 0.9),
+        0 0 0 1px rgba(15, 23, 42, 0.8);
+}
+
+.message-bubble .content {
+    background: radial-gradient(circle at 0% 0%, #020617 0%, #020617 60%);
+}
+
+.message-bubble .timestamp {
+    color: #6b7280;
+}
+

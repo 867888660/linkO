@@ -154,8 +154,7 @@ def _create_or_set_creds(c: Any, debug: List[str]) -> None:
                 break
             except Exception as e:
                 _append_debug(debug, f"L2 creds FAIL via {m} => {e}")
-    if not creds:
-        raise SystemExit("无法获取 API 凭据")
+    
     c.set_api_creds(creds)
 
 
