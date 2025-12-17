@@ -7236,6 +7236,8 @@ const database = graph.save();
       inputColumn.appendChild(inputContainer);
     }
     function CreatOutputs(output, index,IdTemp) {
+      // 确保输出标识存在，避免 realId 未定义报错
+      const realId = IdTemp || output.Id;
       function CreatLable(inputEl, SelectLabel){
         /* ===== 基本数据抓取 ===== */
         const Tempoutput = SearchOutput(id, IdTemp);

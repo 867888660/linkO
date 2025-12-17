@@ -132,6 +132,29 @@ def robust_get(url: str, params: Dict[str, Any] = None, retry: int = 2, timeout:
         _backoff_sleep(k)
     raise RuntimeError(f"GET 失败: {url} params={params}")
 
+def try_get_clob_end_date_iso(condition_id: str, retry: int = 1) -> (str, str):
+    """
+    返回 (end_date_iso, err)
+    - 成功：("2026-03-31T00:00:00Z", "")
+    - 失败：("", "原因")
+    """
+    cid = str(condition_id or "").strip()
+    if not (cid.startswith("0x") and len(cid) == 66):
+        return "", f"invalid_condition_id={cid}"
+
+    try:
+        data = robust_get(f"{CLOB}/markets/{cid}", params=None, retry=retry, timeout=10)
+        m = data.get("market") if isinstance(data, dict) and isinstance(data.get("market"), dict) else data
+        if isinstance(m, dict):
+            end_iso = m.get("end_date_iso") or m.get("endDate") or ""
+        else:
+            end_iso = ""
+        if not end_iso:
+            return "", "clob_end_date_iso_missing"
+        return str(end_iso), ""
+    except Exception as e:
+        return "", f"clob_end_date_iso_fetch_fail:{type(e).__name__}"
+
 def robust_post(url: str, json_body: Dict[str, Any], retry: int = 2, timeout: int = 12) -> Any:
     for k in range(retry + 1):
         try:
@@ -267,6 +290,56 @@ def fetch_markets(limit: int, offset: int, closed: bool, retry: int) -> List[Dic
     if isinstance(data, list):
         return data
     return []
+
+def fetch_clob_end_date_iso_map(condition_ids: List[str], retry: int) -> Dict[str, str]:
+    """
+    返回 {condition_id: end_date_iso}
+    优先批量 GET /markets?condition_ids=...；失败/缺失再逐个 GET /markets/<condition_id> 兜底。
+    """
+    out: Dict[str, str] = {}
+    cids = [c for c in condition_ids if c]
+    if not cids:
+        return out
+
+    # ① 批量：/markets?condition_ids=...
+    try:
+        params = {
+            "condition_ids": cids,      # requests 会编码成 condition_ids=a&condition_ids=b...
+            "limit": len(cids),
+            "offset": 0
+        }
+        data = robust_get(f"{CLOB}/markets", params=params, retry=retry)
+        arr = []
+        if isinstance(data, list):
+            arr = data
+        elif isinstance(data, dict):
+            arr = data.get("markets") or data.get("data") or data.get("items") or data.get("results") or []
+        for m in arr:
+            if not isinstance(m, dict):
+                continue
+            cid = m.get("condition_id") or m.get("conditionId")
+            end_iso = m.get("end_date_iso") or m.get("endDate")
+            if cid and end_iso:
+                out[str(cid)] = str(end_iso)
+    except Exception:
+        pass
+
+    # ② 兜底：/markets/<condition_id>
+    missing = [cid for cid in cids if str(cid) not in out]
+    for cid in missing:
+        try:
+            data = robust_get(f"{CLOB}/markets/{cid}", params=None, retry=retry)
+            m = None
+            if isinstance(data, dict):
+                m = data.get("market") if isinstance(data.get("market"), dict) else data
+            if isinstance(m, dict):
+                end_iso = m.get("end_date_iso") or m.get("endDate")
+                if end_iso:
+                    out[str(cid)] = str(end_iso)
+        except Exception:
+            continue
+
+    return out
 
 def fetch_yes_asks(token_ids: List[str], retry: int) -> Dict[str, float]:
     asks: Dict[str, float] = {}
@@ -538,6 +611,134 @@ def _round_if_finite(x, nd=6):
         return round(x, nd)
     except Exception:
         return None
+
+_MONTH_MAP = {
+    "jan": 1, "january": 1,
+    "feb": 2, "february": 2,
+    "mar": 3, "march": 3,
+    "apr": 4, "april": 4,
+    "may": 5,
+    "jun": 6, "june": 6,
+    "jul": 7, "july": 7,
+    "aug": 8, "august": 8,
+    "sep": 9, "sept": 9, "september": 9,
+    "oct": 10, "october": 10,
+    "nov": 11, "november": 11,
+    "dec": 12, "december": 12,
+}
+
+_RULE_DEADLINE_RE = re.compile(
+    r"\bby\s+([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\s*,\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*(ET|EST|EDT)\b",
+    re.IGNORECASE
+)
+
+def parse_rules_deadline_iso(rules: str) -> str:
+    """
+    从 rules 里解析形如：
+    'by December 31, 2025, 11:59 PM ET'
+    返回 UTC ISO：'2026-01-01T04:59:00Z'
+    解析失败返回 ""。
+    """
+    if not rules:
+        return ""
+    m = _RULE_DEADLINE_RE.search(rules)
+    if not m:
+        return ""
+
+    mon_s, day_s, year_s, hh_s, mm_s, ap_s, tz_s = m.groups()
+    mon = _MONTH_MAP.get(mon_s.lower().strip(), 0)
+    if mon <= 0:
+        return ""
+
+    day = int(day_s); year = int(year_s)
+    hh = int(hh_s); minute = int(mm_s)
+    ap = ap_s.upper().strip()
+    tz = tz_s.upper().strip()
+
+    # 12h -> 24h
+    if ap == "PM" and hh != 12:
+        hh += 12
+    if ap == "AM" and hh == 12:
+        hh = 0
+
+    # 处理时区：EST=-5, EDT=-4, ET 尽量用 zoneinfo（失败就按月份粗略推断）
+    offset_hours = -5
+    if tz == "EDT":
+        offset_hours = -4
+    elif tz == "EST":
+        offset_hours = -5
+    else:  # ET
+        try:
+            from zoneinfo import ZoneInfo
+            dt_local = datetime(year, mon, day, hh, minute, 0, tzinfo=ZoneInfo("America/New_York"))
+            dt_utc = dt_local.astimezone(timezone.utc)
+            return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        except Exception:
+            # 粗略：4-10 月按 EDT，其余按 EST（足够覆盖你样例 Dec 31）
+            offset_hours = -4 if 4 <= mon <= 10 else -5
+
+    dt_local = datetime(year, mon, day, hh, minute, 0, tzinfo=timezone(timedelta(hours=offset_hours)))
+    dt_utc = dt_local.astimezone(timezone.utc)
+    return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str, str):
+    """
+    优先级（按你要求）：
+    1) CLOB end_date_iso（若非空）
+    2) Gamma endDate（mm 里已有）
+    3) rules 文本 'by ... ET'
+    4) 仍不行：9999 拉很大
+
+    Debug：正常 ""；只要出现“没拿到 end_date_iso / 用了兜底”就写原因。
+    """
+    dbg = []
+
+    # --- 1) CLOB end_date_iso 优先 ---
+    cid = str(mm.get("condition_id") or "").strip()
+    clob_end = ""
+    if cid.startswith("0x") and len(cid) == 66:
+        try:
+            d = robust_get(f"{CLOB}/markets/{cid}", params=None, retry=max(1, retry), timeout=10)
+            m = d.get("market") if isinstance(d, dict) and isinstance(d.get("market"), dict) else d
+            raw = m.get("end_date_iso", None) if isinstance(m, dict) else None
+            clob_end = (raw or "").strip() if raw is not None else ""
+            if clob_end:
+                mm["endDate"] = clob_end
+                return mm["endDate"], ""  # 成功就不打 Debug（你要“正常为空”）
+            else:
+                dbg.append("clob_end_date_iso_missing")
+                try:
+                    if isinstance(m, dict):
+                        dbg.append("clob_end_date_iso_raw=" + repr(raw))
+                except Exception:
+                    pass
+        except Exception as e:
+            dbg.append(f"clob_fetch_fail:{type(e).__name__}")
+    else:
+        dbg.append(f"invalid_condition_id={cid}")
+
+    # --- 2) Gamma endDate（已有） ---
+    gamma_end = (mm.get("endDate") or "").strip()
+    if gamma_end:
+        # 这里即使 Gamma 有 endDate，也保留 Debug（因为你要求“包括没拿到 end_date_iso”也提示）
+        return gamma_end, "; ".join(dbg)
+
+    dbg.append("gamma_endDate_empty")
+
+    # --- 3) rules 文本兜底 ---
+    rules = mm.get("rules") or ""
+    rules_iso = parse_rules_deadline_iso(rules)
+    if rules_iso:
+        mm["endDate"] = rules_iso
+        dbg.append("used_rules_deadline")
+        return mm["endDate"], "; ".join(dbg)
+
+    dbg.append("rules_deadline_parse_fail")
+
+    # --- 4) 仍不行：9999 拉很大 ---
+    mm["endDate"] = "9999-12-31T23:59:59Z"
+    dbg.append("fallback_endDate_9999")
+    return mm["endDate"], "; ".join(dbg)
 
 # **Function definition**
 def run_node(node):
@@ -883,13 +1084,21 @@ def run_node(node):
         mid = meta_t["mid"]
         opt_name = meta_t["option_name"]
 
+        # —— 每个 market 只解析一次 endDate + Debug（最小改动）——
+        mm = market_map.get(mid, {})
+        if mm and not mm.get("_end_resolved"):
+            endv, dbg = resolve_end_date_and_debug(mid, mm, retry=retry)
+            mm["endDate"] = endv
+            mm["_end_debug"] = dbg or ""
+            mm["_end_resolved"] = True
+
         # —— 计算期限与"如果赢"的复利年化/日化 —— #
-        end_ts = _parse_end_ts_safe(market_map.get(mid, {}).get("endDate"))
+        end_ts = _parse_end_ts_safe(mm.get("endDate"))
         delta_days = (end_ts - time.time()) / 86400.0
 
         roi_if_win = (1.0 - price) / price
 
-        if delta_days <= 0:
+        if (delta_days is None) or (delta_days <= 0):
             daily_eff_if_win = None
             apr_eff_if_win   = None
         else:
@@ -937,6 +1146,7 @@ def run_node(node):
                 "condition_id": mm.get("condition_id"),
                 "question": mm.get("question"),
                 "endDate": mm.get("endDate"),
+                "Debug": mm.get("_end_debug") or "",
                 "days_to_end": round((_parse_end_ts_safe(mm.get("endDate")) - time.time())/86400.0, 4) if mm.get("endDate") else None,
                 # 新增：把规则、来源、URL 一起写入
                 "rules": mm.get("rules") or "",
