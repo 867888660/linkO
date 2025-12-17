@@ -114,7 +114,7 @@ Inputs[16]['Kind'] = 'Num'
 Inputs[16]['name'] = 'Rightnow_buy_Score'
 Inputs[16]['Isnecessary'] = True
 Inputs[16]['IsLabel'] = True
-Inputs[16]['Num'] = 85.0
+Inputs[16]['Num'] = 85
 
 # **Assign properties to Outputs**
 Outputs[0]['Kind'] = 'String'
@@ -172,7 +172,7 @@ def run_node(node):
     top_concentration = _to_float(node['Inputs'][13]['Context'], -1.0)
     IsSubject         = _to_bool01(node['Inputs'][14]['Context'])
     IsMatching        = _to_bool01(node['Inputs'][15]['Context'])
-    rightnow_buy_score = _to_float(node['Inputs'][16]['Context'], 85.0)
+    rightnow_buy_score = node['Inputs'][16]['Num']
 
     # 由前端传入，不预归一（允许和≠1；先截断到非负）
     w_main = max(0.0, w_main)   # 年化权重
