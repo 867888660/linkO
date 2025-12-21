@@ -72,7 +72,7 @@ def run_node(node):
 
     # Make the API call
     response = client.chat.completions.create(
-        model="qwen2.5-7b-instruct-1m",
+        model="qwen-flash",
         messages=messages,
         temperature=node['temperature'],
         max_tokens=node['max_tokens'],

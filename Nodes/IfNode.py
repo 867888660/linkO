@@ -112,6 +112,8 @@ def run_node(node):
                     cond_norm = (cond or '').strip().lower()
                     if cond_norm == 'eempty':  # 兼容老拼写
                         cond_norm = 'empty'
+                    if cond_norm == 'no empty':  # 兼容前端历史拼写
+                        cond_norm = 'not empty'
                     print(f"[DEBUG]   输入值 = {input_val}")
                     if cond_norm == 'include':
                         result = (cont in input_val)

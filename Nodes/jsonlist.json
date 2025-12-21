@@ -138,6 +138,12 @@
         "NodeFunction": "这是一个创建和保存TXT文本文件的组件。\\n\\n代码功能摘要：该组件接收文件路径、文件名和内容三个输入参数，将内容以UTF-8编码格式保存为.txt文件，并返回保存状态和完整文件路径。\\n\\n参数：\\n```yaml\\ninputs:\\n  - name: File_Path\\n    type: string\\n    required: true\\n    description: 文件保存的目录路径\\n  - name: File_Name\\n    type: string\\n    required: false\\n    description: 要创建的文件名称（不含扩展名）\\n  - name: Content\\n    type: string\\n    required: false\\n    description: 要写入文件的文本内容\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 文件保存操作的结果状态信息\\n  - name: File_Path\\n    type: string\\n    description: 完整的文件保存路径\\n```\\n\\n运行逻辑：\\n- 从输入节点获取文件保存路径、文件名称和文件内容\\n- 对文件名进行预处理，移除其中的换行符\\n- 将文件路径和文件名拼接，形成完整路径\\n- 自动为文件添加.txt扩展名\\n- 使用UTF-8编码方式将内容写入到指定文件\\n- 输出文件保存成功的状态信息到Result\\n- 输出完整的文件保存路径到File_Path"
     },
     {
+        "Filename": "Crypto_Binance.py",
+        "Hash": "141a469e77a159e9d54f7d59d053f38c96900d96b13393042687a3e00cd855ac",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个Crypto行情抓取节点：输入Binance交易对名称列表（如BTCUSDT,ETHUSDT），输出这些交易对的最新价、24h成交量等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 调用Binance Spot REST接口 /api/v3/ticker/24hr 并使用 symbols=[...] 一次性批量查询\\n- 标准化字段：symbol、price(lastPrice)、vol_24h(volume)、quote_vol_24h(quoteVolume)、closeTime等\\n- 输出为JSON字符串写入OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 交易对名称列表，逗号或空格分隔，例如 \"BTCUSDT,ETHUSDT\"\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个交易对的最新价/成交量等\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为symbols字符串\\n- 解析并清洗成交易对数组（转大写，去空）\\n- GET Binance /api/v3/ticker/24hr?symbols=[...]&type=MINI\\n- 组装结果列表并输出JSON"
+    },
+    {
         "Filename": "DataBase.py",
         "Hash": "323caffdab2d3d2cd772128bc8905a2d1841270c91258283ddcdaf1d418ff764",
         "NodeKind": "DataBase",
@@ -271,7 +277,7 @@
     },
     {
         "Filename": "IfNode.py",
-        "Hash": "25b0e9bed6922ed7da80cd753dd842958e7acfbf20dbb02e6f9edf512b5fc483",
+        "Hash": "bae93937c4a7522047770ab13c24e26c4e0da24f5c044d7c6f9478d392969304",
         "NodeKind": "IfNode",
         "NodeFunction": "组件功能：这是一个条件判断节点，用于根据配置的多个判断条件对输入参数进行逻辑判断，并输出布尔值结果。\\n\\n代码功能摘要：该节点支持对String、Number、Boolean三种类型的输入参数进行多条件判断，通过配置判断主体、条件操作符和目标值，实现复杂的业务规则判断。支持And/Or两种逻辑组合方式，可以灵活处理多个条件的组合判断。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: boolean\\n    description: 条件判断的最终结果，true表示条件满足，false表示条件不满足\\n```\\n\\n运行逻辑：\\n- 清空并重新初始化输出数组，将所有输出的Boolean值设为False\\n- 遍历每个输出节点，提取其配置的判断条件参数：IfLogicSubjectArray（判断主体数组）、IfLogicConditionArray（判断条件数组）、IfLogicContentArray（判断内容数组）、IfLogicKind（逻辑组合方式）\\n- 对每组判断条件进行并行处理，根据最小数组长度确定实际处理的条件数量\\n- 对于每个判断条件，根据Subject名称在输入数组中查找对应的输入参数\\n- 根据输入参数的类型执行相应的判断逻辑：String类型支持include/exclude/empty/not empty判断；Number类型支持>/</==/!=/>=/<= 数值比较；Boolean类型支持true/false判断\\n- 收集所有单个条件的判断结果到multi_results数组中\\n- 根据IfLogicKind的值进行最终结果计算：'And'模式下所有条件都为true时结果才为true；'Or'模式下任一条件为true时结果就为true\\n- 将最终判断结果赋值给输出的Boolean字段，并设置输出类型为Boolean\\n- 返回处理完成的输出数组"
     },
@@ -373,7 +379,7 @@
     },
     {
         "Filename": "passivityTrigger_PolyMarket.py",
-        "Hash": "5ad17647bcf12d62cde00ac0b968a9ee835deb62f97e3fd26d9ec8af445a75a5",
+        "Hash": "3ac4f131c38e3d53de70a8adb707029c730b8ccdf7773e16958e70722a8d7f86",
         "NodeKind": "passivityTrigger",
         "NodeFunction": "组件功能：Agent A（爬虫+初筛，passivityTrigger 模式）。功能概览：1) 逐页抓取 /markets（withTokens/withClobTokenIds/withOutcomes），提取 clob tokenId；2) 批量调用 /prices 获取 YES ask；3) 为每个 token 计算盘口 L1（best bid/ask）、自适应 1¢ 带宽内深度、订单聚集度、带内 VWAP，并计算期限指标（days_to_end、daily_eff_if_win、apr_eff_if_win）；4) 先按价格区间 [min_yes, max_yes] 筛选，再按 l1_spread_c（L1 价差上限，单位美分）与 min_depth_1c_usd（1¢ 带宽内买卖深度较小值的美元下限）二次过滤；5) 每页处理完即单独落盘 JSON，包含规则/来源/URL 与各选项细节；6) 支持 offset_end：-1 为无上限模式（按 limit 递进，遇尾页暂停），>0 为边界模式（从 offset_start 递增至 offset_end 后停止，不回绕）；7) 每次仅处理一页并返回（Save_Path, DeBug），内部以 node._state.next_offset 记忆续跑位置。"
     },
@@ -391,7 +397,7 @@
     },
     {
         "Filename": "PolyMarket_Soccer.py",
-        "Hash": "a1673fd82a3fd097a75bedf3d28f1704547bbd2e52c43bd7cb93209796089ae1",
+        "Hash": "6c307c672643734d4fba4820ebaf6aa9da1c3ef5e7174a727ba381252862e831",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基础的节点模板程序，用于计算单个独立期权选项的综合评分与建议买入股数。节点读取规则清晰度、若赢年化、1¢ 深度及若干权重等输入，输出 Score（0–100）、SuggestedQty，以及 RightNow 买入信号。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n程序定义了一个标准的节点结构模板，包含输入输出节点的初始化、属性配置和基础的运行框架。核心处理逻辑在 run_node 函数中实现：将 APR_win 归一化得到 S_apr；由 depth_ask_1c_usd 归一得到 S_liq；结合模型-市场错价 S_edge 与权重合成 Score（若 Isclear=0 则 Score=0）；若 IsSubject 或 IsMatching 为真则一票否决 Score=0；按 beta×1¢ 深度股数或用(1¢ 金额/卖一价)估算股数得到 SuggestedQty；最后比较 Score 与 Rightnow_buy_Score 输出 Is_RightNow_Buy。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Isclear\\n    type: boolean\\n    required: true\\n    description: 规则是否清晰，一票否决（0 时 Score=0）\\n  - name: APR_win\\n    type: number\\n    required: true\\n    description: 若赢年化收益（主指标）\\n  - name: l1_spread_c\\n    type: number\\n    required: false\\n    description: 一级点差（美分），仅入日志不参与打分\\n  - name: depth_ask_1c_usd\\n    type: number\\n    required: false\\n    description: 1¢ 带宽可成交金额（USD），用于小加分与控仓估算\\n  - name: depth_ask_1c_qty\\n    type: number\\n    required: false\\n    description: 1¢ 带宽可成交股数，若提供则优先用于控仓\\n  - name: ask_price\\n    type: number\\n    required: false\\n    description: 卖一价；无股数时用 USD/ask 估算股数\\n  - name: S_llm\\n    type: number\\n    required: false\\n    description: LLM 解释分（0–1）\\n  - name: w_main\\n    type: number\\n    required: false\\n    description: 收益主导权重，默认 0.90\\n  - name: w_liq\\n    type: number\\n    required: false\\n    description: 流动性小加分权重，默认 0.05\\n  - name: w_llm\\n    type: number\\n    required: false\\n    description: 解释分权重，默认 0.05\\n  - name: A_ref\\n    type: number\\n    required: false\\n    description: 年化标尺，默认 0.30\\n  - name: D_ref\\n    type: number\\n    required: false\\n    description: 深度标尺（USD），默认 3000\\n  - name: beta\\n    type: number\\n    required: false\\n    description: 控仓系数，默认 0.30\\n  - name: top_concentration_ask_1c\\n    type: number\\n    required: false\\n    description: 1¢ 深度是否单笔集中（=1.0 则仅日志提示）\\n  - name: IsSubject\\n    type: boolean\\n    required: false\\n    description: 是否属于主观题（为真时一票否决 Score=0）\\n  - name: IsMatching\\n    type: boolean\\n    required: false\\n    description: 是否处于匹配/冲突状态（为真时与 IsSubject 相同，一票否决 Score=0）\\n  - name: Rightnow_buy_Score\\n    type: number\\n    required: false\\n    description: 触发 RightNow 买入的分数阈值，默认 85.0\\noutputs:\\n  - name: Score\\n    type: number\\n    description: 最终推荐分（0–100）\\n  - name: SuggestedQty\\n    type: number\\n    description: 建议买入股数（按 1¢ 深度与 beta 控仓）\\n  - name: Is_RightNow_Buy\\n    type: boolean\\n    description: 若 Score > Rightnow_buy_Score 则为 true，否则为 false\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 初始化输入输出数组，分配基础属性（ID、名称、类型）\\n- 读取输入，进行容错解析与安全下限处理\\n- 计算 S_apr、S_edge（含反向惩罚）、S_liq 与 S_time，并按权重合成得分\\n- 若 Isclear=0 或 IsSubject/IsMatching=1，则 Score=0（前两者为一票否决）\\n- 依据 1¢ 深度股数或用(1¢ 金额/卖一价)估算股数，乘以 beta 得到 SuggestedQty；若 e<0 再按 P 缩仓\\n- 将 Score 与 SuggestedQty 写入输出；比较 Score 与 Rightnow_buy_Score 得出 Is_RightNow_Buy 并输出"
     },
@@ -445,7 +451,7 @@
     },
     {
         "Filename": "QwQ7B.py",
-        "Hash": "3054e0d606fa7ca041353993149436cc9491112ea9b4c5141ff2b7e4aaa40dce",
+        "Hash": "07ef7be036da77ce2588b2b6873a136ec53eabc0973e29637c36925ae5009202",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问2.5-7B模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计。核心处理包括消息构建、API调用、响应解析和输出格式化。\\n\\n参数\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容\\n```\\n\\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测文件路径类型的输入并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 构建包含系统消息和用户消息的对话数组\\n- 将Base64编码的图像添加到消息中\\n- 使用OpenAI客户端调用通义千问API，设置温度、最大token数等参数\\n- 获取模型响应内容\\n- 根据OriginalTextSelector判断是否需要JSON解析\\n- 如果是JSON模式，使用正则表达式清理和解析响应\\n- 将解析后的内容分配给对应的输出节点\\n- 记录API调用的token使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },
@@ -520,6 +526,12 @@
         "Hash": "0aa1e16a10057660b8e679645242755c0efdf87a2c4b555119ea47119556c7a1",
         "NodeKind": "Normal",
         "NodeFunction": "输入srt，和中止的时间轨道，输出剪辑后的srt"
+    },
+    {
+        "Filename": "Stocks_Finnhub.py",
+        "Hash": "82553cde11688d158b77272285ea57fb3eb87d67a049efb7f9bceed18b54fb96",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，输出每个Ticker的最新价等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析Ticker输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 从Input2读取Finnhub API Key（token），作为鉴权参数调用接口\\n- 对每个symbol调用Finnhub Quote接口获取最新价（current price）\\n- 将结果标准化为统一字段结构并输出JSON字符串到OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 美股Ticker列表，逗号或空格分隔，例如 \"AAPL,MSFT\"\\n  - name: ApiKey\\n    type: string\\n    required: true\\n    description: Finnhub API Key（token），用于接口鉴权\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为Ticker列表字符串\\n- 解析并清洗为symbols数组（统一转大写、去空、去重）\\n- 读取Input2作为Finnhub API Key（token），若为空则返回错误\\n- 并发请求Finnhub Quote接口（/quote）获取每个Ticker的现价\\n- 组装输出：symbol、price、ts_utc、source等字段\\n- 输出JSON字符串写入OutPut1"
     },
     {
         "Filename": "TeamWorkTrigger.py",

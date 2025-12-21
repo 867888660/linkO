@@ -29,6 +29,25 @@ let recordModeBaseGraph = null;
 let recordModeTempMessageBackup = null;
 let recordItemsCache = [];
 let recordModeCurrentFilename = '';
+// 记录面板：避免 annotate 时 O(N^2) 的 DOM 扫描
+let recordPanelButtonMap = new Map(); // filename -> button element
+// 记录列表后台标注任务：用于取消/防止并发把前后端拖慢
+let recordAnnotateController = null;
+let recordAnnotateToken = 0;
+const RECORD_ANNOTATE_CONCURRENCY = 2;        // 并发过高会把 /history/run 与 UI 都拖慢
+const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标注，避免“越多越卡”
+const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+
+function cancelRecordAnnotation(reason = '') {
+  // 递增 token 使已排队/延迟启动的任务自动失效
+  recordAnnotateToken++;
+  try {
+    if (recordAnnotateController) {
+      recordAnnotateController.abort(reason || 'cancelRecordAnnotation');
+    }
+  } catch (_) {}
+  recordAnnotateController = null;
+}
 //#region 浮窗栏
 const tooltip = document.createElement('div');
 tooltip.className = 'tooltip';
@@ -3364,7 +3383,17 @@ async function loadRecordItems() {
     renderRecordPanel(recordItemsCache);
     // 异步标记是否存在错误节点，用于控制记录条目的底色（红/蓝）
     try {
-      annotateRecordItemsWithErrorFlag(recordItemsCache);
+      // 取消上一轮标注任务，避免“记录越多，点一条越慢”
+      cancelRecordAnnotation('reload record list');
+      const token = ++recordAnnotateToken;
+      recordAnnotateController = new AbortController();
+      // 让 UI 先完成渲染，再后台慢慢标注（并发/数量都有限制）
+      setTimeout(() => {
+        annotateRecordItemsWithErrorFlag(recordItemsCache, {
+          token,
+          signal: recordAnnotateController?.signal
+        });
+      }, 0);
     } catch (e) {
       console.warn('[RECORD] annotate error flag schedule failed', e);
     }
@@ -3372,81 +3401,118 @@ async function loadRecordItems() {
   }
 }
 
-async function annotateRecordItemsWithErrorFlag(items) {
+async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
   if (!Array.isArray(items) || !items.length) return;
 
+  const token = typeof opts.token === 'number' ? opts.token : recordAnnotateToken;
+  const signal = opts.signal;
+  const historyKey = getProjectHistoryKey();
+  const projQuery = historyKey ? `&project_name=${encodeURIComponent(historyKey)}` : '';
+
+  const shouldStop = () => (signal && signal.aborted) || token !== recordAnnotateToken;
+  const yieldToUI = () => new Promise(r => setTimeout(r, 0));
+
   // 只对还未知状态的记录做补充检查，避免重复请求
-  const pendingItems = items.filter(item =>
+  const pendingItemsAll = items.filter(item =>
     item && item.filename && typeof item.__hasError === 'undefined'
   );
-  if (!pendingItems.length) return;
+  if (!pendingItemsAll.length) return;
 
-  await Promise.all(
-    pendingItems.map(async (item) => {
-      try {
-        const resp = await fetch(`/history/run?filename=${encodeURIComponent(item.filename)}`);
-        if (!resp.ok) return;
-        const payload = await resp.json();
-        // payload.nodes 可能是数组，也可能是 { nodes: [...] }
-        let nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
-        if (!nodes.length && payload && payload.nodes && Array.isArray(payload.nodes.nodes)) {
-          nodes = payload.nodes.nodes;
+  // 记录过多时不做全量标注：否则会把 /history/run 与 UI 都拖慢
+  const maxItems = Number.isFinite(opts.maxItems) ? Math.max(0, opts.maxItems) : RECORD_ANNOTATE_MAX_ITEMS;
+  const pendingItems = pendingItemsAll.slice(0, maxItems);
+  if (pendingItemsAll.length > pendingItems.length) {
+    console.warn(`[RECORD] 记录过多：仅后台标注前 ${pendingItems.length}/${pendingItemsAll.length} 条，避免卡顿`);
+  }
+
+  // 深度搜索文本非常昂贵：只在记录数量较少时启用
+  const enableDeepSearch = (opts.enableDeepSearch !== false) && (pendingItems.length <= RECORD_DEEP_SEARCH_MAX_ITEMS);
+
+  let cursor = 0;
+  const concurrency = Math.max(1, Math.min(RECORD_ANNOTATE_CONCURRENCY, pendingItems.length));
+
+  const processOne = async (item) => {
+    if (!item || !item.filename) return;
+    if (shouldStop()) return;
+    try {
+      const resp = await fetch(
+        `/history/run?filename=${encodeURIComponent(item.filename)}${projQuery}`,
+        signal ? { signal } : undefined
+      );
+      if (!resp.ok) return;
+      const payload = await resp.json();
+      // payload.nodes 可能是数组，也可能是 { nodes: [...] }
+      let nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
+      if (!nodes.length && payload && payload.nodes && Array.isArray(payload.nodes.nodes)) {
+        nodes = payload.nodes.nodes;
+      }
+
+      // 快速判定是否有错误节点（可短路）
+      let hasError = false;
+      if (Array.isArray(nodes)) {
+        for (let i = 0; i < nodes.length; i++) {
+          const n = nodes[i];
+          if (n && (n.IsError === true || n.isError === true)) {
+            hasError = true;
+            break;
+          }
         }
-        const hasError = Array.isArray(nodes) && nodes.some(n =>
-          n && (n.IsError === true || n.isError === true)
-        );
-        item.__hasError = !!hasError;
+      }
+      item.__hasError = !!hasError;
 
-        // 构建可搜索文本，包含 Inputs/Outputs/label/prompt 关键词
+      // 构建可搜索文本（可选：只在记录少时启用，且做截断，避免卡顿/内存爆炸）
+      if (enableDeepSearch) {
         try {
           const collectFields = [];
-          nodes.forEach(n => {
-            if (!n || typeof n !== 'object') return;
+          const maxNodesForIndex = 30;
+          const maxChars = 12000;
+          for (let i = 0; i < (Array.isArray(nodes) ? nodes.length : 0) && i < maxNodesForIndex; i++) {
+            const n = nodes[i];
+            if (!n || typeof n !== 'object') continue;
             ['label', 'name', 'prompt', 'ExportPrompt', 'SystemPrompt'].forEach(k => {
               if (n[k]) collectFields.push(String(n[k]));
             });
+            // Inputs/Outputs 只收集 name，避免把大量 Context 文本塞进索引
             if (Array.isArray(n.Inputs)) {
-              n.Inputs.forEach(inp => {
-                if (!inp) return;
-                collectFields.push(inp.name || '');
-                if (inp.Context) collectFields.push(inp.Context);
-                if (typeof inp.Num !== 'undefined' && inp.Num !== null) collectFields.push(String(inp.Num));
-                if (typeof inp.Boolean === 'boolean') collectFields.push(String(inp.Boolean));
-              });
+              n.Inputs.forEach(inp => { if (inp && inp.name) collectFields.push(String(inp.name)); });
             }
             if (Array.isArray(n.Outputs)) {
-              n.Outputs.forEach(out => {
-                if (!out) return;
-                collectFields.push(out.name || '');
-                if (out.Context) collectFields.push(out.Context);
-                if (typeof out.Num !== 'undefined' && out.Num !== null) collectFields.push(String(out.Num));
-                if (typeof out.Boolean === 'boolean') collectFields.push(String(out.Boolean));
-              });
+              n.Outputs.forEach(out => { if (out && out.name) collectFields.push(String(out.name)); });
             }
-          });
+            if (collectFields.join(' ').length > maxChars) break;
+          }
           const baseText = `${formatRecordLabel(item)} ${item.time_label || ''}`;
-          item.__searchText = `${baseText} ${collectFields.join(' ')}`.toLowerCase();
+          let st = `${baseText} ${collectFields.join(' ')}`.toLowerCase();
+          if (st.length > maxChars) st = st.slice(0, maxChars);
+          item.__searchText = st;
         } catch (e) {
           console.warn('[RECORD] build search text failed', e);
         }
+      }
 
-        // 根据结果更新对应按钮的样式
-        const btnList = document.querySelectorAll('.record-panel-item');
-        btnList.forEach(btn => {
-          if (!btn.dataset) return;
-          if (btn.dataset.filename === item.filename) {
-            if (item.__hasError) {
-              btn.classList.add('record-panel-item-error');
-            } else {
-              btn.classList.remove('record-panel-item-error');
-            }
-            if (item.__searchText) {
-              btn.dataset.searchText = item.__searchText;
-            }
-          }
-        });
-      } catch (err) {
-        console.warn('[RECORD] annotate error flag failed for', item && item.filename, err);
+      // 根据结果更新对应按钮的样式（O(1)）
+      const btn = recordPanelButtonMap && item.filename ? recordPanelButtonMap.get(item.filename) : null;
+      if (btn) {
+        if (item.__hasError) btn.classList.add('record-panel-item-error');
+        else btn.classList.remove('record-panel-item-error');
+        if (item.__searchText) btn.dataset.searchText = item.__searchText;
+      }
+    } catch (err) {
+      // 取消/中断不算错误，直接忽略
+      if (signal && signal.aborted) return;
+      console.warn('[RECORD] annotate error flag failed for', item && item.filename, err);
+    }
+  };
+
+  await Promise.all(
+    Array.from({ length: concurrency }).map(async () => {
+      while (true) {
+        if (shouldStop()) return;
+        const idx = cursor++;
+        if (idx >= pendingItems.length) return;
+        await processOne(pendingItems[idx]);
+        // 让出主线程，避免卡 UI（尤其在记录较多时）
+        if (idx % 2 === 0) await yieldToUI();
       }
     })
   );
@@ -3473,6 +3539,8 @@ function renderRecordPanel(items) {
   const container = document.getElementById('LeftSideWindow_KIND-container');
   if (!container) return;
   container.innerHTML = '';
+  // 重建 filename -> DOM 的映射，供后台标注 O(1) 更新样式
+  try { recordPanelButtonMap = new Map(); } catch (_) { recordPanelButtonMap = new Map(); }
 
   const header = document.createElement('div');
   header.className = 'record-panel-header';
@@ -3528,6 +3596,10 @@ function renderRecordPanel(items) {
       handleRecordSelection(item.filename);
     });
     list.appendChild(btn);
+    // 记录映射：避免 annotate 时 querySelectorAll + forEach 扫全量
+    if (item && item.filename) {
+      recordPanelButtonMap.set(item.filename, btn);
+    }
   });
   container.appendChild(list);
   updateRecordPanelSelection(recordModeCurrentFilename);
@@ -3596,13 +3668,22 @@ function disableEditorButtons(disabled) {
 }
 
 function updateRecordPanelSelection(filename) {
+  if (recordPanelButtonMap && recordPanelButtonMap.size) {
+    for (const [fn, btn] of recordPanelButtonMap.entries()) {
+      if (!btn) continue;
+      btn.classList.toggle('active', !!filename && fn === filename);
+    }
+    return;
+  }
   document.querySelectorAll('.record-panel-item').forEach(btn => {
-    btn.classList.toggle('active', filename && btn.dataset.filename === filename);
+    btn.classList.toggle('active', filename && btn.dataset && btn.dataset.filename === filename);
   });
 }
 
 async function handleRecordSelection(filename) {
   if (!filename) return;
+  // 用户点击记录时，优先保证这一次加载，不要让后台全量标注占满网络/主线程
+  cancelRecordAnnotation('user select record');
   recordModeCurrentFilename = filename;
   updateRecordPanelSelection(filename);
   await applyRecordSnapshot(filename);
@@ -3612,7 +3693,9 @@ async function applyRecordSnapshot(filename) {
   if (!filename || !recordModeBaseGraph) return;
   setRecordLoadingIndicator(true);
   try {
-    const response = await fetch(`/history/run?filename=${encodeURIComponent(filename)}`);
+    const historyKey = getProjectHistoryKey();
+    const projQuery = historyKey ? `&project_name=${encodeURIComponent(historyKey)}` : '';
+    const response = await fetch(`/history/run?filename=${encodeURIComponent(filename)}${projQuery}`);
     if (!response.ok) {
       throw new Error('记录文件不存在或无法读取');
     }
@@ -3721,6 +3804,7 @@ function setRecordLoadingIndicator(isLoading) {
 
 function exitRecordMode(isFallback = false) {
   isRecordMode = false;
+  cancelRecordAnnotation('exit record mode');
   window.is_read_history = false;
   document.body.classList.remove('record-mode');
   setRecordButtonState(false);
@@ -5008,10 +5092,10 @@ function CreatDetaile(Item)
             // 2. 绿色标题栏
             let titleBar = document.createElement('div');
             titleBar.style = `
-              background: linear-gradient(135deg, #34D399 0%, #10B981 100%);
+              background: linear-gradient(135deg,rgb(51, 51, 51) 0%,rgb(99, 99, 99) 100%);
               height: 50px; display: flex; align-items: center; justify-content: center;
               user-select: none; position: relative;
-              box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+              box-shadow: 0 2px 8px rgba(70, 70, 70, 0.3);
             `;
         
             let titleText = document.createElement('span');
@@ -11436,8 +11520,16 @@ const database = graph.save();
             const condition = document.createElement('select');
             populateCondition(condition, Inputs, subject.value);
             // Check if tempoutput and tempoutput.IfLogicConditionArray exist before accessing an index
+            if (!Array.isArray(tempoutput.IfLogicConditionArray)) {
+              tempoutput.IfLogicConditionArray = [];
+            }
             if (tempoutput && tempoutput.IfLogicConditionArray && tempoutput.IfLogicConditionArray[rowIndex] != undefined) {
-                condition.value = tempoutput.IfLogicConditionArray[rowIndex] || '';
+                // 兼容历史拼写：no empty -> not empty
+                const v = tempoutput.IfLogicConditionArray[rowIndex];
+                condition.value = (v === 'no empty') ? 'not empty' : (v || '');
+            } else {
+                // 关键修复：即使用户不点下拉框，也要把默认值写回配置
+                tempoutput.IfLogicConditionArray[rowIndex] = condition.value;
             }
             condition.onchange = () => {
               if (!Array.isArray(tempoutput.IfLogicConditionArray)) {
@@ -11460,6 +11552,11 @@ const database = graph.save();
             subject.onchange = () => {
               tempoutput.IfLogicSubjectArray[rowIndex] = subject.value;
               populateCondition(condition, Inputs, subject.value);
+              // 同步保存当前默认/选中条件，避免 IfLogicConditionArray 缺失导致后端走默认 include
+              if (!Array.isArray(tempoutput.IfLogicConditionArray)) {
+                tempoutput.IfLogicConditionArray = [];
+              }
+              tempoutput.IfLogicConditionArray[rowIndex] = condition.value;
 
               content.style.display =
                 condition.value.includes('true') || condition.value.includes('false')
@@ -11492,6 +11589,9 @@ const database = graph.save();
               if (idx > -1) {
                 tempoutput.IfLogicSubjectArray.splice(idx, 1);
                 tempoutput.IfLogicContentArray.splice(idx, 1);
+                if (Array.isArray(tempoutput.IfLogicConditionArray)) {
+                  tempoutput.IfLogicConditionArray.splice(idx, 1);
+                }
               }
             };
             row.appendChild(remove);
@@ -11540,7 +11640,8 @@ const database = graph.save();
                   select.appendChild(opt);
                 });
               } else if (inp.Kind.includes('String')) {
-                ['exclude', 'include', 'empty', 'no empty'].forEach(v => {
+                // 使用 not empty；同时后端也会兼容 no empty（历史拼写）
+                ['exclude', 'include', 'empty', 'not empty'].forEach(v => {
                   const opt = document.createElement('option');
                   opt.value = v;
                   opt.text  = v.charAt(0).toUpperCase() + v.slice(1);
@@ -12461,6 +12562,19 @@ function createSideWindow(item, isCheckMode = false) {
     console.warn('🔍 [SIDEWIN:HTML] tempNode.Outputs 不存在或不是数组:', tempNode?.Outputs);
   }
   outputsHtml += '</div>';
+
+  // Error / Debug 文本需要进入 textarea innerHTML，必须做转义（避免 </textarea> 破坏 DOM）
+  function escapeForTextarea(val) {
+    const s = (val === null || val === undefined) ? '' : String(val);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/<\/textarea/gi, '&lt;/textarea');
+  }
+
   //创建一个debug区域（优先使用快照中的 debug；若为空则回退到 tempNode.debug）
   let debugTextRaw = '';
   try {
@@ -12471,13 +12585,29 @@ function createSideWindow(item, isCheckMode = false) {
   } catch(_) {
     debugTextRaw = (typeof tempNode?.debug === 'string' && tempNode.debug.trim().length) ? tempNode.debug : (node.debug || '');
   }
+
+  // 若节点报错：把 ErrorContext + 最近一次后端错误明细拼进 Debug，方便直接查看
+  try {
+    const lastErr = window.__nodeLastBackendError && window.__nodeLastBackendError[item.id];
+    const ctx = (tempNode && tempNode.ErrorContext) || (node && node.ErrorContext) || '';
+    const detail = (lastErr && lastErr.detail) || '';
+    if ((tempNode && tempNode.IsError) || (node && node.IsError) || ctx || detail) {
+      const parts = [];
+      if (ctx) parts.push(String(ctx));
+      if (detail && detail !== ctx) parts.push(String(detail));
+      const merged = parts.join('\n\n---\n\n');
+      debugTextRaw = merged || debugTextRaw;
+    }
+  } catch (_) {}
+
   const debugText = (debugTextRaw || '').replace(/\\n/g, '\n');
+  const debugTextSafe = escapeForTextarea(debugText);
 
   let debugHtml = `
     <div class="section-container">
         <h3>Debug</h3>
         <div class="debug-wrapper">
-            <textarea class="side-window-textarea" style="white-space:pre-wrap;" readonly>${debugText}</textarea>
+            <textarea class="side-window-textarea" style="white-space:pre-wrap;" readonly>${debugTextSafe}</textarea>
         </div>
     </div>`;
   // 历史快照选择框（所有模式显示，置顶）
@@ -12690,18 +12820,39 @@ function createSideWindow(item, isCheckMode = false) {
           outputsHtml2 += '</div>';
           if (outputsEl) outputsEl.innerHTML = outputsHtml2;
 
-          // 重新构建 debug 文本
+          // 重新构建 Debug 文本（若报错，把错误拼进 Debug）
           let debugText2 = '';
           try {
-            const snapNode = (active?.nodes||[]).find(n=>n.id===item.id);
-            const raw = (snapNode && typeof snapNode.debug==='string') ? snapNode.debug : (pickNode.debug || '');
-            debugText2 = (raw||'').replace(/\\n/g,'\n');
+            // 根据当前选择推断“对应快照”用于 Debug/Error（避免 active 未定义导致不刷新）
+            let chosenGraph = null;
+            if (val === '-1') {
+              const saved = (window.__sidewinSelectedGraphs && window.__sidewinSelectedGraphs[item.id]) || null;
+              chosenGraph = saved || getLatestActiveGraph() || graph.save();
+            } else {
+              const idx2 = parseInt(val, 10);
+              chosenGraph = ring[idx2] || null;
+            }
+            const chosenNode = (chosenGraph && Array.isArray(chosenGraph.nodes)) ? chosenGraph.nodes.find(n => n && n.id === item.id) : null;
+            const rawDbg = (chosenNode && typeof chosenNode.debug === 'string') ? chosenNode.debug : (pickNode.debug || '');
+            debugText2 = (rawDbg || '').replace(/\\n/g, '\n');
+
+            const lastErr2 = window.__nodeLastBackendError && window.__nodeLastBackendError[item.id];
+            const ctx2 = pickNode.ErrorContext || (chosenNode && chosenNode.ErrorContext) || '';
+            const det2 = (lastErr2 && lastErr2.detail) || '';
+            if ((pickNode.IsError === true) || ctx2 || det2) {
+              const parts2 = [];
+              if (ctx2) parts2.push(String(ctx2));
+              if (det2 && det2 !== ctx2) parts2.push(String(det2));
+              const merged2 = parts2.join('\n\n---\n\n');
+              debugText2 = merged2 || debugText2;
+            }
           } catch(_) {}
+
           if (debugEl) debugEl.innerHTML = `
             <div class="section-container">
               <h3>Debug</h3>
               <div class="debug-wrapper">
-                <textarea class="side-window-textarea" style="white-space:pre-wrap;" readonly>${debugText2}</textarea>
+                <textarea class="side-window-textarea" style="white-space:pre-wrap;" readonly>${escapeForTextarea(debugText2)}</textarea>
               </div>
             </div>`;
 
@@ -13023,17 +13174,89 @@ function setupRunButton(node) {
               })
           });
 
-          // 解析响应数据
-          const data = await response.json();
+          // 解析响应数据（兼容非 JSON 错误体，尽量展示“具体错误内容”）
+          const rawText = await response.text();
+          let data = null;
+          try { data = rawText ? JSON.parse(rawText) : null; } catch (_) { data = null; }
           if (!response.ok) {
-              resultMessage.textContent = '后端服务响应错误: ' + (data.trace || '未知错误');
+              const traceLike =
+                (data && (data.trace || data.detail || data.message || data.error)) ||
+                (typeof rawText === 'string' ? rawText : '');
+              const summary = `后端服务响应错误: HTTP ${response.status} ${response.statusText || ''}`.trim();
+              const detail = (data ? JSON.stringify(data, null, 2) : String(traceLike || '未知错误')).trim();
+              const short = String(traceLike || '').replace(/\s+/g, ' ').slice(0, 200);
+
+              resultMessage.textContent = summary + (short ? ` - ${short}` : '');
               resultMessage.style.color = 'red';
               resultIndicator.style.display = 'block';
-              throw new Error('后端服务响应错误', data);
+
+              // 将错误信息写回到节点，确保侧窗可查看完整错误
+              try {
+                window.__nodeLastBackendError = window.__nodeLastBackendError || {};
+                window.__nodeLastBackendError[sendNode.id] = { ts: Date.now(), summary, detail };
+              } catch (_) {}
+              try {
+                const nodeItem = graph.findById(sendNode.id);
+                if (nodeItem) {
+                  graph.updateItem(nodeItem, {
+                    IsError: true,
+                    IsRunning: false,
+                    isFinish: true,
+                    ErrorContext: summary,
+                    debug: detail
+                  });
+                }
+              } catch (_) {}
+              try {
+                const tn = TempMessageNode?.nodes?.find(n => n && n.id === sendNode.id);
+                if (tn) {
+                  tn.IsError = true;
+                  tn.IsRunning = false;
+                  tn.isFinish = true;
+                  tn.ErrorContext = summary;
+                  tn.debug = detail;
+                }
+              } catch (_) {}
+
+              // 若侧窗已打开，立即刷新 Debug textarea（避免残留上一次内容）
+              try {
+                const dbgTa =
+                  document.querySelector('#debug-section .debug-wrapper textarea') ||
+                  document.querySelector('#debug-section textarea');
+                if (dbgTa) dbgTa.value = detail || summary;
+              } catch (_) {}
+
+              throw new Error(summary);
+          }
+          if (!data) {
+              throw new Error('后端返回的响应不是有效 JSON（请查看侧窗 Error/Debug）');
           }
 
+          // 成功：清理上一次错误痕迹（否则会“保留 error/debug 之前的运行结果”）
+          // 同时：将 debug 同步为“本次结果”（无 debug 则清空，避免旧错误残留）
+          try {
+            if (window.__nodeLastBackendError && window.__nodeLastBackendError[sendNode.id]) {
+              delete window.__nodeLastBackendError[sendNode.id];
+            }
+          } catch (_) {}
+          let dbgStr = '';
+          try {
+            const d = data.debug;
+            dbgStr = (d === undefined || d === null || d === '') ? '' : ((typeof d === 'string') ? d : JSON.stringify(d, null, 2));
+          } catch (_) { dbgStr = ''; }
+          try {
+            const nodeItem = graph.findById(sendNode.id);
+            if (nodeItem) {
+              graph.updateItem(nodeItem, { IsError: false, ErrorContext: '', debug: dbgStr });
+            }
+          } catch (_) {}
+          try {
+            const tn = TempMessageNode?.nodes?.find(n => n && n.id === sendNode.id);
+            if (tn) { tn.IsError = false; tn.ErrorContext = ''; tn.debug = dbgStr; }
+          } catch (_) {}
+
           // 更新输出显示，包括 Token 信息
-          updateOutputs(data.output,data.debug,sendNode.id);
+          updateOutputs(data.output, (data.debug ?? ''), sendNode.id);
 
           // 运行完成后：同步到 ring
           try {
@@ -13201,9 +13424,17 @@ function updateOutputs(outputs,debug,Id) {
           element.value = value;
       }
   });
-  const debugelement =document.querySelector('.debug-wrapper textarea');
+  // ⚠️ SideWindow 里可能有多个 wrapper（例如 Error/Debug），这里必须精确指向 Debug 区块
+  const debugelement =
+    document.querySelector('#debug-section .debug-wrapper textarea') ||
+    document.querySelector('#debug-section textarea');
   if (debugelement) {
-    debugelement.value = JSON.stringify(debug, null, 2);
+    // debug 可能为 ''/null/undefined：此时应清空，而不是保留上一次内容
+    if (debug === undefined || debug === null || debug === '') {
+      debugelement.value = '';
+    } else {
+      debugelement.value = (typeof debug === 'string') ? debug : JSON.stringify(debug, null, 2);
+    }
   }
   // 不再触碰全图数据，等待轮询把后端 graph_data 写回
   // 更新 Token 信息（如果有）
@@ -13682,8 +13913,17 @@ function mergeGraphPreservingData(oldGraph, newGraph) {
         });
       }
       // 保留 debug
-      if ((typeof rn.debug !== 'string' || rn.debug.trim()==='') && typeof on.debug === 'string' && on.debug.trim()!=='') {
-        rn.debug = on.debug;
+      {
+        const rnDbgEmpty = (typeof rn.debug !== 'string' || rn.debug.trim()==='');
+        const onDbgNonEmpty = (typeof on.debug === 'string' && on.debug.trim()!=='');
+        const oldWasError = (on?.IsError === true) || (typeof on?.ErrorContext === 'string' && on.ErrorContext.trim() !== '');
+        const newIsSuccessFinal = (rn?.isFinish === true) && (rn?.IsError === false);
+        // 若从“错误→成功”且新 debug 为空：不要保留旧错误 debug，直接清空
+        if (rnDbgEmpty && oldWasError && newIsSuccessFinal) {
+          rn.debug = '';
+        } else if (rnDbgEmpty && onDbgNonEmpty) {
+          rn.debug = on.debug;
+        }
       }
       // 保留状态位（仅在新数据缺省时）
       ['IsRunning','isFinish','IsError','ErrorContext'].forEach(k=>{
@@ -13754,14 +13994,21 @@ function mergeGraphStateAware(oldGraph, newGraph) {
       // 3) 合并 debug（仅在最终态或新 debug 非空时覆盖）
       const newDbg = (typeof rn.debug === 'string') ? rn.debug.trim() : '';
       const oldDbg = (typeof on.debug === 'string') ? on.debug : '';
+      const oldWasError = (on?.IsError === true) || (typeof on?.ErrorContext === 'string' && on.ErrorContext.trim() !== '');
+      const newIsSuccessFinal = (rn?.isFinish === true) && (rn?.IsError === false);
       if (!finalish) {
         if (oldDbg) { try { if (window.MERGE_DEBUG !== false) console.warn('[MERGE] keep old debug (not final)', { id: rn.id, label: rn.label, isFinish: rn.isFinish, IsError: rn.IsError }); } catch(_) {} }
         rn.debug = oldDbg;
       } else if (finalish && newDbg !== '') {
         try { if (window.MERGE_DEBUG !== false) console.warn('[MERGE] overwrite debug (finalish)', { id: rn.id, label: rn.label, isFinish: rn.isFinish, IsError: rn.IsError }); } catch(_) {}
       } else {
-        if (oldDbg) { try { if (window.MERGE_DEBUG !== false) console.warn('[MERGE] keep old debug (final but new empty)', { id: rn.id, label: rn.label, isFinish: rn.isFinish, IsError: rn.IsError }); } catch(_) {} }
-        rn.debug = oldDbg;
+        // 若从“错误→成功”且新 debug 为空：清空旧错误 debug
+        if (oldWasError && newIsSuccessFinal) {
+          rn.debug = '';
+        } else {
+          if (oldDbg) { try { if (window.MERGE_DEBUG !== false) console.warn('[MERGE] keep old debug (final but new empty)', { id: rn.id, label: rn.label, isFinish: rn.isFinish, IsError: rn.IsError }); } catch(_) {} }
+          rn.debug = oldDbg;
+        }
       }
 
       // 4) Prompt 类字段（仅在最终态或新字段非空时覆盖）
@@ -16449,8 +16696,16 @@ async function executeNode(node, count, DataTemp, nodes, edges) {
       /* ---------- 写回输出 ---------- */
       const sourceTempNode = TempMessageNode.nodes.find(n => n.id === node.id);
       sourceTempNode.Outputs.forEach((o, i) => Object.assign(o, data.output[i]));
-      //debugto string赋值给sourceTempNode.debug
-      sourceTempNode.debug = JSON.stringify(data.debug, null, 2);
+      // debug：本次无 debug 则清空（避免残留上一次错误）
+      try {
+        const d = data.debug;
+        sourceTempNode.debug = (d === undefined || d === null || d === '') ? '' : ((typeof d === 'string') ? d : JSON.stringify(d, null, 2));
+      } catch (_) {
+        sourceTempNode.debug = '';
+      }
+      // 成功时清理错误上下文
+      sourceTempNode.ErrorContext = '';
+      sourceTempNode.IsError = false;
 
       // 第一条输出携带 token 统计
       if (data.output[0]) {

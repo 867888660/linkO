@@ -1,0 +1,225 @@
+import json
+import logging
+import os
+import re
+import time
+from datetime import datetime, timezone, timedelta
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+import requests
+
+# **Function definition**
+
+# **Define the number of outputs and inputs**输入节点与输出节点的数量
+OutPutNum = 1
+InPutNum = 2
+# **Define the number of outputs and inputs**
+
+# **Initialize Outputs and Inputs arrays and assign names directly**
+Outputs = [{'Num': None, 'Kind': None, 'Boolean': False, 'Id': f'Output{i + 1}', 'Context': None, 'name': f'OutPut{i + 1}', 'Link': 0, 'Description': ''} for i in range(OutPutNum)]
+Inputs = [{'Num': None, 'Kind': None, 'Id': f'Input{i + 1}', 'Context': None, 'Isnecessary': True, 'name': f'Input{i + 1}', 'Link': 0, 'IsLabel': True} for i in range(InPutNum)]
+# **Initialize Outputs and Inputs arrays and assign names directly**
+NodeKind = 'Normal'
+Lable = [{'Id': 'Label1', 'Kind': 'None'}]
+FunctionIntroduction = '组件功能（简述代码整体功能）\\n这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，输出每个Ticker的最新价等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析Ticker输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 从Input2读取Finnhub API Key（token），作为鉴权参数调用接口\\n- 对每个symbol调用Finnhub Quote接口获取最新价（current price）\\n- 将结果标准化为统一字段结构并输出JSON字符串到OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 美股Ticker列表，逗号或空格分隔，例如 \"AAPL,MSFT\"\\n  - name: ApiKey\\n    type: string\\n    required: true\\n    description: Finnhub API Key（token），用于接口鉴权\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为Ticker列表字符串\\n- 解析并清洗为symbols数组（统一转大写、去空、去重）\\n- 读取Input2作为Finnhub API Key（token），若为空则返回错误\\n- 并发请求Finnhub Quote接口（/quote）获取每个Ticker的现价\\n- 组装输出：symbol、price、ts_utc、source等字段\\n- 输出JSON字符串写入OutPut1'
+
+# **Assign properties to Inputs**
+for output in Outputs:
+    output['Kind'] = 'String'
+
+for input in Inputs:
+    input['Kind'] = 'String'
+
+Inputs[0]['name'] = 'Symbols'
+Inputs[0]['Isnecessary'] = True
+Inputs[1]['name'] = 'API_Key'
+Inputs[1]['Isnecessary'] = True
+Inputs[1]['Kind'] = 'String_Key'
+Outputs[0]['name'] = 'Result'
+
+_LOGGER = logging.getLogger("Stocks_Finnhub_Node")
+if not _LOGGER.handlers:
+    logging.basicConfig(level=logging.INFO)
+
+_SESS = requests.Session()
+_SESS.headers.update({
+    "User-Agent": "pm-node/1.0",
+    "Accept": "application/json",
+})
+
+def _parse_symbols(text: str):
+    if text is None:
+        return []
+    parts = re.split(r"[,\s;]+", str(text).strip())
+    syms = []
+    for p in parts:
+        p = p.strip().upper()
+        if p:
+            syms.append(p)
+    seen = set()
+    out = []
+    for s in syms:
+        if s not in seen:
+            out.append(s)
+            seen.add(s)
+    return out
+
+def _safe_float(x):
+    try:
+        return float(x)
+    except Exception:
+        return None
+
+def _get_quote(base, token, symbol):
+    # Finnhub Quote API :contentReference[oaicite:7]{index=7}
+    url = base.rstrip("/") + "/quote"
+    resp = _SESS.get(url, params={"symbol": symbol, "token": token}, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+def _get_candle_5m(base, token, symbol):
+    # Finnhub Stock Candles API :contentReference[oaicite:8]{index=8}
+    url = base.rstrip("/") + "/stock/candle"
+    now = int(time.time())
+    frm = now - 60 * 30  # last 30 minutes window is enough for the latest 5m bar
+    params = {
+        "symbol": symbol,
+        "resolution": 5,
+        "from": frm,
+        "to": now,
+        "token": token
+    }
+    resp = _SESS.get(url, params=params, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+def _get_profile2(base, token, symbol):
+    # Company Profile2 has marketCapitalization and shareOutstanding fields (examples exist) :contentReference[oaicite:9]{index=9}
+    url = base.rstrip("/") + "/stock/profile2"
+    resp = _SESS.get(url, params={"symbol": symbol, "token": token}, timeout=10)
+    resp.raise_for_status()
+    return resp.json()
+
+def _extract_last_5m_volume(candle_json):
+    # Response includes arrays: c,h,l,o,t,v and status s
+    if not isinstance(candle_json, dict):
+        return None
+    if candle_json.get("s") != "ok":
+        return None
+    v = candle_json.get("v")
+    if isinstance(v, list) and len(v) > 0:
+        return _safe_float(v[-1])
+    return None
+
+def run_node(node):
+    symbols_text = node['Inputs'][0]['Context']   # 例如 "AAPL,MSFT,TSLA"
+    api_key_text = node['Inputs'][1]['Context']   # 既可填token，也可填环境变量名
+    content = ""
+    Debugging = []
+
+    try:
+        # --- token resolution: support both "direct token" and "env var name" ---
+        raw = (api_key_text or "").strip()
+        token = ""
+
+        if raw:
+            # 1) try treat Input2 as direct token first (most common)
+            token = raw
+            # 2) if it looks like an env var name (e.g., FINNHUB_API_KEY) and exists, use env value
+            env_val = os.getenv(raw, "").strip()
+            if env_val:
+                # If user passed env var name, env_val will be real token; override.
+                # If user passed a real token, env_val will usually be empty, so no change.
+                token = env_val
+
+        # final fallback: if still empty, try standard env var
+        if not token:
+            token = os.getenv("FINNHUB_API_KEY", "").strip()
+
+        if not token:
+            Outputs[0]['Context'] = json.dumps({
+                "ok": False,
+                "error": "Missing Finnhub API token. Provide token in Input2 or set FINNHUB_API_KEY.",
+                "ts_utc": datetime.now(timezone.utc).isoformat(),
+                "data": []
+            }, ensure_ascii=False)
+            return Outputs
+
+        symbols = _parse_symbols(symbols_text)
+        if not symbols:
+            Outputs[0]['Context'] = json.dumps({
+                "ok": False,
+                "error": "No symbols provided",
+                "ts_utc": datetime.now(timezone.utc).isoformat(),
+                "data": []
+            }, ensure_ascii=False)
+            return Outputs
+
+        base = os.getenv("FINNHUB_BASE_URL", "https://finnhub.io/api/v1").rstrip("/")
+        max_workers = int(os.getenv("FINNHUB_MAX_WORKERS", "5"))
+        ts_now = datetime.now(timezone.utc).isoformat()
+
+        def _fetch_one(sym):
+            # quote for price
+            q = _get_quote(base, token, sym)
+            last_price = _safe_float(q.get("c"))
+
+            # profile2 for market cap (restore 市值)
+            market_cap_musd = None
+            market_cap_usd = None
+            try:
+                p = _get_profile2(base, token, sym)
+                market_cap_musd = _safe_float(p.get("marketCapitalization"))
+                # Finnhub profile2 的 marketCapitalization 常见口径是 “百万美元” 级别（按其示例字段量级推断）
+                market_cap_usd = market_cap_musd * 1_000_000 if market_cap_musd is not None else None
+            except Exception as e:
+                # profile2 失败不影响现价输出
+                Debugging.append(f"{sym} profile2 error: {repr(e)}")
+
+            return {
+                "symbol": sym,
+                "price": last_price,
+                "market_cap_musd": market_cap_musd,
+                "market_cap_usd": market_cap_usd,
+                "ts_utc": ts_now,
+                "source": "finnhub_quote_profile2"
+            }
+
+        t0 = time.time()
+        rows = []
+        with ThreadPoolExecutor(max_workers=max_workers) as ex:
+            futs = {ex.submit(_fetch_one, s): s for s in symbols}
+            for fut in as_completed(futs):
+                sym = futs[fut]
+                try:
+                    rows.append(fut.result())
+                except Exception as e:
+                    Debugging.append(f"{sym} error: {repr(e)}")
+                    rows.append({
+                        "symbol": sym,
+                        "error": repr(e),
+                        "ts_utc": ts_now,
+                        "source": "finnhub_quote_profile2"
+                    })
+
+        dt_ms = int((time.time() - t0) * 1000)
+        result = {
+            "ok": True,
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "latency_ms": dt_ms,
+            "count": len(rows),
+            "data": sorted(rows, key=lambda x: x.get("symbol", ""))
+        }
+        content = json.dumps(result, ensure_ascii=False)
+
+    except Exception as e:
+        Debugging.append(f"Exception: {repr(e)}")
+        content = json.dumps({
+            "ok": False,
+            "error": repr(e),
+            "ts_utc": datetime.now(timezone.utc).isoformat(),
+            "data": []
+        }, ensure_ascii=False)
+
+    Outputs[0]['Context'] = content
+    return Outputs

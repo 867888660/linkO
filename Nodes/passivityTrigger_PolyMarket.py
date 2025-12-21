@@ -602,6 +602,20 @@ def _normalize_rules(s: str) -> str:
     s = "\n".join([ln for ln in lines if ln])
     return s
 
+def _cat_to_str(x) -> str:
+    """将 category/group/topic/tags 等字段安全转成字符串（兼容 str/dict/list）。"""
+    if x is None:
+        return ""
+    if isinstance(x, str):
+        return x.strip()
+    if isinstance(x, dict):
+        return str(x.get("name") or x.get("label") or x.get("title") or "").strip()
+    if isinstance(x, list):
+        parts = [_cat_to_str(it) for it in x]
+        parts = [p for p in parts if p]
+        return ",".join(parts)
+    return str(x).strip()
+
 def _round_if_finite(x, nd=6):
     if x is None:
         return None
@@ -830,6 +844,7 @@ def run_node(node):
             "condition_id": stub.get("conditionId") or stub.get("condition_id") or mid,
             "question": stub.get("question") or stub.get("title") or "",
             "endDate": stub.get("endDate") or stub.get("end_time") or stub.get("endTime") or "",
+            "category": stub.get("category") or "",
             # 新增：把规则/来源/slug 先存起来
             "rules": _normalize_rules(stub.get("description") or ""),
             "resolutionSource": stub.get("resolutionSource") or stub.get("resolution_source") or "",
@@ -865,6 +880,13 @@ def run_node(node):
         if not meta.get("option_name"):
             need_detail_mids.add(meta["mid"]) 
 
+    # —— 新增：category 为空的 market 也需要 detail（最小改动，只补缺）——
+    for mid, mm in market_map.items():
+        if not (mm.get("category") or "").strip():
+            need_detail_mids.add(mid)
+
+    debug_lines.append(f"need_detail_mids={len(need_detail_mids)} sample={list(need_detail_mids)[:5]}")
+
     for mid in need_detail_mids:
         try:
             detail = robust_get(
@@ -873,6 +895,10 @@ def run_node(node):
                 retry=1
             )
             if not isinstance(detail, dict):
+                try:
+                    market_map[mid]["_cat_debug"] = "cat_detail_not_dict"
+                except Exception:
+                    pass
                 continue
             # 若列表页没给或给得不完整，用详情页兜底回填
             if not market_map.get(mid, {}).get("rules"):
@@ -884,6 +910,64 @@ def run_node(node):
                 market_map[mid]["resolutionSource"] = detail.get("resolutionSource") or detail.get("resolution_source") or market_map[mid].get("resolutionSource") or ""
             if not market_map.get(mid, {}).get("slug"):
                 market_map[mid]["slug"] = detail.get("slug") or market_map[mid].get("slug") or ""
+            # category 字段兼容：category / group / topic / tags（最稳的字段兜底）
+            if not (market_map.get(mid, {}).get("category") or "").strip():
+                _cat1 = _cat_to_str(detail.get("category"))
+                _cat2 = _cat_to_str(detail.get("group"))
+                _cat3 = _cat_to_str(detail.get("topic"))
+                _cat4 = _cat_to_str(detail.get("tags"))
+                cat = (_cat1 or _cat2 or _cat3 or _cat4)
+                market_map[mid]["category"] = cat
+                # Debug：说明 category 补齐来源；若仍为空给出原因
+                if cat:
+                    if _cat1:
+                        debug_lines.append(f"[cat-source] mid={mid} <- detail.category")
+                        try:
+                            market_map[mid]["_cat_debug"] = "cat_source=detail.category"
+                        except Exception:
+                            pass
+                    elif _cat2:
+                        debug_lines.append(f"[cat-source] mid={mid} <- detail.group")
+                        try:
+                            market_map[mid]["_cat_debug"] = "cat_source=detail.group"
+                        except Exception:
+                            pass
+                    elif _cat3:
+                        debug_lines.append(f"[cat-source] mid={mid} <- detail.topic")
+                        try:
+                            market_map[mid]["_cat_debug"] = "cat_source=detail.topic"
+                        except Exception:
+                            pass
+                    else:
+                        debug_lines.append(f"[cat-source] mid={mid} <- detail.tags")
+                        try:
+                            market_map[mid]["_cat_debug"] = "cat_source=detail.tags"
+                        except Exception:
+                            pass
+                else:
+                    present = []
+                    for k in ("category", "group", "topic", "tags"):
+                        try:
+                            v = detail.get(k, None)
+                            if v is None:
+                                continue
+                            # 只标记“字段存在且非空/非空容器”
+                            if isinstance(v, str) and v.strip():
+                                present.append(f"{k}:str")
+                            elif isinstance(v, dict) and len(v) > 0:
+                                present.append(f"{k}:dict")
+                            elif isinstance(v, list) and len(v) > 0:
+                                present.append(f"{k}:list")
+                            else:
+                                present.append(f"{k}:empty")
+                        except Exception:
+                            pass
+                    msg = f"cat_missing=no_usable_category_fields present={present}"
+                    debug_lines.append(f"[cat-missing] mid={mid} reason=no_usable_category_fields present={present}")
+                    try:
+                        market_map[mid]["_cat_debug"] = msg
+                    except Exception:
+                        pass
             # 👉【新增调试】看清楚 detail 结构
             debug_lines.append(f"[detail] mid={mid} keys={list(detail.keys())[:20]}")
             outs_dbg = detail.get("outcomes")
@@ -982,6 +1066,10 @@ def run_node(node):
             except Exception:
                 pass
         except Exception:
+            try:
+                market_map[mid]["_cat_debug"] = "cat_detail_fetch_fail"
+            except Exception:
+                pass
             pass
 
     # 👉【新增兜底】如果某个 mid 只有 2 个 token 且都没名字，就按 Yes/No 命名
@@ -999,6 +1087,34 @@ def run_node(node):
             token_meta[t0]["option_name"] = token_meta[t0].get("option_name") or "Yes"
             token_meta[t1]["option_name"] = token_meta[t1].get("option_name") or "No"
             debug_lines.append(f"[fallback] mid={_mid} set names by binary default: {t0[:12]}…->Yes, {t1[:12]}…->No")
+
+    def _norm_yn(s: str) -> str:
+        s = (s or "").strip().lower()
+        if s in ("yes", "y", "true", "1"):
+            return "yes"
+        if s in ("no", "n", "false", "0"):
+            return "no"
+        return ""
+
+    mid_to_yes_tid = {}
+    mid_to_no_tid = {}
+
+    for tid, meta in token_meta.items():
+        mid = meta.get("mid")
+        yn = _norm_yn(meta.get("option_name"))
+        if not mid or not yn:
+            continue
+        if yn == "yes":
+            mid_to_yes_tid[mid] = tid
+        else:
+            mid_to_no_tid[mid] = tid
+
+    mid_to_pair = {}
+    for _mid, tid_list in mid_to_tids.items():
+        if len(tid_list) == 2:
+            mid_to_pair[_mid] = (tid_list[0], tid_list[1])
+
+    debug_lines.append(f"binary_pairs: yes={len(mid_to_yes_tid)} no={len(mid_to_no_tid)}")
 
     # 3) /prices YES ask
     yes_asks: Dict[str, float] = {}
@@ -1142,11 +1258,18 @@ def run_node(node):
 
         if mid not in market_records:
             mm = market_map.get(mid, {})
+            dbg_parts = []
+            if (mm.get("_end_debug") or ""):
+                dbg_parts.append(mm.get("_end_debug") or "")
+            if (mm.get("_cat_debug") or ""):
+                dbg_parts.append(mm.get("_cat_debug") or "")
+            _dbg_joined = "; ".join([x for x in dbg_parts if x]) if dbg_parts else ""
             market_records[mid] = {
                 "condition_id": mm.get("condition_id"),
                 "question": mm.get("question"),
+                "category": mm.get("category") or "",
                 "endDate": mm.get("endDate"),
-                "Debug": mm.get("_end_debug") or "",
+                "Debug": _dbg_joined,
                 "days_to_end": round((_parse_end_ts_safe(mm.get("endDate")) - time.time())/86400.0, 4) if mm.get("endDate") else None,
                 # 新增：把规则、来源、URL 一起写入
                 "rules": mm.get("rules") or "",
@@ -1155,9 +1278,27 @@ def run_node(node):
                 # 小类列表：每个 outcome 一条
                 "options": []
             }
+        # 计算二元对侧 token（用于反买）
+        opp_token = None
+        opp_name = None
+        yn_opt = _norm_yn(opt_name)
+        if yn_opt == "yes":
+            opp_token = mid_to_no_tid.get(mid)
+            opp_name = "No" if opp_token else None
+        elif yn_opt == "no":
+            opp_token = mid_to_yes_tid.get(mid)
+            opp_name = "Yes" if opp_token else None
+        if opp_token is None:
+            pair = mid_to_pair.get(mid)
+            if pair:
+                t0, t1 = pair
+                opp_token = t1 if tid == t0 else (t0 if tid == t1 else None)
+                opp_name = opp_name  # 保持未知名称为空
         market_records[mid]["options"].append({
             "name": opt_name,
             "token": tid,
+            "opp_token": opp_token,
+            "opp_name": opp_name,
             "ask": price,
             "bid": round(best_bid, 6) if best_bid is not None else None,
             "l1_spread_c": l1_spread_c_val,
