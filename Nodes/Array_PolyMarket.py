@@ -4,6 +4,13 @@ import copy
 from datetime import datetime, timezone
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from math import ceil
+
+try:
+    # py3.9+
+    from zoneinfo import ZoneInfo
+except Exception:
+    ZoneInfo = None
 
 # -------------------------
 # 调试开关与日志
@@ -82,6 +89,9 @@ FIELD_NAMES = [
     'daily_eff_if_win',
     'apr_eff_if_win',
     'query_time_beijing',
+
+    # 新增字段：务必追加在末尾，避免改变既有输出槽编号导致工作流“错位”
+    'opp_token',
 ]
 
 # 额外 +1 个聚合输出槽：Json_Save
@@ -275,6 +285,84 @@ def _apr_from_daily(daily_str, ndigits=NDIGITS_PRICE, days=365):
     return format(apr.normalize(), 'f')
 
 # -------------------------
+# 时间/时区：days_to_end 统一修正
+# -------------------------
+def _parse_end_datetime(endDate_raw):
+    """
+    尽量把 endDate 解析成带 tzinfo 的 datetime。
+    兼容：
+    - 2025-12-25T12:34:56Z
+    - 2025-12-25T12:34:56+00:00
+    - 2025-12-25（视为当天 00:00:00）
+    - 其它无法解析 → None
+    """
+    if endDate_raw is None:
+        return None
+    s = str(endDate_raw).strip()
+    if not s:
+        return None
+    # 兼容 Z
+    if s.endswith('Z'):
+        s = s[:-1] + '+00:00'
+    # 仅日期
+    if re.fullmatch(r'\d{4}-\d{2}-\d{2}', s):
+        s = s + 'T00:00:00'
+    try:
+        dt = datetime.fromisoformat(s)
+    except Exception:
+        return None
+    # 如果是 naive：默认按 UTC 解释（最保守，且避免“同日变负”）
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt
+
+def _calc_days_to_end(endDate_raw, now_utc=None):
+    """
+    以北京时间口径计算 days_to_end（向上取整），并保证不为负：
+    - endDate <= now → 0
+    - 其它 → ceil((end - now)/86400)
+    解析失败返回 ''（不覆盖原值）。
+    """
+    end_dt = _parse_end_datetime(endDate_raw)
+    if end_dt is None:
+        return ''
+    if now_utc is None:
+        now_utc = datetime.now(timezone.utc)
+
+    if ZoneInfo is not None:
+        tz_bj = ZoneInfo('Asia/Shanghai')
+    else:
+        # 兜底：固定 +8
+        from datetime import timedelta
+        tz_bj = timezone(timedelta(hours=8))
+
+    end_bj = end_dt.astimezone(tz_bj)
+    now_bj = now_utc.astimezone(tz_bj)
+    delta_seconds = (end_bj - now_bj).total_seconds()
+    if delta_seconds <= 0:
+        return '0'
+    return str(int(ceil(delta_seconds / 86400.0)))
+
+def _is_negative_number(x):
+    """
+    判断是否为负数（支持 -0.3758 这类小数/字符串）。
+    非法值返回 False（交由其它逻辑决定是否覆盖）。
+    """
+    if x is None:
+        return False
+    s = str(x).strip()
+    if s == '':
+        return False
+    s = s.replace('，', ',').replace(',', '')
+    try:
+        v = Decimal(s)
+    except Exception:
+        return False
+    if not v.is_finite():
+        return False
+    return v < 0
+
+# -------------------------
 # 主函数
 # -------------------------
 def run_node(node):
@@ -339,6 +427,13 @@ def run_node(node):
         url = _get(m, 'url')
         query_time_beijing = _get(m, 'query_time_beijing')
 
+        # 修正 days_to_end：当原值缺失/不合法/为负（常见于时区不一致）时，按北京时间重算
+        # 说明：如果上游已经给了正确的非负天数，这里不会覆盖，避免改变既有工作流语义。
+        calc_days = _calc_days_to_end(endDate)
+        if calc_days and (not str(days_to_end).strip() or _is_negative_number(days_to_end)):
+            _dbg(debug, f'fix days_to_end: raw={days_to_end} -> calc={calc_days} (endDate={endDate})')
+            days_to_end = calc_days
+
         options = m.get('options')
         options = options if isinstance(options, list) else None
         _dbg(debug,
@@ -372,9 +467,11 @@ def run_node(node):
 
                 # 盘口/价格（0~1）
                 'token': _get(src, 'token'),
+                'opp_token': _get(src, 'opp_token'),
                 'ask': _num(_get(src, 'ask'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
                 'bid': _num(_get(src, 'bid'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
-                'l1_spread_c': _num(_get(src, 'l1_spread_c'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
+                # 价差（单位：美分），来源通常是整数 0,1,2,... 不能按 0~1 概率清洗
+                'l1_spread_c': _int_nonneg(_get(src, 'l1_spread_c')),
                 'band_c_used': _s(_get(src, 'band_c_used')),
 
                 # 深度/数量（非负）

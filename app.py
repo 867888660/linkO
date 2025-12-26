@@ -1181,7 +1181,11 @@ def run_node_single():
     # ---------- 3. 统一结果格式处理 ----------
     def normalize_result(result):
         if isinstance(result, dict) and "outputs" in result:
-            output, debug_text = result["outputs"], result.get("debug_text", "")
+            output = result["outputs"]
+            # 兼容两种字段名：debug_text（旧） / debug（新）
+            debug_text = result.get("debug_text", "")
+            if not debug_text:
+                debug_text = result.get("debug", "")
         else:
             output, debug_text = result, ""
 
@@ -1230,6 +1234,8 @@ def run_node_single():
             return jsonify({
                 "output":       output,
                 "debug_text":   debug_text,
+                # 额外提供 debug 字段，便于前端/其他分支统一读取（不破坏旧逻辑）
+                "debug":        debug_text,
                 "inputs":       node.get("Inputs", []),
                 "ExportPrompt": node.get("ExportPrompt"),
             })
@@ -1260,6 +1266,7 @@ def run_node_single():
         return jsonify({
             "output":       output,
             "debug_text":   debug_text,
+            "debug":        debug_text,
             "inputs":       node.get("Inputs", []),
             "ExportPrompt": node.get("ExportPrompt"),
         })

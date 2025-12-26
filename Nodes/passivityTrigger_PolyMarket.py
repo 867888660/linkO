@@ -56,7 +56,8 @@ Inputs[3]['Kind'] = 'Num'
 Inputs[3]['name'] = 'min_yes'
 Inputs[3]['Isnecessary'] = True
 Inputs[3]['IsLabel'] = True
-Inputs[3]['Num'] = 0.01
+# 价格最小精度（Polymarket 常见为 0.001）
+Inputs[3]['Num'] = 0.001
 
 Inputs[4]['Kind'] = 'Num'
 Inputs[4]['name'] = 'max_yes'
@@ -591,6 +592,66 @@ def _parse_end_ts_safe(end_date_str: str) -> float:
     except Exception:
         return 0.0
 
+_GAMMA_MIDNIGHT_UTC_RE = re.compile(r"^\s*(\d{4})-(\d{2})-(\d{2})T00:00:00(?:Z|\+00:00)\s*$")
+
+def _ny_is_dst_local(year: int, month: int, day: int, hour: int, minute: int, second: int) -> bool:
+    """
+    无 zoneinfo 时，按美国纽约 DST 规则判断（2007+ 规则）：
+    - DST 开始：3 月第二个周日 02:00
+    - DST 结束：11 月第一个周日 02:00
+    """
+    try:
+        dt = datetime(year, month, day, hour, minute, second)
+    except Exception:
+        return False
+
+    def _nth_sunday(y: int, m: int, n: int) -> int:
+        first = datetime(y, m, 1)
+        # Python weekday: Mon=0 ... Sun=6
+        delta = (6 - first.weekday()) % 7
+        return 1 + delta + 7 * (n - 1)
+
+    # 边界日期
+    dst_start_day = _nth_sunday(year, 3, 2)   # 3月第二个周日
+    dst_end_day   = _nth_sunday(year, 11, 1)  # 11月第一个周日
+
+    dst_start = datetime(year, 3, dst_start_day, 2, 0, 0)
+    dst_end   = datetime(year, 11, dst_end_day, 2, 0, 0)
+    return dst_start <= dt < dst_end
+
+def _normalize_gamma_endDate_iso(end_date_str: str) -> str:
+    """
+    Gamma 有时给出 'YYYY-MM-DDT00:00:00Z'（看起来像“日期占位”而非真实截止时刻），
+    这会导致北京时间白天就出现 days_to_end 为负的小数。
+
+    规则（仅用于 Gamma endDate 分支）：
+    - 若命中 midnight UTC：视为“美东当日 23:59:59”截止，转成 UTC ISO 返回
+    - 否则返回 ""
+    """
+    if not end_date_str:
+        return ""
+    m = _GAMMA_MIDNIGHT_UTC_RE.match(str(end_date_str))
+    if not m:
+        return ""
+    try:
+        y = int(m.group(1)); mo = int(m.group(2)); d = int(m.group(3))
+    except Exception:
+        return ""
+
+    # 优先用 zoneinfo 精确处理 DST
+    try:
+        from zoneinfo import ZoneInfo
+        dt_local = datetime(y, mo, d, 23, 59, 59, tzinfo=ZoneInfo("America/New_York"))
+        dt_utc = dt_local.astimezone(timezone.utc)
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        # 兜底：按规则推断 DST
+        is_dst = _ny_is_dst_local(y, mo, d, 23, 59, 59)
+        offset_hours = -4 if is_dst else -5
+        dt_local = datetime(y, mo, d, 23, 59, 59, tzinfo=timezone(timedelta(hours=offset_hours)))
+        dt_utc = dt_local.astimezone(timezone.utc)
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
 def _normalize_rules(s: str) -> str:
     if not s: return ""
     # 换行类标签先替换成换行，其他标签去掉
@@ -699,8 +760,8 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
     """
     优先级（按你要求）：
     1) CLOB end_date_iso（若非空）
-    2) Gamma endDate（mm 里已有）
-    3) rules 文本 'by ... ET'
+    2) rules 文本 'by ... ET'
+    3) Gamma endDate（mm 里已有）
     4) 仍不行：9999 拉很大
 
     Debug：正常 ""；只要出现“没拿到 end_date_iso / 用了兜底”就写原因。
@@ -731,15 +792,7 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
     else:
         dbg.append(f"invalid_condition_id={cid}")
 
-    # --- 2) Gamma endDate（已有） ---
-    gamma_end = (mm.get("endDate") or "").strip()
-    if gamma_end:
-        # 这里即使 Gamma 有 endDate，也保留 Debug（因为你要求“包括没拿到 end_date_iso”也提示）
-        return gamma_end, "; ".join(dbg)
-
-    dbg.append("gamma_endDate_empty")
-
-    # --- 3) rules 文本兜底 ---
+    # --- 2) rules 文本兜底（优先于 Gamma endDate） ---
     rules = mm.get("rules") or ""
     rules_iso = parse_rules_deadline_iso(rules)
     if rules_iso:
@@ -748,6 +801,20 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
         return mm["endDate"], "; ".join(dbg)
 
     dbg.append("rules_deadline_parse_fail")
+
+    # --- 3) Gamma endDate（已有） ---
+    gamma_end = (mm.get("endDate") or "").strip()
+    if gamma_end:
+        # Gamma 偶发 'YYYY-MM-DDT00:00:00Z'：按“美东当日 23:59:59”修正（只在此分支使用）
+        fixed = _normalize_gamma_endDate_iso(gamma_end)
+        if fixed and fixed != gamma_end:
+            mm["endDate"] = fixed
+            dbg.append(f"normalized_gamma_midnight_to_et_eod: {gamma_end} -> {fixed}")
+            return mm["endDate"], "; ".join(dbg)
+        # 即使 Gamma 有 endDate，也保留 Debug（因为你要求“包括没拿到 end_date_iso”也提示）
+        return gamma_end, "; ".join(dbg)
+
+    dbg.append("gamma_endDate_empty")
 
     # --- 4) 仍不行：9999 拉很大 ---
     mm["endDate"] = "9999-12-31T23:59:59Z"

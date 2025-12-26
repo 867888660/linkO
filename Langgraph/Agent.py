@@ -89,6 +89,7 @@ class State(TypedDict):
     node: Dict[str, Any]            # 完整保留外部 node
     messages: List[Dict[str, str]]  # 对话历史
     tool_results: List[Dict[str, Any]]
+    llm_traces: List[Dict[str, Any]]
 
 # ---------- 2. 找脚本 ----------
 def _find_script(node_name: str) -> Optional[Path]:
@@ -133,13 +134,20 @@ def _load_and_run_script(script_name: str, node: Dict[str, Any]) -> str:
 
 # ---------- 4. LLM 节点 ----------
 def llm_node(state: State) -> State:
-    import json, re
+    import json, re, copy
     node = state["node"]
 
     # 使用状态里的 messages
     messages = state["messages"]
 
-    cnt = len([m for m in messages if m["role"] == "assistant"])
+    # 只统计“真正的 LLM 回合”，排除 tools_node 塞进来的 Observation，
+    # 否则会导致回合数被 Observation 消耗、提前触发强制 Final Answer。
+    def _is_observation_msg(m: Dict[str, str]) -> bool:
+        if m.get("role") != "assistant":
+            return False
+        return str(m.get("content", "")).lstrip().startswith("Observation:")
+
+    cnt = len([m for m in messages if m["role"] == "assistant" and not _is_observation_msg(m)])
     remaining = node.get("ReactNum", 3) - cnt
     print(f"当前回合: {cnt}, 剩余回合: {remaining}")
 
@@ -160,13 +168,28 @@ def llm_node(state: State) -> State:
     max_retries = 3
     last_error  = None
     for attempt in range(1, max_retries + 1):
+        # 记录本轮 LLM “真实输入”：送进节点脚本前的 messages 快照
+        # （用深拷贝，避免后续 messages 追加导致回看时对不上）
+        input_snapshot = copy.deepcopy(messages)
         try:
             raw = _load_and_run_script(node["name"], node)
             last_error = None  # 只要成功就清空错误
+            state.setdefault("llm_traces", []).append({
+                "attempt": attempt,
+                "success": True,
+                "llm_input_messages": input_snapshot,
+                "llm_raw_return": raw,
+            })
             break
         except Exception as e:
             last_error = e
             print(f"LLM执行错误(第 {attempt}/{max_retries} 次): {e}")
+            state.setdefault("llm_traces", []).append({
+                "attempt": attempt,
+                "success": False,
+                "error": str(e),
+                "llm_input_messages": input_snapshot,
+            })
             if attempt == max_retries:
                 # 全部重试失败
                 error_msg = f"LLM执行错误: {e}"
@@ -176,10 +199,27 @@ def llm_node(state: State) -> State:
     # ------ 以下为原本成功后的处理逻辑 ------
     # 转换为字符串
     if isinstance(raw, list):
-        ctx = next((d.get("Context", "") for d in raw if isinstance(d, dict)), "")
-        text = ctx or json.dumps(raw, ensure_ascii=False, indent=2)
+        # 兼容常见返回：[{"Context": "..."}] / ["..."] / ["文本", {...debug...}]
+        ctx = next((d.get("Context", "") for d in raw if isinstance(d, dict) and isinstance(d.get("Context"), str)), "")
+        if ctx:
+            text = ctx
+        elif raw and isinstance(raw[0], str):
+            text = raw[0]
+        elif raw and isinstance(raw[0], dict) and isinstance(raw[0].get("Context"), str):
+            text = raw[0].get("Context", "")
+        else:
+            text = json.dumps(raw, ensure_ascii=False, indent=2)
     elif isinstance(raw, str):
         text = raw
+    elif isinstance(raw, dict):
+        # 兼容节点脚本返回 dict
+        if isinstance(raw.get("Context"), str):
+            text = raw["Context"]
+        else:
+            try:
+                text = json.dumps(raw, ensure_ascii=False, indent=2)
+            except Exception:
+                text = repr(raw)
     else:
         text = json.dumps(raw, ensure_ascii=False, indent=2)
 
@@ -196,18 +236,44 @@ def llm_node(state: State) -> State:
             think_content = think_match.group(1).strip() if think_match else text.strip()
             final_text = f"Final Answer: {think_content}"
         else:
-            think_line, action_line = "", ""
-            for line in text.splitlines():
-                if not think_line and line.lstrip().startswith("Think:"):
-                    think_line = line.strip()
-                elif not action_line and line.lstrip().startswith("Action:"):
-                    action_line = line.strip()
-                if think_line and action_line:
-                    break
-            final_text = f"{think_line}\n\n{action_line}".strip()
+            # 保留完整 Think 块（多行），直到 Action 之前；Action 保留一行即可。
+            think_block = ""
+            action_line = ""
+            m_think = re.search(r'^\s*Think\s*:\s*([\s\S]*?)(?=^\s*Action\s*:)', text, re.I | re.M)
+            if m_think:
+                think_content = m_think.group(1).strip()
+                think_block = f"Think: {think_content}"
+            else:
+                # 兜底：至少把第一行 Think 带上
+                for line in text.splitlines():
+                    if line.lstrip().startswith("Think:"):
+                        think_block = line.strip()
+                        break
+
+            m_action = re.search(r'^\s*Action\s*:\s*.*$', text, re.I | re.M)
+            if m_action:
+                action_line = m_action.group(0).strip()
+            else:
+                for line in text.splitlines():
+                    if line.lstrip().startswith("Action:"):
+                        action_line = line.strip()
+                        break
+
+            final_text = f"{think_block}\n\n{action_line}".strip()
 
     print(f"LLM 输出: {repr(final_text[:100])}")
     state["messages"].append({"role": "assistant", "content": final_text})
+
+    # 把本轮“用于解析的文本 / 最终写回 messages 的文本”补到最后一次成功 trace 里
+    try:
+        traces = state.get("llm_traces", [])
+        for t in reversed(traces):
+            if t.get("success") is True:
+                t["llm_text_for_parsing"] = text
+                t["llm_parsed_output"] = final_text
+                break
+    except Exception:
+        pass
     return state
 
 def escape_newlines_in_json(raw: str) -> str:
@@ -338,10 +404,11 @@ def tools_node(state: State) -> State:
                 "Action": f"{tool_name}({arg_str})",
                 "Result": f"工具 {tool_name} 未找到"
             }
-            state["messages"].append(
-                {"role": "observation",
-                 "content": "Observation:\n" + json.dumps(obs_payload, ensure_ascii=False, indent=2)}
-            )
+            # 重要：必须写成 assistant 的 Observation，保证后续 llm 还能继续（否则 last assistant 仍含 Action 会导致卡住）
+            state["messages"].append({
+                "role": "assistant",
+                "content": "Observation:\n" + json.dumps(obs_payload, ensure_ascii=False, indent=2)
+            })
             state.setdefault("tool_results", []).append(
                 {"tool_name": tool_name, "inputs": {},
                  "result": obs_payload["Result"], "success": False}
@@ -382,9 +449,13 @@ def tools_node(state: State) -> State:
         )
 
         # ---------- ★ 生成结构化 Observation ----------
-        # 1) 取 Think 部分（若不存在则给空串）
-        think_match = re.search(r"Think\s*:\s*(.*)", last_reply, re.S)
-        think_text  = think_match.group(1).strip() if think_match else ""
+        # 1) 取 Think 块（多行），仅到 Action 之前
+        think_match = re.search(
+            r'^\s*Think\s*:\s*([\s\S]*?)(?=^\s*Action\s*:)',
+            last_reply,
+            re.I | re.M
+        )
+        think_text = think_match.group(1).strip() if think_match else ""
 
         # 2) 拼装 Action 字符串（无反斜杠）
         action_inner = ", ".join(f'{k}="{v}"' for k, v in params.items())
@@ -396,12 +467,12 @@ def tools_node(state: State) -> State:
             "Result": result
         }
 
-        # ---------- ★ 生成结构化 Observation ----------
+        # ---------- ★ 生成结构化 Observation（写入 messages，供前端 DEBUG 直接展示） ----------
         obs = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, indent=2)
         state["messages"].append(
             {
                 "role": "assistant",
-                "content": f"Observation: {obs}"
+                "content": "Observation:\n" + json.dumps(obs_payload, ensure_ascii=False, indent=2)
             }
         )
         print(f"结果 result: {result}...")  # 只打印前100字符
@@ -443,7 +514,12 @@ def _build_agent():
 
             # 3) 回合数限制
             rn  = state["node"].get("ReactNum", 3)
-            cnt = len([m for m in state["messages"] if m["role"] == "assistant"])
+            # 同 llm_node：排除 Observation 消耗回合数
+            cnt = len([
+                m for m in state["messages"]
+                if m["role"] == "assistant"
+                and not str(m.get("content", "")).lstrip().startswith("Observation:")
+            ])
             if cnt >= rn:
                 print(f"达到最大回合数 {rn}，强制结束流程")
                 return END
@@ -821,16 +897,44 @@ def run_node(node: Dict[str, Any]):
 
             # 5) 组装 debug 信息
             debug_obj = {
+                "llm_traces": copy.deepcopy(result.get("llm_traces", [])),
                 "messages": copy.deepcopy(result.get("messages", [])),
                 "tools": copy.deepcopy(result.get("tool_results", [])),
                 "final_answer": answer_text,
             }
 
-            def _brief(txt: str, limit: int = 300):
+            # DEBUG 里需要能看清 Think/Action，默认 300 太短，容易把思考裁掉
+            def _brief(txt: str, limit: int = 4000):
                 txt = txt.replace("\n", "\\n")
                 return txt if len(txt) <= limit else txt[:limit] + " …"
 
-            lines: list[str] = ["=== Messages ==="]
+            # 额外：把每次 LLM 的输入/输出完整写进 debug，便于诊断
+            def _safe_dump(obj) -> str:
+                try:
+                    return json.dumps(obj, ensure_ascii=False, indent=2)
+                except Exception:
+                    return repr(obj)
+
+            lines: list[str] = ["=== LLM Traces ==="]
+            for idx, t in enumerate(debug_obj.get("llm_traces", []) or [], 1):
+                lines.append(f"\n--- LLM Trace #{idx} ---")
+                lines.append(f"attempt={t.get('attempt')} success={t.get('success')}")
+                if t.get("error"):
+                    lines.append("error:\n" + str(t.get("error")))
+                lines.append("\n[llm_input_messages]")
+                # 这里保留“真实换行”，不要做 \\n 压缩，方便直接阅读 prompt
+                lines.append(_safe_dump(t.get("llm_input_messages", [])))
+                if "llm_raw_return" in t:
+                    lines.append("\n[llm_raw_return]")
+                    lines.append(_safe_dump(t.get("llm_raw_return")))
+                if t.get("llm_text_for_parsing") is not None:
+                    lines.append("\n[llm_text_for_parsing]")
+                    lines.append(str(t.get("llm_text_for_parsing")))
+                if t.get("llm_parsed_output") is not None:
+                    lines.append("\n[llm_parsed_output]")
+                    lines.append(str(t.get("llm_parsed_output")))
+
+            lines.append("\n\n=== Messages (brief) ===")
             for idx, m in enumerate(debug_obj["messages"], 1):
                 role = m.get("role", "")
                 content = _brief(str(m.get("content", "")))
@@ -842,6 +946,30 @@ def run_node(node: Dict[str, Any]):
                 success = t.get("success", False)
                 result_sn = _brief(str(t.get("result", "")))
                 lines.append(f"- {tool_name} | success={success} | result: {result_sn}")
+
+            # 全量 Tools（包含所有 result/Result 原文，便于排查）
+            try:
+                lines.append("\n=== Tools (full) ===")
+                lines.append(_safe_dump(debug_obj.get("tools", [])))
+            except Exception:
+                pass
+
+            # 全量 Observation（把 messages 里 Observation 的 JSON 原文也吐出来，确保所有 Result 可见）
+            try:
+                lines.append("\n=== Observations (full) ===")
+                obs_msgs = []
+                for m in debug_obj.get("messages", []) or []:
+                    if str(m.get("role")) != "assistant":
+                        continue
+                    c = str(m.get("content", "")).lstrip()
+                    if not c.startswith("Observation:"):
+                        continue
+                    payload = c[len("Observation:"):].lstrip()
+                    obs_msgs.append(payload)
+                # 注意：不对 payload 做 brief，按原文输出
+                lines.append("\n\n---\n\n".join(obs_msgs) if obs_msgs else "(none)")
+            except Exception:
+                pass
 
             lines.append("\n=== Final Answer ===\n" + answer_text)
             debug_text = "\n".join(lines)
@@ -883,7 +1011,9 @@ def run_node(node: Dict[str, Any]):
             # 7) 成功返回
             return {
                 "outputs": Outputs,
-                "debug": debug_text
+                # 统一两种字段名，避免 /run-node 与 /run-node-single 不一致导致“前端无 debug”
+                "debug": debug_text,
+                "debug_text": debug_text
             }
 
         # ---------- 捕获错误并决定是否重试 ----------

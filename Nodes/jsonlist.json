@@ -55,7 +55,7 @@
     },
     {
         "Filename": "Array_PolyMarket.py",
-        "Hash": "3ec68a044011bd83f3c59437ba79b1745bf33c068a8f08552ad808d832e298a6",
+        "Hash": "0fe8386fcb70a1b601a3019c7a92ce205f12d8d98af9515a11cbf4f5a2736816",
         "NodeKind": "ArrayTrigger",
         "NodeFunction": "组件功能：这是一个数组触发器节点，用于根据指定的数字范围生成包含输出节点序列的数组。\n\n代码功能摘要：接收起始和结束数字作为输入，通过循环遍历指定范围内的每个数字，为每个数字创建一个输出节点的深拷贝并存储到数组中，最终返回包含所有数字序列的数组。\n\n参数：\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: integer\\n    required: true\\n    description: 数字范围的起始值\\n  - name: Input2\\n    type: integer\\n    required: true\\n    description: 数字范围的结束值（包含）\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 生成的数组序列，包含指定范围内所有数字对应的输出节点\\n```\n\n运行逻辑：\\n- 从输入节点获取起始数字Start_Num和结束数字End_Num\\n- 初始化空数组Array用于存储结果\\n- 使用for循环遍历从Start_Num到End_Num+1的范围（包含结束值）\\n- 在每次循环中，将当前数字i赋值给输出节点的Num属性\\n- 对当前输出节点进行深拷贝并添加到Array数组中\\n- 循环结束后返回包含所有数字序列的Array数组\\n- 每个数组元素都是一个完整的输出节点对象，包含对应的数字值"
     },
@@ -379,7 +379,7 @@
     },
     {
         "Filename": "passivityTrigger_PolyMarket.py",
-        "Hash": "3ac4f131c38e3d53de70a8adb707029c730b8ccdf7773e16958e70722a8d7f86",
+        "Hash": "70a3a5ce8ce1c7560c05012d8fc108b4980e3ca17ec036ecc2d14c2e1c83cfab",
         "NodeKind": "passivityTrigger",
         "NodeFunction": "组件功能：Agent A（爬虫+初筛，passivityTrigger 模式）。功能概览：1) 逐页抓取 /markets（withTokens/withClobTokenIds/withOutcomes），提取 clob tokenId；2) 批量调用 /prices 获取 YES ask；3) 为每个 token 计算盘口 L1（best bid/ask）、自适应 1¢ 带宽内深度、订单聚集度、带内 VWAP，并计算期限指标（days_to_end、daily_eff_if_win、apr_eff_if_win）；4) 先按价格区间 [min_yes, max_yes] 筛选，再按 l1_spread_c（L1 价差上限，单位美分）与 min_depth_1c_usd（1¢ 带宽内买卖深度较小值的美元下限）二次过滤；5) 每页处理完即单独落盘 JSON，包含规则/来源/URL 与各选项细节；6) 支持 offset_end：-1 为无上限模式（按 limit 递进，遇尾页暂停），>0 为边界模式（从 offset_start 递增至 offset_end 后停止，不回绕）；7) 每次仅处理一页并返回（Save_Path, DeBug），内部以 node._state.next_offset 记忆续跑位置。"
     },
@@ -403,9 +403,9 @@
     },
     {
         "Filename": "polymarket_transaction.py",
-        "Hash": "941a8ff6f30495e4e6b2e0f7a605cf45efdbe1ab10a79ed4849b5e4ae276bc0c",
+        "Hash": "462dccae822ef936754f41b9ff2f6cee80ee99a35910c2e1c8a9d8a5aa745dc0",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单或撤单流程，完成 API 凭据生成、构建订单对象、发送订单或执行撤单操作，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.01\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单\n- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n- 返回包含 Result 和 DeBugging 的 Outputs 数组"
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单或撤单流程，完成 API 凭据生成、构建订单对象、发送订单或执行撤单操作，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单\n- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n- 返回包含 Result 和 DeBugging 的 Outputs 数组"
     },
     {
         "Filename": "PPtDesign.py",

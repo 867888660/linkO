@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import time
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any
 
 # 尝试导入第三方依赖；若缺失则标记并在运行时给出友好提示
@@ -60,7 +61,7 @@ FunctionIntroduction = (
     '参数\n```yaml\n'
     'inputs:\n'
     '  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n'
-    '  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.01\n'
+    '  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n'
     '  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n'
     '  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n'
     '  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n'
@@ -187,9 +188,17 @@ def _try_set_timeout(c: Any, seconds: int, debug: List[str]) -> None:
 def _validate_for_order(side: str, price: str, size_shares: float) -> None:
     if side not in ("BUY", "SELL"):
         raise ValueError(f"SIDE 必须是 BUY/SELL，收到: {side}")
-    price_val = float(price)
-    if abs(round(price_val * 100) - price_val * 100) > 1e-9:
-        raise ValueError(f"PRICE 必须是 0.01 的整数倍，收到: {price}")
+    try:
+        price_dec = Decimal(str(price))
+    except (InvalidOperation, ValueError):
+        raise ValueError(f"PRICE 不是有效数字，收到: {price}")
+    # Polymarket 常见价格范围在 (0, 1]，并且最小步长为 0.001（用户反馈/更细报价）
+    if price_dec <= 0 or price_dec > 1:
+        raise ValueError(f"PRICE 必须在 (0, 1] 之间，收到: {price}")
+    # 校验：必须是 0.001 的整数倍
+    scaled = price_dec * Decimal("1000")
+    if scaled != scaled.to_integral_value():
+        raise ValueError(f"PRICE 必须是 0.001 的整数倍，收到: {price}")
     if size_shares <= 0:
         raise ValueError("SIZE_SHARES 必须 > 0（份数/股数）")
 
@@ -349,7 +358,9 @@ def run_node(node):
             if not size:
                 raise ValueError("BUY/SELL 需要 SIZE_SHARES")
             _validate_for_order(mode, price, float(size))
-            _append_debug(Debugging, f"order args => side={mode}, price={price}, size={size}, tif={tif}")
+            # 统一将价格规范到三位小数，避免浮点误差导致的步长/过滤问题
+            price_norm = Decimal(str(price)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+            _append_debug(Debugging, f"order args => side={mode}, price={price_norm}, size={size}, tif={tif}")
             # SELL 前置：检查余额并尝试确保授权
             token_id_int = int(token_id)
             if mode == "SELL":
@@ -364,7 +375,7 @@ def run_node(node):
                 _ensure_position_allowance(client, token_id_int, float(size), Debugging)
             # 将下单行为整体纳入重试：create_order + post_order
             def _place():
-                oa = OrderArgs(token_id=int(token_id), side=mode, price=float(price), size=float(size))
+                oa = OrderArgs(token_id=int(token_id), side=mode, price=float(price_norm), size=float(size))
                 order_obj_local = client.create_order(oa)
                 return client.post_order(order_obj_local, tif)
 
@@ -385,8 +396,15 @@ def run_node(node):
 
         elif mode == "WITHDRAW_ORDER":
             open_orders = [od for od in _list_open_orders(client, Debugging) if od['status'] in ("live", "partial_fill")]
-            price_filter = float(price) if price not in (None, "") else None
-            targets = [od for od in open_orders if str(od['token_id']) == token_id and (price_filter is None or od.get('price') == price_filter)]
+            price_filter = round(float(Decimal(str(price)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)), 3) if price not in (None, "") else None
+            targets = [
+                od for od in open_orders
+                if str(od['token_id']) == token_id
+                and (
+                    price_filter is None
+                    or (od.get('price') is not None and round(float(od.get('price')), 3) == price_filter)
+                )
+            ]
             if not targets:
                 _append_debug(Debugging, "未找到匹配条件的在挂单；如需按价格撤单请提供 PRICE。")
                 result.update({"success": True, "action": "WITHDRAW_ORDER", "cancelled": 0, "matched": 0})

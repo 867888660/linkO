@@ -37,6 +37,7 @@ let recordAnnotateToken = 0;
 const RECORD_ANNOTATE_CONCURRENCY = 2;        // 并发过高会把 /history/run 与 UI 都拖慢
 const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标注，避免“越多越卡”
 const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+let recordSearchRefilterTimer = null;
 
 function cancelRecordAnnotation(reason = '') {
   // 递增 token 使已排队/延迟启动的任务自动失效
@@ -47,6 +48,33 @@ function cancelRecordAnnotation(reason = '') {
     }
   } catch (_) {}
   recordAnnotateController = null;
+}
+
+function scheduleRecordSearchIndexBuild(query, refilterFn) {
+  const q = (query || '').trim().toLowerCase();
+  if (!q) return;
+  if (!Array.isArray(recordItemsCache) || !recordItemsCache.length) return;
+  // 搜索时优先级最高：取消正在进行的后台标注，避免占用网络/主线程
+  cancelRecordAnnotation('search build');
+  const token = ++recordAnnotateToken;
+  recordAnnotateController = new AbortController();
+  // 记录很多时也允许构建搜索索引，但仍然做数量/并发限制
+  annotateRecordItemsWithErrorFlag(recordItemsCache, {
+    token,
+    signal: recordAnnotateController?.signal,
+    enableDeepSearch: true,
+    // 搜索索引比错误标记更“有用”，这里允许多处理一些（仍然要限流）
+    maxItems: Math.max(RECORD_ANNOTATE_MAX_ITEMS, 600),
+    onItemUpdated: () => {
+      if (typeof refilterFn !== 'function') return;
+      try {
+        if (recordSearchRefilterTimer) clearTimeout(recordSearchRefilterTimer);
+        recordSearchRefilterTimer = setTimeout(() => {
+          try { refilterFn(); } catch(_) {}
+        }, 120);
+      } catch(_) {}
+    }
+  });
 }
 //#region 浮窗栏
 const tooltip = document.createElement('div');
@@ -3391,7 +3419,9 @@ async function loadRecordItems() {
       setTimeout(() => {
         annotateRecordItemsWithErrorFlag(recordItemsCache, {
           token,
-          signal: recordAnnotateController?.signal
+          signal: recordAnnotateController?.signal,
+          // 列表加载阶段只做“错误标记”（轻量）；深度搜索索引按需在用户输入时再构建
+          enableDeepSearch: false
         });
       }, 0);
     } catch (e) {
@@ -3406,16 +3436,23 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
 
   const token = typeof opts.token === 'number' ? opts.token : recordAnnotateToken;
   const signal = opts.signal;
+  const onItemUpdated = typeof opts.onItemUpdated === 'function' ? opts.onItemUpdated : null;
   const historyKey = getProjectHistoryKey();
   const projQuery = historyKey ? `&project_name=${encodeURIComponent(historyKey)}` : '';
 
   const shouldStop = () => (signal && signal.aborted) || token !== recordAnnotateToken;
   const yieldToUI = () => new Promise(r => setTimeout(r, 0));
 
-  // 只对还未知状态的记录做补充检查，避免重复请求
-  const pendingItemsAll = items.filter(item =>
-    item && item.filename && typeof item.__hasError === 'undefined'
-  );
+  // 是否构建深度搜索索引：search 输入时可强制开启
+  const forceDeepSearch = opts.enableDeepSearch === true;
+  // 只对还未知状态的记录做补充检查，避免重复请求；
+  // 同时：当需要构建搜索索引时，也要处理 __searchText 为空的记录（哪怕 __hasError 已经有值）
+  const pendingItemsAll = items.filter(item => {
+    if (!item || !item.filename) return false;
+    if (typeof item.__hasError === 'undefined') return true;
+    if (forceDeepSearch && typeof item.__searchText === 'undefined') return true;
+    return false;
+  });
   if (!pendingItemsAll.length) return;
 
   // 记录过多时不做全量标注：否则会把 /history/run 与 UI 都拖慢
@@ -3425,8 +3462,8 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
     console.warn(`[RECORD] 记录过多：仅后台标注前 ${pendingItems.length}/${pendingItemsAll.length} 条，避免卡顿`);
   }
 
-  // 深度搜索文本非常昂贵：只在记录数量较少时启用
-  const enableDeepSearch = (opts.enableDeepSearch !== false) && (pendingItems.length <= RECORD_DEEP_SEARCH_MAX_ITEMS);
+  // 深度搜索文本非常昂贵：默认只在记录数量较少时启用；search 时可强制开启（仍会被 maxItems/并发/截断保护）
+  const enableDeepSearch = forceDeepSearch || ((opts.enableDeepSearch !== false) && (pendingItems.length <= RECORD_DEEP_SEARCH_MAX_ITEMS));
 
   let cursor = 0;
   const concurrency = Math.max(1, Math.min(RECORD_ANNOTATE_CONCURRENCY, pendingItems.length));
@@ -3448,20 +3485,22 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
       }
 
       // 快速判定是否有错误节点（可短路）
-      let hasError = false;
-      if (Array.isArray(nodes)) {
-        for (let i = 0; i < nodes.length; i++) {
-          const n = nodes[i];
-          if (n && (n.IsError === true || n.isError === true)) {
-            hasError = true;
-            break;
+      if (typeof item.__hasError === 'undefined') {
+        let hasError = false;
+        if (Array.isArray(nodes)) {
+          for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i];
+            if (n && (n.IsError === true || n.isError === true)) {
+              hasError = true;
+              break;
+            }
           }
         }
+        item.__hasError = !!hasError;
       }
-      item.__hasError = !!hasError;
 
       // 构建可搜索文本（可选：只在记录少时启用，且做截断，避免卡顿/内存爆炸）
-      if (enableDeepSearch) {
+      if (enableDeepSearch && typeof item.__searchText === 'undefined') {
         try {
           const collectFields = [];
           const maxNodesForIndex = 30;
@@ -3472,12 +3511,24 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
             ['label', 'name', 'prompt', 'ExportPrompt', 'SystemPrompt'].forEach(k => {
               if (n[k]) collectFields.push(String(n[k]));
             });
-            // Inputs/Outputs 只收集 name，避免把大量 Context 文本塞进索引
+            // Inputs/Outputs：保留 name + 少量 Context/数值（截断），保证“按关键字搜索”可用
             if (Array.isArray(n.Inputs)) {
-              n.Inputs.forEach(inp => { if (inp && inp.name) collectFields.push(String(inp.name)); });
+              n.Inputs.forEach(inp => {
+                if (!inp) return;
+                if (inp.name) collectFields.push(String(inp.name));
+                if (inp.Context) collectFields.push(String(inp.Context).slice(0, 240));
+                if (typeof inp.Num !== 'undefined' && inp.Num !== null) collectFields.push(String(inp.Num));
+                if (typeof inp.Boolean === 'boolean') collectFields.push(String(inp.Boolean));
+              });
             }
             if (Array.isArray(n.Outputs)) {
-              n.Outputs.forEach(out => { if (out && out.name) collectFields.push(String(out.name)); });
+              n.Outputs.forEach(out => {
+                if (!out) return;
+                if (out.name) collectFields.push(String(out.name));
+                if (out.Context) collectFields.push(String(out.Context).slice(0, 240));
+                if (typeof out.Num !== 'undefined' && out.Num !== null) collectFields.push(String(out.Num));
+                if (typeof out.Boolean === 'boolean') collectFields.push(String(out.Boolean));
+              });
             }
             if (collectFields.join(' ').length > maxChars) break;
           }
@@ -3496,6 +3547,9 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
         if (item.__hasError) btn.classList.add('record-panel-item-error');
         else btn.classList.remove('record-panel-item-error');
         if (item.__searchText) btn.dataset.searchText = item.__searchText;
+      }
+      if (onItemUpdated) {
+        try { onItemUpdated(item); } catch (_) {}
       }
     } catch (err) {
       // 取消/中断不算错误，直接忽略
@@ -3610,10 +3664,17 @@ function renderRecordPanel(items) {
     const doFilter = () => {
       const q = (inputEl.value || '').trim().toLowerCase();
       const itemsEls = list.querySelectorAll('.record-panel-item');
+      let hit = 0;
       itemsEls.forEach(el => {
         const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
-        el.style.display = q ? (text.includes(q) ? '' : 'none') : '';
+        const ok = q ? text.includes(q) : true;
+        if (ok && q) hit++;
+        el.style.display = ok ? '' : 'none';
       });
+      // 如果当前索引命中很少/为 0，则后台按需补全深度搜索索引，再自动重跑过滤
+      if (q && hit === 0) {
+        scheduleRecordSearchIndexBuild(q, doFilter);
+      }
     };
     inputEl.addEventListener('input', doFilter);
     inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doFilter(); });
@@ -10580,7 +10641,8 @@ const database = graph.save();
         // 创建描述输入框
         const Description = document.createElement('textarea');
         Description.className = 'Description-textarea'; // Apply the CSS class for styling
-        Description.value = output.Description; // Set the value
+        // Set the value (avoid "undefined" showing in textarea)
+        Description.value = (output && output.Description != null) ? output.Description : '';
         
 
         adjustHeightBasedOnContent(Description);
@@ -10770,26 +10832,34 @@ const database = graph.save();
         let data = graph.save();
           data.nodes.forEach((node) => {
             if (node.id == id) {
-              if(node.name.includes('Contextadd'))
-              {
-                Description.value
-              }
               let Temp='' ;
               Temp+='Please ensure the output is in JSON format\n';
                   Temp+='{\n';
-              // 无论当前是 Json 还是 OriginalText 模式，始终写入 JsonOutputs
-              const targetOutputs = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : node.Outputs;
-              targetOutputs.forEach((output,index) => {
-                  if(output.Id == realId)
-                    output.Description = Description.value;
+              // 关键修复：面板渲染读取的是 node.Outputs，但切换模式时可能存在 node.JsonOutputs；
+              // 为了“再次点击仍然是修改后的值”，这里同步写入 Outputs 和 JsonOutputs（如果存在）。
+              const newDesc = Description.value;
+              const outputsMain = Array.isArray(node.Outputs) ? node.Outputs : [];
+              const outputsJson = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : null;
+
+              const syncDesc = (arr) => {
+                arr.forEach((out) => {
+                  if (out && out.Id == realId) out.Description = newDesc;
+                });
+              };
+              syncDesc(outputsMain);
+              if (outputsJson) syncDesc(outputsJson);
+
+              // Prompt 内容优先使用 Outputs（因为 UI / 执行侧通常以它为准）
+              outputsMain.forEach((output,index) => {
                   let Kind='';
-                  if(output.Kind.includes('String'))
+                  const k = (output && output.Kind != null) ? String(output.Kind) : '';
+                  if(k.includes('String'))
                     Kind='String';
-                  else if(output.Kind=='Num')
+                  else if(k=='Num')
                     Kind='Num';
-                  else if(output.Kind=='Boolean')
+                  else if(k=='Boolean')
                     Kind='Boolean';
-                  Temp+='"'+output.Id+'"' + ':' + '"'+output.Description+'"' +'(you need output type:'+Kind+')'+ '\n';
+                  Temp+='"'+output.Id+'"' + ':' + '"'+(output.Description ?? '')+'"' +'(you need output type:'+Kind+')'+ '\n';
 
               });
              Temp+='}\n';
@@ -10815,25 +10885,31 @@ const database = graph.save();
         let data = graph.save();
           data.nodes.forEach((node) => {
             if (node.id == id) {
-              if(node.name.includes('Contextadd'))
-              {
-                Description.value
-              }
               let Temp='' ;
               Temp+='Please ensure the output is in JSON format\n';
                   Temp+='{\n';
-              const targetOutputs = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : node.Outputs;
-              targetOutputs.forEach((output,index) => {
-                  if(output.Id == realId)
-                    output.Description = Description.value;
+              const newDesc = Description.value;
+              const outputsMain = Array.isArray(node.Outputs) ? node.Outputs : [];
+              const outputsJson = Array.isArray(node.JsonOutputs) ? node.JsonOutputs : null;
+
+              const syncDesc = (arr) => {
+                arr.forEach((out) => {
+                  if (out && out.Id == realId) out.Description = newDesc;
+                });
+              };
+              syncDesc(outputsMain);
+              if (outputsJson) syncDesc(outputsJson);
+
+              outputsMain.forEach((output,index) => {
                   let Kind='';
-                  if(output.Kind.includes('String'))
+                  const k = (output && output.Kind != null) ? String(output.Kind) : '';
+                  if(k.includes('String'))
                     Kind='String';
-                  else if(output.Kind=='Num')
+                  else if(k=='Num')
                     Kind='Num';
-                  else if(output.Kind=='Boolean')
+                  else if(k=='Boolean')
                     Kind='Boolean';
-                  Temp+='"'+output.Id+'"' + ':' + '"'+output.Description+'"' +'(you need output type:'+Kind+')'+ '\n';
+                  Temp+='"'+output.Id+'"' + ':' + '"'+(output.Description ?? '')+'"' +'(you need output type:'+Kind+')'+ '\n';
 
               });
              Temp+='}\n';
@@ -12010,7 +12086,7 @@ const database = graph.save();
     //domElement.style.left = `${x}px`;
     //domElement.style.top = `${y+200}px`;
   //}
-  }
+}
   function autoResizeTextarea(textarea) {
     textarea.style.height = 'auto';  // 重置高度，允许它根据内容缩小
     textarea.style.height = textarea.scrollHeight + 'px';  // 设置高度等于滚动高度，以适应所有内容
@@ -12370,7 +12446,7 @@ function createSideWindow(item, isCheckMode = false) {
   const tempNode = node;
       
   // 🔍 数据源调试信息
-  console.log('🔍 [SIDEWIN:ENTRY] 数据源状态:');
+  console.log('[SIDEWIN:ENTRY] 数据源状态:');
   console.log('  - frontendMode:', frontendMode);
   console.log('  - __lastCompletedGraphData 存在:', !!window.__lastCompletedGraphData);
   console.log('  - __lastCompletedGraphData.nodes 数量:', window.__lastCompletedGraphData?.nodes?.length || 0);
@@ -12388,7 +12464,7 @@ function createSideWindow(item, isCheckMode = false) {
   console.log('  - tempNode 存在:', !!tempNode);
   
   // 🔍 详细数据内容调试
-  console.log('🔍 [SIDEWIN:ENTRY] 详细数据内容:');
+  console.log('[SIDEWIN:ENTRY] 详细数据内容:');
   console.log('  - item.id:', item.id);
   console.log('  - node 详情:', node);
   console.log('  - tempNode 详情:', tempNode);
@@ -12458,13 +12534,13 @@ function createSideWindow(item, isCheckMode = false) {
   }
 
   // 🔍 数据传递到HTML生成的调试
-  console.log('🔍 [SIDEWIN:HTML] ===== HTML生成数据调试 =====');
-  console.log('🔍 [SIDEWIN:HTML] node 用于输入和提示词:');
+  console.log('[SIDEWIN:HTML] ===== HTML生成数据调试 =====');
+  console.log('[SIDEWIN:HTML] node 用于输入和提示词:');
   console.log('  - node.Inputs 数量:', node?.Inputs?.length || 0);
   console.log('  - node.NodeKind:', node?.NodeKind);
   console.log('  - node.prompt:', node?.prompt);
   console.log('  - node.SystemPrompt:', node?.SystemPrompt);
-  console.log('🔍 [SIDEWIN:HTML] tempNode 用于输出:');
+  console.log('[SIDEWIN:HTML] tempNode 用于输出:');
   console.log('  - tempNode.Outputs 数量:', tempNode?.Outputs?.length || 0);
   console.log('  - tempNode.Outputs 详情:', tempNode?.Outputs);
 
@@ -12497,7 +12573,7 @@ function createSideWindow(item, isCheckMode = false) {
   `;
   });
   } else {
-    console.warn('🔍 [SIDEWIN:HTML] node.Inputs 不存在或不是数组:', node?.Inputs);
+    console.warn('[SIDEWIN:HTML] node.Inputs 不存在或不是数组:', node?.Inputs);
   }
   inputsHtml += '</div>';
 
@@ -12559,7 +12635,7 @@ function createSideWindow(item, isCheckMode = false) {
       `;
   });
   } else {
-    console.warn('🔍 [SIDEWIN:HTML] tempNode.Outputs 不存在或不是数组:', tempNode?.Outputs);
+    console.warn('[SIDEWIN:HTML] tempNode.Outputs 不存在或不是数组:', tempNode?.Outputs);
   }
   outputsHtml += '</div>';
 
@@ -12585,6 +12661,15 @@ function createSideWindow(item, isCheckMode = false) {
   } catch(_) {
     debugTextRaw = (typeof tempNode?.debug === 'string' && tempNode.debug.trim().length) ? tempNode.debug : (node.debug || '');
   }
+  // 🔧 兜底：如果快照/TempMessageNode 没有同步到 debug（例如 ring 未写入导致 activeGraph 还是旧快照），
+  // 则回退到实时图（graph.save）里的节点 debug，确保侧窗能看到本次运行的后端 debug。
+  try {
+    const liveDbg = (typeof liveNode?.debug === 'string') ? liveNode.debug : '';
+    if ((!debugTextRaw || !String(debugTextRaw).trim().length) && liveDbg && String(liveDbg).trim().length) {
+      debugTextRaw = liveDbg;
+      console.warn('[SIDEWIN:DEBUG] fallback to liveNode.debug (graph.save)');
+    }
+  } catch(_) {}
 
   // 若节点报错：把 ErrorContext + 最近一次后端错误明细拼进 Debug，方便直接查看
   try {
@@ -12836,6 +12921,22 @@ function createSideWindow(item, isCheckMode = false) {
             const rawDbg = (chosenNode && typeof chosenNode.debug === 'string') ? chosenNode.debug : (pickNode.debug || '');
             debugText2 = (rawDbg || '').replace(/\\n/g, '\n');
 
+            // 🔧 兜底：历史/快照数据可能没有同步到 debug（例如 ring 未写入/仍是旧快照），
+            // 回退到实时图节点 debug，避免 onchange 把 Debug 覆盖成空。
+            try {
+              const liveN = getLiveNodeById(item.id);
+              const liveDbg = (typeof liveN?.debug === 'string') ? liveN.debug : '';
+              if ((!debugText2 || !String(debugText2).trim().length) && liveDbg && String(liveDbg).trim().length) {
+                debugText2 = String(liveDbg).replace(/\\n/g, '\n');
+                console.warn('[SIDEWIN:HISTORY:DEBUG] fallback to liveNode.debug (graph.save)');
+              }
+              const snapLen = (chosenNode && typeof chosenNode.debug === 'string') ? chosenNode.debug.length : 0;
+              const pickLen = (typeof pickNode?.debug === 'string') ? pickNode.debug.length : 0;
+              const liveLen = (typeof liveDbg === 'string') ? liveDbg.length : 0;
+              const finalLen = (typeof debugText2 === 'string') ? debugText2.length : 0;
+              console.warn('[SIDEWIN:HISTORY:DEBUGPICK]', { val, snapLen, pickLen, liveLen, finalLen });
+            } catch(_) {}
+
             const lastErr2 = window.__nodeLastBackendError && window.__nodeLastBackendError[item.id];
             const ctx2 = pickNode.ErrorContext || (chosenNode && chosenNode.ErrorContext) || '';
             const det2 = (lastErr2 && lastErr2.detail) || '';
@@ -12884,27 +12985,27 @@ function createSideWindow(item, isCheckMode = false) {
     let tempNodeForCheck = Tempnodes.find(n => n.id === item.id);
     
     // 🔍 详细调试信息 - 检查数据传递
-    console.log('🔍 [SIDEWIN:DEBUG] ===== 检查模式数据调试 =====');
-    console.log('🔍 [SIDEWIN:DEBUG] item.id:', item.id);
-    console.log('🔍 [SIDEWIN:DEBUG] Tempnodes 总数:', Tempnodes ? Tempnodes.length : 'undefined');
-    console.log('🔍 [SIDEWIN:DEBUG] tempNodeForCheck 是否存在:', !!tempNodeForCheck);
-    console.log('🔍 [SIDEWIN:DEBUG] 原始 tempNode 状态:');
-    console.log('  - isFinish:', tempNode?.isFinish);
-    console.log('  - IsRunning:', tempNode?.IsRunning);
-    console.log('  - IsError:', tempNode?.IsError);
-    console.log('  - ErrorContext:', tempNode?.ErrorContext);
+    console.warn('[SIDEWIN:DEBUG] ===== 检查模式数据调试 =====');
+    console.warn('[SIDEWIN:DEBUG] item.id:', item.id);
+    console.warn('[SIDEWIN:DEBUG] Tempnodes 总数:', Tempnodes ? Tempnodes.length : 'undefined');
+    console.warn('[SIDEWIN:DEBUG] tempNodeForCheck 是否存在:', !!tempNodeForCheck);
+    console.warn('[SIDEWIN:DEBUG] 原始 tempNode 状态:');
+    console.warn('  - isFinish:', tempNode?.isFinish);
+    console.warn('  - IsRunning:', tempNode?.IsRunning);
+    console.warn('  - IsError:', tempNode?.IsError);
+    console.warn('  - ErrorContext:', tempNode?.ErrorContext);
     
     if (tempNodeForCheck) {
-      console.log('🔍 [SIDEWIN:DEBUG] tempNodeForCheck 关键状态:');
-      console.log('  - isFinish:', tempNodeForCheck.isFinish);
-      console.log('  - IsRunning:', tempNodeForCheck.IsRunning);
-      console.log('  - IsError:', tempNodeForCheck.IsError);
-      console.log('  - ErrorContext:', tempNodeForCheck.ErrorContext);
-      console.log('  - 节点类型:', tempNodeForCheck.NodeKind || tempNodeForCheck.Kind);
-      console.log('  - 节点标签:', tempNodeForCheck.label || tempNodeForCheck.name);
+      console.warn('[SIDEWIN:DEBUG] tempNodeForCheck 关键状态:');
+      console.warn('  - isFinish:', tempNodeForCheck.isFinish);
+      console.warn('  - IsRunning:', tempNodeForCheck.IsRunning);
+      console.warn('  - IsError:', tempNodeForCheck.IsError);
+      console.warn('  - ErrorContext:', tempNodeForCheck.ErrorContext);
+      console.warn('  - 节点类型:', tempNodeForCheck.NodeKind || tempNodeForCheck.Kind);
+      console.warn('  - 节点标签:', tempNodeForCheck.label || tempNodeForCheck.name);
     } else {
-      console.error('🔍 [SIDEWIN:ERROR] 未找到 tempNodeForCheck，item.id:', item.id);
-      console.log('🔍 [SIDEWIN:DEBUG] 可用的节点ID列表:', Tempnodes.map(n => n.id));
+      console.error('[SIDEWIN:ERROR] 未找到 tempNodeForCheck，item.id:', item.id);
+      console.warn('[SIDEWIN:DEBUG] 可用的节点ID列表:', Tempnodes.map(n => n.id));
     }
     
     const statusArea = document.querySelector('.status-area');
@@ -12912,30 +13013,30 @@ function createSideWindow(item, isCheckMode = false) {
     const resultIndicator = document.getElementById('result-indicator');
     if (statusArea) statusArea.style.display = 'flex';
     
-    console.log('🔍 [SIDEWIN:DEBUG] DOM 元素状态:');
-    console.log('  - loadingIndicator:', !!loadingIndicator);
-    console.log('  - resultIndicator:', !!resultIndicator);
-    console.log('  - resultMessage:', !!resultMessage);
+    console.warn('[SIDEWIN:DEBUG] DOM 元素状态:');
+    console.warn('  - loadingIndicator:', !!loadingIndicator);
+    console.warn('  - resultIndicator:', !!resultIndicator);
+    console.warn('  - resultMessage:', !!resultMessage);
     
     // 🔍 修改后的逻辑：始终显示状态信息，但数据始终可见
-    console.log('🔍 [SIDEWIN:DEBUG] ===== 状态显示逻辑 =====');
+    console.warn('[SIDEWIN:DEBUG] ===== 状态显示逻辑 =====');
     
     if (tempNodeForCheck) {
         // 根据节点状态显示不同的状态信息
         if (tempNodeForCheck.isFinish == false) {
             // 未完成状态
-            console.log('🔍 [SIDEWIN:DEBUG] 节点未完成');
+            console.warn('[SIDEWIN:DEBUG] 节点未完成');
             
             if (tempNodeForCheck.IsRunning == true) {
                 // 正在运行
-                console.log('🔍 [SIDEWIN:DEBUG] 节点正在运行中');
+                console.warn('[SIDEWIN:DEBUG] 节点正在运行中');
                 if (tempNodeForCheck.IsError == false) {
-                    console.log('🔍 [SIDEWIN:DEBUG] 运行中无错误，显示加载指示器');
+                    console.warn('[SIDEWIN:DEBUG] 运行中无错误，显示加载指示器');
             loadingIndicator.style.display = 'block';
             resultIndicator.style.display = 'none';
             resultMessage.textContent = '';
                 } else {
-                    console.log('🔍 [SIDEWIN:DEBUG] 运行中有错误，显示错误信息');
+                    console.warn('[SIDEWIN:DEBUG] 运行中有错误，显示错误信息');
                     loadingIndicator.style.display = 'none';
                     resultMessage.textContent = `运行错误: ${tempNodeForCheck.ErrorContext || '未知错误'}`;
             resultMessage.style.color = 'red';
@@ -12943,7 +13044,7 @@ function createSideWindow(item, isCheckMode = false) {
           }
             } else {
                 // 待运行
-                console.log('🔍 [SIDEWIN:DEBUG] 节点待运行');
+                console.warn('[SIDEWIN:DEBUG] 节点待运行');
                 loadingIndicator.style.display = 'none';
           resultMessage.textContent = '待运行';
           resultMessage.style.color = 'orange';
@@ -12951,15 +13052,15 @@ function createSideWindow(item, isCheckMode = false) {
         }
         } else {
             // 已完成状态
-            console.log('🔍 [SIDEWIN:DEBUG] 节点已完成');
+            console.warn('[SIDEWIN:DEBUG] 节点已完成');
             loadingIndicator.style.display = 'none';
         
             if (tempNodeForCheck.IsError) {
-                console.log('🔍 [SIDEWIN:DEBUG] 完成但有错误');
+                console.warn('[SIDEWIN:DEBUG] 完成但有错误');
                 resultMessage.textContent = `完成但有错误: ${tempNodeForCheck.ErrorContext || '未知错误'}`;
                 resultMessage.style.color = 'red';
     } else {
-                console.log('🔍 [SIDEWIN:DEBUG] 正常完成');
+                console.warn('[SIDEWIN:DEBUG] 正常完成');
                 resultMessage.textContent = '已完成';
                 resultMessage.style.color = 'green';
             }
@@ -12967,14 +13068,14 @@ function createSideWindow(item, isCheckMode = false) {
         }
     } else {
         // 节点未找到
-        console.log('🔍 [SIDEWIN:DEBUG] 节点未找到，显示默认状态');
+        console.warn('[SIDEWIN:DEBUG] 节点未找到，显示默认状态');
         loadingIndicator.style.display = 'none';
         resultMessage.textContent = '节点数据未找到';
         resultMessage.style.color = 'gray';
         resultIndicator.style.display = 'block';
     }
     
-    console.log('🔍 [SIDEWIN:DEBUG] ===== 数据始终可见，状态仅作提示 =====');
+    console.warn('[SIDEWIN:DEBUG] ===== 数据始终可见，状态仅作提示 =====');
 } else {
     resultIndicator.style.display = 'none';
     setupRunButton(liveNode || node);
@@ -13239,9 +13340,10 @@ function setupRunButton(node) {
               delete window.__nodeLastBackendError[sendNode.id];
             }
           } catch (_) {}
+          // 后端 /run-node-single 返回字段是 debug_text；旧逻辑读 data.debug 会导致 debug 被清空
           let dbgStr = '';
           try {
-            const d = data.debug;
+            const d = (data && data.debug !== undefined) ? data.debug : (data ? data.debug_text : undefined);
             dbgStr = (d === undefined || d === null || d === '') ? '' : ((typeof d === 'string') ? d : JSON.stringify(d, null, 2));
           } catch (_) { dbgStr = ''; }
           try {
@@ -13256,7 +13358,8 @@ function setupRunButton(node) {
           } catch (_) {}
 
           // 更新输出显示，包括 Token 信息
-          updateOutputs(data.output, (data.debug ?? ''), sendNode.id);
+          // 兼容 debug/debug_text 两种字段名
+          updateOutputs(data.output, ((data && data.debug !== undefined) ? data.debug : (data ? data.debug_text : '')) ?? '', sendNode.id);
 
           // 运行完成后：同步到 ring
           try {
@@ -13288,8 +13391,9 @@ function setupRunButton(node) {
                 nodeSnap.isFinish = true;
                 nodeSnap.IsError = false;
                 nodeSnap.IsRunning = false;
-                if (typeof data.debug === 'object' || typeof data.debug === 'string') {
-                  try { nodeSnap.debug = (typeof data.debug === 'string') ? data.debug : JSON.stringify(data.debug); } catch(_) {}
+                const dd = (data && data.debug !== undefined) ? data.debug : (data ? data.debug_text : undefined);
+                if (typeof dd === 'object' || typeof dd === 'string') {
+                  try { nodeSnap.debug = (typeof dd === 'string') ? dd : JSON.stringify(dd); } catch(_) {}
                 }
               }
             } catch(_) {}
@@ -16698,7 +16802,8 @@ async function executeNode(node, count, DataTemp, nodes, edges) {
       sourceTempNode.Outputs.forEach((o, i) => Object.assign(o, data.output[i]));
       // debug：本次无 debug 则清空（避免残留上一次错误）
       try {
-        const d = data.debug;
+        // 兼容 debug/debug_text 两种字段名
+        const d = (data && data.debug !== undefined) ? data.debug : (data ? data.debug_text : undefined);
         sourceTempNode.debug = (d === undefined || d === null || d === '') ? '' : ((typeof d === 'string') ? d : JSON.stringify(d, null, 2));
       } catch (_) {
         sourceTempNode.debug = '';
