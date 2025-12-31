@@ -1338,6 +1338,42 @@ class WorkflowEngine:
             had_non_empty_since_last_preheat = False
             # 被动触发器轮询节流时间戳
             last_passivity_pull_ts = 0.0
+
+            # 🔥 关键修复：当图中存在 ArrayTrigger 节点时，清洗“来自前端的旧 array 队列”
+            # 你遇到的现象（ArrayTrigger 一直 IDLE，但队列却被消费）往往是：
+            # - array_trigger_array 里有占位项/历史残留（nodeId=None 或 nodeId 不属于当前图的 ArrayTrigger）
+            # - 导致启动时 `not local_array_trigger_array` 为 False，从而跳过 ArrayTrigger 预热
+            try:
+                array_node_ids = set()
+                if has_array_trigger:
+                    for _n in (nodes or []):
+                        if isinstance(_n, dict) and "ArrayTrigger" in str(_n.get("NodeKind", "")):
+                            if _n.get("id"):
+                                array_node_ids.add(_n.get("id"))
+
+                if has_array_trigger and not has_passivity_trigger and isinstance(local_array_trigger_array, list) and local_array_trigger_array:
+                    before = len(local_array_trigger_array)
+                    # 仅保留“由当前图的 ArrayTrigger 生成”的有效项：nodeId 命中且 outputData 非空
+                    filtered = []
+                    for it in local_array_trigger_array:
+                        if not isinstance(it, dict):
+                            continue
+                        nid = it.get("nodeId")
+                        if nid in array_node_ids and it.get("outputData") is not None:
+                            filtered.append(it)
+                    # 如果过滤后为空，但原队列非空 → 说明是旧队列/占位项，必须清空并强制预热
+                    if len(filtered) == 0 and before > 0:
+                        self._log_event(workflow_id, f"🧹 [ARRAY:SANITIZE] drop stale array_queue (before={before}) → force preheat ArrayTrigger")
+                        local_array_trigger_array = []
+                        workflow_state["pending_array_count"] = 0
+                        self._refresh_parent_array_queue(workflow_id, 0)
+                    elif len(filtered) != before:
+                        self._log_event(workflow_id, f"🧹 [ARRAY:SANITIZE] shrink array_queue {before} -> {len(filtered)}")
+                        local_array_trigger_array = filtered
+                        workflow_state["pending_array_count"] = len(local_array_trigger_array)
+                        self._refresh_parent_array_queue(workflow_id, len(local_array_trigger_array))
+            except Exception:
+                pass
             
             # 如果没有初始数据，优先预热 passivityTrigger（与JS一致）
             if not local_passivity_array and has_passivity_trigger:
@@ -1761,7 +1797,13 @@ class WorkflowEngine:
         for node in array_trigger_nodes:
             self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 节点: {node.get('label', node.get('id'))} kind={node.get('NodeKind')}")
         
-        # 第二阶段：找到连接到 ArrayTrigger 节点的上游节点
+        # 🔥 关键修复：使用统一的辅助函数执行上游普通节点
+        # 这样可以支持 Normal → ArrayTrigger 和 passivityTrigger + Normal → ArrayTrigger 两种架构
+        if array_trigger_nodes:
+            self._log_event(workflow_id, "🔴 [DEBUG] 执行 ArrayTrigger 的上游普通节点（支持 Normal → ArrayTrigger）")
+            self._execute_upstream_normal_nodes_for_array_trigger(workflow_id, data_temp, array_trigger_nodes)
+        
+        # 第二阶段：找到连接到 ArrayTrigger 节点的上游节点（保留原有逻辑用于兼容性，但主要依赖上面的辅助函数）
         connect_edges = [
             edge for edge in edges
             if any(node["id"] == edge["target"] for node in array_trigger_nodes)
@@ -1775,12 +1817,11 @@ class WorkflowEngine:
             node for node in connect_nodes
             if node is not None and "passivityTrigger" not in node.get("NodeKind", "")
         ]
-        self._log_event(workflow_id, f"🔴 [DEBUG] 找到 {len(connect_nodes)} 个上游节点")
-        for i, node in enumerate(connect_nodes):
-            self._log_event(workflow_id, f"🔴 [DEBUG] 上游节点{i}: {node.get('label', node.get('id'))}")
+        self._log_event(workflow_id, f"🔴 [DEBUG] 找到 {len(connect_nodes)} 个直接连接的上游节点（已通过辅助函数处理）")
         
-        # 第三阶段：处理所有上游节点
-        self._log_event(workflow_id, f"🔴 [DEBUG] 开始处理 {len(connect_nodes)} 个上游节点")
+        # 第三阶段：处理所有上游节点（保留原有逻辑作为兜底，但主要逻辑已在辅助函数中完成）
+        # 注意：如果辅助函数已经执行了所有上游节点，这里可能不会执行（因为节点状态已更新）
+        self._log_event(workflow_id, f"🔴 [DEBUG] 开始处理剩余的上游节点（如有）")
         
         # 🎯🎯🎯 显示 passivity 数据传递给 ArrayTrigger 的过程 🎯🎯🎯
         current_passivity_item = None
@@ -1892,22 +1933,25 @@ class WorkflowEngine:
                 # 标记运行中（仅本地数据）
                 self._update_node_status(data_temp, node["id"], {"IsRunning": True, "IsError": False})
                 
-                # 执行节点（先做最小输入就绪校验：若存在必需输入且 Context/Num/Boolean 全为空则跳过）
+                # 🔥 关键修复：执行前检查输入是否就绪（与预热场景保持一致）
                 inputs_ready_min = True
                 for inp in node.get("Inputs", []):
-                    if inp.get("Isnecessary"):
+                    if inp.get("Isnecessary", False):
                         kind = inp.get("Kind", "")
                         if kind == "Num" and inp.get("Num") is None:
                             inputs_ready_min = False
+                            self._log_event(workflow_id, f"⚠️ [PASSIVITY-ARRAY] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Num=None)")
                             break
                         if kind == "Boolean" and inp.get("Boolean") is None:
                             inputs_ready_min = False
+                            self._log_event(workflow_id, f"⚠️ [PASSIVITY-ARRAY] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Boolean=None)")
                             break
-                        if "String" in kind and inp.get("Context") is None:
+                        if "String" in kind and (inp.get("Context") is None or inp.get("Context") == ""):
                             inputs_ready_min = False
+                            self._log_event(workflow_id, f"⚠️ [PASSIVITY-ARRAY] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Context=None或空)")
                             break
                 if not inputs_ready_min:
-                    self._log_event(workflow_id, "🔴 [DEBUG] ArrayTrigger 输入未就绪，跳过本次执行")
+                    self._log_event(workflow_id, f"⏸️ [PASSIVITY-ARRAY] ArrayTrigger 输入未就绪，跳过执行: {node.get('label', node.get('id'))}")
                     self._update_node_status(data_temp, node["id"], {"IsRunning": False})
                     continue
                 # 执行节点
@@ -2047,6 +2091,168 @@ class WorkflowEngine:
                 except Exception:
                     pass
     
+    def _execute_upstream_normal_nodes_for_array_trigger(self, workflow_id, data_temp, array_trigger_nodes):
+        """
+        执行 ArrayTrigger 节点的上游普通节点（排除 trigger 类节点）
+        支持 Normal → ArrayTrigger 和 passivityTrigger + Normal → ArrayTrigger 架构
+        """
+        nodes = data_temp.get("nodes", [])
+        edges = data_temp.get("edges", [])
+        
+        # 找到所有连接到 ArrayTrigger 节点的上游节点
+        connect_edges = [
+            edge for edge in edges
+            if any(node["id"] == edge["target"] for node in array_trigger_nodes)
+        ]
+        connect_nodes = [
+            next((node for node in nodes if node["id"] == edge["source"]), None)
+            for edge in connect_edges
+        ]
+        
+        # 过滤掉 None 和 trigger 类节点（passivityTrigger、ArrayTrigger 等）
+        normal_upstream_nodes = [
+            node for node in connect_nodes
+            if node is not None and "trigger" not in node.get("NodeKind", "").lower()
+        ]
+        
+        if not normal_upstream_nodes:
+            self._log_event(workflow_id, "🔵 [UPSTREAM] ArrayTrigger 无上游普通节点，跳过")
+            return
+        
+        self._log_event(workflow_id, f"🔵 [UPSTREAM] 找到 {len(normal_upstream_nodes)} 个上游普通节点，开始执行")
+        
+        # 执行所有上游普通节点（使用拓扑排序，确保依赖关系正确）
+        # 简化版：直接执行所有上游节点（如果它们之间没有依赖，可以并行；有依赖则按顺序）
+        executed_node_ids = set()
+        
+        def _can_execute(node):
+            """检查节点是否可以执行（所有输入都已就绪）"""
+            for inp in node.get("Inputs", []):
+                if inp.get("Isnecessary", False):
+                    kind = inp.get("Kind", "")
+                    if kind == "Num" and inp.get("Num") is None:
+                        return False
+                    if kind == "Boolean" and inp.get("Boolean") is None:
+                        return False
+                    if "String" in kind and inp.get("Context") is None:
+                        return False
+            return True
+        
+        # 执行上游节点（按依赖顺序，或直接执行所有可执行的）
+        remaining_nodes = normal_upstream_nodes.copy()
+        max_iterations = len(remaining_nodes) * 2  # 防止无限循环
+        iteration = 0
+        
+        while remaining_nodes and iteration < max_iterations:
+            iteration += 1
+            executed_this_round = []
+            
+            for node in remaining_nodes:
+                if node["id"] in executed_node_ids:
+                    continue
+                
+                # 检查是否可以执行（输入已就绪）
+                if not _can_execute(node):
+                    continue
+                
+                try:
+                    self._log_event(workflow_id, f"🔵 [UPSTREAM] 执行上游节点: {node.get('label', node.get('id'))}")
+                    
+                    # 标记运行中
+                    self._update_node_status(data_temp, node["id"], {"IsRunning": True, "IsError": False})
+                    self._update_workflow_state(workflow_id, data_temp)
+                    
+                    # 处理节点
+                    processed_node = self._process_node(node)
+                    result = self._execute_node(processed_node)
+                    
+                    # 写回 debug
+                    if isinstance(result, dict):
+                        node["debug"] = result.get("debug", "")
+                    
+                    # 更新节点输出
+                    if isinstance(result, dict) and result.get("output") is not None:
+                        for idx, output in enumerate(result["output"] if isinstance(result["output"], list) else [result["output"]]):
+                            if idx < len(node.get("Outputs", [])):
+                                port_kind = node["Outputs"][idx].get("Kind", "")
+                                normalized = self._normalize_output_for_port(output, port_kind)
+                                node["Outputs"][idx].update(normalized)
+                        
+                        # 更新第一条输出的 token 信息
+                        out_list = result["output"] if isinstance(result["output"], list) else [result["output"]]
+                        if len(out_list) > 0 and len(node.get("Outputs", [])) > 0:
+                            first_output = out_list[0]
+                            if isinstance(first_output, dict):
+                                token_fields = ["prompt_tokens", "completion_tokens", "total_tokens"]
+                                for field in token_fields:
+                                    if field in first_output:
+                                        node["Outputs"][0][field] = first_output[field]
+                    
+                    # 运行完成
+                    self._update_node_status(data_temp, node["id"], {"IsRunning": False, "isFinish": True, "IsError": False, "ErrorContext": ""})
+                    
+                    # 传播输出到下游节点（包括 ArrayTrigger）
+                    outputs = result.get("output", []) if isinstance(result, dict) else []
+                    # 🔥 关键修复：处理 normalize_result 可能产生的嵌套列表
+                    # 如果 outputs 是 [[...]] 格式（嵌套列表），取第一个元素
+                    if isinstance(outputs, list) and len(outputs) == 1 and isinstance(outputs[0], list):
+                        outputs = outputs[0]
+                    if outputs:
+                        for edge in edges:
+                            if edge["source"] == node["id"]:
+                                target_nodes = [n for n in nodes if n["id"] == edge["target"]]
+                                for target_node in target_nodes:
+                                    offset = edge["sourceAnchor"] - len(node.get("Inputs", []))
+                                    if offset < 0 or offset >= len(outputs):
+                                        self._log_event(workflow_id, f"⚠️ [UPSTREAM] 跳过边传播：offset={offset} 超出范围 (outputs长度={len(outputs)})")
+                                        continue
+                                    output_item = outputs[offset] or {}
+                                    if not isinstance(output_item, dict):
+                                        output_item = self._coerce_to_dict(output_item) or {}
+                                    target_idx = edge["targetAnchor"]
+                                    if target_idx < len(target_node.get("Inputs", [])):
+                                        input_item = target_node["Inputs"][target_idx]
+                                        # 跨类型转换
+                                        ik = input_item.get("Kind", "")
+                                        conv_in = self._convert_between_kinds(output_item, ik)
+                                        if ik == "Num":
+                                            input_item["Num"] = conv_in.get("Num")
+                                        elif ik == "Boolean":
+                                            input_item["Boolean"] = conv_in.get("Boolean")
+                                        elif "String" in ik:
+                                            input_item["Context"] = conv_in.get("Context")
+                                        # 标记就绪
+                                        if "inputStatus" not in target_node:
+                                            target_node["inputStatus"] = [False] * len(target_node.get("Inputs", []))
+                                        target_node["inputStatus"][target_idx] = True
+                                        self._log_event(workflow_id, f"✅ [UPSTREAM] 数据传播成功: {node.get('label', '?')}.Outputs[{offset}] → {target_node.get('label', '?')}.Inputs[{target_idx}]({input_item.get('name', '?')}) = {conv_in.get('Context') or conv_in.get('Num') or conv_in.get('Boolean')}")
+                                    else:
+                                        self._log_event(workflow_id, f"⚠️ [UPSTREAM] 跳过边传播：target_idx={target_idx} 超出范围 (Inputs长度={len(target_node.get('Inputs', []))})")
+                    
+                    executed_node_ids.add(node["id"])
+                    executed_this_round.append(node)
+                    self._log_event(workflow_id, f"✅ [UPSTREAM] 上游节点完成: {node.get('label', node.get('id'))}")
+                    
+                except Exception as e:
+                    print(f"❌ [ERROR] 执行上游节点失败: {e}")
+                    self._log_event(workflow_id, f"❌ [UPSTREAM] 上游节点执行失败: {node.get('label', node.get('id'))} - {e}")
+                    self._update_node_status(data_temp, node["id"], {"IsRunning": False, "IsError": True, "ErrorContext": str(e)})
+                    executed_node_ids.add(node["id"])  # 标记为已处理，避免卡住
+                    executed_this_round.append(node)
+            
+            # 移除已执行的节点
+            for node in executed_this_round:
+                if node in remaining_nodes:
+                    remaining_nodes.remove(node)
+            
+            # 更新工作流状态
+            self._update_workflow_state(workflow_id, data_temp)
+        
+        if remaining_nodes:
+            self._log_event(workflow_id, f"⚠️ [UPSTREAM] 仍有 {len(remaining_nodes)} 个上游节点未执行（可能因依赖未满足）")
+        else:
+            self._log_event(workflow_id, f"✅ [UPSTREAM] 所有上游普通节点执行完成")
+    
     def _run_array_trigger_nodes(self, workflow_id, data_temp, array_trigger_array):
         """运行 ArrayTrigger 节点（模拟前端 runArrayTriggerNodes）"""
         nodes = data_temp.get("nodes", [])
@@ -2054,8 +2260,35 @@ class WorkflowEngine:
         
         nodes_to_process = [node for node in nodes if "ArrayTrigger" in node.get("NodeKind", "")]
         
+        # 🔥 关键修复：在执行 ArrayTrigger 前，先执行其上游普通节点
+        if nodes_to_process:
+            self._log_event(workflow_id, f"🔵 [ARRAY-PREHEAT] 预热 ArrayTrigger，先执行上游普通节点")
+            self._execute_upstream_normal_nodes_for_array_trigger(workflow_id, data_temp, nodes_to_process)
+        
         for node in nodes_to_process:
             try:
+                # 🔥 关键修复：执行前检查输入是否就绪
+                inputs_ready = True
+                for inp in node.get("Inputs", []):
+                    if inp.get("Isnecessary", False):
+                        kind = inp.get("Kind", "")
+                        if kind == "Num" and inp.get("Num") is None:
+                            inputs_ready = False
+                            self._log_event(workflow_id, f"⚠️ [ARRAY-PREHEAT] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Num=None)")
+                            break
+                        if kind == "Boolean" and inp.get("Boolean") is None:
+                            inputs_ready = False
+                            self._log_event(workflow_id, f"⚠️ [ARRAY-PREHEAT] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Boolean=None)")
+                            break
+                        if "String" in kind and (inp.get("Context") is None or inp.get("Context") == ""):
+                            inputs_ready = False
+                            self._log_event(workflow_id, f"⚠️ [ARRAY-PREHEAT] ArrayTrigger 输入未就绪: {inp.get('name', '?')} (Context=None或空)")
+                            break
+                
+                if not inputs_ready:
+                    self._log_event(workflow_id, f"⏸️ [ARRAY-PREHEAT] ArrayTrigger 输入未就绪，跳过执行: {node.get('label', node.get('id'))}")
+                    continue
+                
                 # 标记运行中
                 with self.lock:
                     self._update_node_status(data_temp, node["id"], {"IsRunning": True, "IsError": False})

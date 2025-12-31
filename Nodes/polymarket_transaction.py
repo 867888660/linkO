@@ -5,6 +5,16 @@ import time
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any
 
+# 标准库 HTTP（用于 Gamma API 查询；不引入额外第三方依赖）
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
+
+# 可选：链上 redeem（需要 web3.py）。若缺失则在 BURN 模式给出友好提示。
+try:
+    from web3 import Web3  # type: ignore
+except Exception:
+    Web3 = None  # type: ignore
+
 # 尝试导入第三方依赖；若缺失则标记并在运行时给出友好提示
 try:
     from eth_account import Account  # type: ignore
@@ -54,13 +64,13 @@ Inputs[4]['Kind'] = 'String_Key'
 # **功能说明**
 FunctionIntroduction = (
     '组件功能（简述代码整体功能）\n'
-    '这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、'
+    '这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作，并支持在市场已上报 payouts 后走链上 CTF redeemPositions 进行 redeem（burn winning token 换回抵押品）。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、'
     'PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n'
     '代码功能摘要（概括核心算法或主要处理步骤）\n'
-    '程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单或撤单流程，完成 API 凭据生成、构建订单对象、发送订单或执行撤单操作，将结果与调试日志写入输出。\n\n'
+    '程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n'
     '参数\n```yaml\n'
     'inputs:\n'
-    '  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n'
+    '  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n'
     '  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n'
     '  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n'
     '  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n'
@@ -77,7 +87,7 @@ FunctionIntroduction = (
     '- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n'
     '- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n'
     '- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n'
-    '- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单\n'
+    '- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单；BURN/REDEEM/DESTROY 时先撤掉该 TOKEN_ID 挂单，再用 Gamma API 仅靠 TOKEN_ID 反查 conditionId 与 clobTokenIds(YES/NO)，最后链上调用 CTF redeemPositions，并用 balanceOf 前后差额 burned>0 作为“确实销毁成功”判定（BURN 需要环境变量 POLYGON_RPC/RPC_URL 以及 web3.py）\n'
     '- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n'
     '- 返回包含 Result 和 DeBugging 的 Outputs 数组'
 )
@@ -90,6 +100,46 @@ def _append_debug(debug_list: List[str], message: str) -> None:
         print(message)
     except Exception:
         pass
+
+
+def _extract_signed_raw_tx(signed: Any) -> Any:
+    """
+    兼容不同 eth-account/web3 版本的签名结果，尽力提取可用于 send_raw_transaction 的 raw tx bytes/HexBytes。
+    - 常见字段：rawTransaction（旧） / raw_transaction（新）
+    - 也可能是 dict / AttributeDict / namedtuple（支持 key 访问）
+    """
+    # 1) 属性形式
+    raw_tx = getattr(signed, 'rawTransaction', None)
+    if raw_tx is None:
+        raw_tx = getattr(signed, 'raw_transaction', None)
+    if raw_tx is not None:
+        return raw_tx
+
+    # 2) 映射/下标形式
+    try:
+        if isinstance(signed, dict):
+            return signed.get('rawTransaction') or signed.get('raw_transaction')
+        # AttributeDict / namedtuple / list/tuple
+        if hasattr(signed, '__getitem__'):
+            try:
+                v = signed['rawTransaction']  # type: ignore[index]
+                if v is not None:
+                    return v
+            except Exception:
+                pass
+            try:
+                v = signed['raw_transaction']  # type: ignore[index]
+                if v is not None:
+                    return v
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+    raise RuntimeError(
+        "签名结果缺少 rawTransaction/raw_transaction，可能是 eth-account/web3 版本不匹配。"
+        "建议升级：pip install -U web3 eth-account"
+    )
 
 
 def _resolve_tif(mode: Optional[int]) -> str:
@@ -192,9 +242,10 @@ def _validate_for_order(side: str, price: str, size_shares: float) -> None:
         price_dec = Decimal(str(price))
     except (InvalidOperation, ValueError):
         raise ValueError(f"PRICE 不是有效数字，收到: {price}")
-    # Polymarket 常见价格范围在 (0, 1]，并且最小步长为 0.001（用户反馈/更细报价）
-    if price_dec <= 0 or price_dec > 1:
-        raise ValueError(f"PRICE 必须在 (0, 1] 之间，收到: {price}")
+    # CLOB 价格是概率（USDC 计价），有效范围通常为 [0.001, 0.999]，步长 0.001
+    # 远端会拒绝 price=1.0，并返回：min: 0.001 - max: 0.999
+    if price_dec < Decimal("0.001") or price_dec > Decimal("0.999"):
+        raise ValueError(f"PRICE 必须在 [0.001, 0.999] 之间，收到: {price}")
     # 校验：必须是 0.001 的整数倍
     scaled = price_dec * Decimal("1000")
     if scaled != scaled.to_integral_value():
@@ -294,6 +345,230 @@ def _ensure_position_allowance(c: Any, token_id: int, required: float, debug: Li
     _append_debug(debug, "未能自动设置 position 授权，若持续 400: not enough balance/allowance，请手动在钱包或 SDK 中授权")
 
 
+def _http_get_json(url: str, timeout: float, debug: Optional[List[str]] = None) -> Any:
+    req = Request(url, headers={'User-Agent': 'polymarket-transaction-node'})
+    try:
+        with urlopen(req, timeout=timeout) as resp:
+            data = resp.read().decode('utf-8')
+            return json.loads(data)
+    except (HTTPError, URLError, TimeoutError, ValueError) as e:
+        if debug is not None:
+            _append_debug(debug, f"HTTP GET failed: {url} => {e}")
+        raise
+
+
+def _gamma_find_market_by_token_id(token_id: str, debug: List[str], limit: int = 200, max_pages: int = 200) -> Optional[Dict[str, Any]]:
+    """仅靠 token_id 反查 Gamma market（不新增 Inputs）。
+    Gamma /markets 是分页接口，字段 clobTokenIds 映射到一对 YES/NO token。"""
+    base = os.getenv('GAMMA_HOST', 'https://gamma-api.polymarket.com')
+    tok = str(token_id).strip()
+    for page in range(max_pages):
+        offset = page * limit
+        url = f"{base}/markets?limit={limit}&offset={offset}"
+        payload = _http_get_json(url, REQUEST_TIMEOUT_SECONDS, debug)
+        markets = payload if isinstance(payload, list) else payload.get('data') if isinstance(payload, dict) else None
+        if not markets:
+            return None
+        for m in markets:
+            token_ids = m.get('clobTokenIds') or m.get('clobTokenIDs') or m.get('clob_token_ids')
+            if isinstance(token_ids, str):
+                try:
+                    token_ids = json.loads(token_ids)
+                except Exception:
+                    token_ids = [t.strip() for t in token_ids.strip('[]').split(',') if t.strip()]
+            if isinstance(token_ids, list) and any(str(x) == tok for x in token_ids):
+                _append_debug(debug, f"Gamma matched market id={m.get('id')} question={m.get('question')}")
+                return m
+    return None
+
+
+def _normalize_hex32(x: Any) -> str:
+    s = str(x or '').strip()
+    if not s:
+        return ''
+    if not s.startswith('0x'):
+        s = '0x' + s
+    if len(s) == 66:
+        return s
+    h = s[2:]
+    h = h.rjust(64, '0')[:64]
+    return '0x' + h
+
+
+def _burn_redeem_positions(private_key: str, token_id_int: int, market: Dict[str, Any], debug: List[str]) -> Dict[str, Any]:
+    """链上 redeemPositions：把可兑换的 winning outcome token 烧掉换回 collateral。"""
+    if Web3 is None:
+        raise RuntimeError("BURN 模式需要 web3.py：pip install web3")
+
+    rpc = os.getenv('POLYGON_RPC') or os.getenv('RPC_URL')
+    if not rpc:
+        # 默认 Polygon RPC（仍可用环境变量覆盖）。如需自定义默认值可设置 POLYGON_RPC_DEFAULT。
+        rpc = os.getenv('POLYGON_RPC_DEFAULT', 'https://polygon-rpc.com')
+        _append_debug(debug, f"未设置 POLYGON_RPC/RPC_URL，使用默认 RPC: {rpc}")
+    if not rpc:
+        raise RuntimeError("缺少 RPC。请设置环境变量 POLYGON_RPC 或 RPC_URL（Polygon/137）")
+
+    # CTF 合约地址：官方文档给了两个 Polygon Mainnet 部署地址，优先用环境变量覆盖。
+    ctf_addr = os.getenv('CTF_ADDRESS', '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045')
+
+    # collateral 默认 USDC.e（Polygon PoS bridged USDC）。可用环境变量覆盖。
+    collateral = os.getenv('COLLATERAL_TOKEN', '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174')
+
+    condition_id = _normalize_hex32(market.get('conditionId') or market.get('condition_id'))
+    if not condition_id:
+        raise RuntimeError("Gamma market 未提供 conditionId，无法 redeem")
+
+    token_ids = market.get('clobTokenIds') or market.get('clobTokenIDs') or market.get('clob_token_ids')
+    if isinstance(token_ids, str):
+        try:
+            token_ids = json.loads(token_ids)
+        except Exception:
+            token_ids = [t.strip() for t in token_ids.strip('[]').split(',') if t.strip()]
+    if not (isinstance(token_ids, list) and len(token_ids) >= 2):
+        raise RuntimeError("Gamma market 缺少 clobTokenIds（YES/NO），无法确定 indexSet")
+
+    # 二元市场 indexSets 为 1 / 2（bitmask）
+    idx = None
+    for i, tid in enumerate(token_ids[:2]):
+        if str(tid) == str(token_id_int):
+            idx = i
+            break
+    if idx is None:
+        raise RuntimeError("token_id 不在该 market 的 clobTokenIds 中，无法确定 indexSet")
+    index_set = 1 if idx == 0 else 2
+
+    w3 = Web3(Web3.HTTPProvider(rpc, request_kwargs={'timeout': REQUEST_TIMEOUT_SECONDS}))
+    # Polygon/Bor 等链的区块头 extraData 可能 >32 bytes，需要注入 POA middleware（兼容不同 web3 版本）
+    injected = False
+    inject_errs: List[str] = []
+    # 1) 经典路径（web3.py v5/v6 常见）
+    try:
+        from web3.middleware import geth_poa_middleware  # type: ignore
+        # 尝试多种注入方式
+        try:
+            w3.middleware_onion.inject(geth_poa_middleware, layer=0)
+        except (TypeError, AttributeError):
+            # 某些版本可能需要实例化或使用 add()
+            try:
+                w3.middleware_onion.add(geth_poa_middleware)
+            except Exception:
+                w3.middleware_onion.inject(geth_poa_middleware(), layer=0)  # type: ignore
+        injected = True
+        _append_debug(debug, "已注入 geth_poa_middleware（解决 extraData 长度问题）")
+    except Exception as e:
+        inject_errs.append(f"geth_poa_middleware: {e}")
+    # 2) 新路径（部分版本在 proof_of_authority 下）
+    if not injected:
+        try:
+            from web3.middleware.proof_of_authority import ExtraDataToPOAMiddleware  # type: ignore
+            try:
+                w3.middleware_onion.inject(ExtraDataToPOAMiddleware, layer=0)
+            except TypeError:
+                w3.middleware_onion.inject(ExtraDataToPOAMiddleware(), layer=0)  # type: ignore
+            injected = True
+            _append_debug(debug, "已注入 ExtraDataToPOAMiddleware（解决 extraData 长度问题）")
+        except Exception as e:
+            inject_errs.append(f"ExtraDataToPOAMiddleware: {e}")
+    # 3) 进一步兜底：construct_poa_middleware()
+    if not injected:
+        try:
+            from web3.middleware.proof_of_authority import construct_poa_middleware  # type: ignore
+            w3.middleware_onion.inject(construct_poa_middleware(), layer=0)  # type: ignore
+            injected = True
+            _append_debug(debug, "已注入 construct_poa_middleware()（解决 extraData 长度问题）")
+        except Exception as e:
+            inject_errs.append(f"construct_poa_middleware: {e}")
+    if not injected:
+        raise RuntimeError(
+            "连接 Polygon 需要 PoA middleware，但当前环境未能注入（请升级 web3 或更换 RPC）。注入错误："
+            + " | ".join(inject_errs)
+        )
+    # 注入后立即测试：尝试获取最新区块，验证 middleware 是否生效
+    try:
+        _ = w3.eth.get_block('latest')
+        _append_debug(debug, "PoA middleware 测试通过：成功获取最新区块")
+    except Exception as test_e:
+        err_msg = str(test_e)
+        if 'extraData' in err_msg:
+            raise RuntimeError(
+                f"PoA middleware 注入失败或未生效（仍报 extraData 错误）。"
+                f"请检查 web3 版本（建议 pip install -U web3）或更换 RPC。"
+                f"测试错误：{err_msg}"
+            )
+        _append_debug(debug, f"PoA middleware 测试时出现其他错误（可忽略）：{test_e}")
+    acct = w3.eth.account.from_key(private_key)
+    wallet = acct.address
+
+    abi = [
+        {
+            'inputs': [
+                {'internalType': 'address', 'name': 'collateralToken', 'type': 'address'},
+                {'internalType': 'bytes32', 'name': 'parentCollectionId', 'type': 'bytes32'},
+                {'internalType': 'bytes32', 'name': 'conditionId', 'type': 'bytes32'},
+                {'internalType': 'uint256[]', 'name': 'indexSets', 'type': 'uint256[]'},
+            ],
+            'name': 'redeemPositions',
+            'outputs': [],
+            'stateMutability': 'nonpayable',
+            'type': 'function',
+        },
+        {
+            'inputs': [
+                {'internalType': 'address', 'name': 'account', 'type': 'address'},
+                {'internalType': 'uint256', 'name': 'id', 'type': 'uint256'},
+            ],
+            'name': 'balanceOf',
+            'outputs': [{'internalType': 'uint256', 'name': '', 'type': 'uint256'}],
+            'stateMutability': 'view',
+            'type': 'function',
+        },
+    ]
+
+    ctf = w3.eth.contract(address=w3.to_checksum_address(ctf_addr), abi=abi)
+    before_bal = int(ctf.functions.balanceOf(wallet, int(token_id_int)).call())
+    _append_debug(debug, f"CTF balance(before) token_id={token_id_int} => {before_bal}")
+
+    tx = ctf.functions.redeemPositions(
+        w3.to_checksum_address(collateral),
+        b'\x00' * 32,
+        bytes.fromhex(condition_id[2:]),
+        [int(index_set)],
+    ).build_transaction({
+        'from': wallet,
+        'nonce': w3.eth.get_transaction_count(wallet),
+        'chainId': int(os.getenv('CHAIN_ID', '137')),
+    })
+    try:
+        tx['gas'] = w3.eth.estimate_gas(tx)
+    except Exception as e:
+        _append_debug(debug, f"estimate_gas failed: {e}")
+    if 'gasPrice' not in tx and 'maxFeePerGas' not in tx:
+        try:
+            tx['gasPrice'] = w3.eth.gas_price
+        except Exception:
+            pass
+
+    signed = acct.sign_transaction(tx)
+    raw_tx = _extract_signed_raw_tx(signed)
+    tx_hash = w3.eth.send_raw_transaction(raw_tx)
+    _append_debug(debug, f"redeemPositions tx sent => {tx_hash.hex()}")
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=int(os.getenv('REDEEM_TIMEOUT', '180')))
+    ok = int(getattr(receipt, 'status', 0)) == 1
+    after_bal = int(ctf.functions.balanceOf(wallet, int(token_id_int)).call())
+    _append_debug(debug, f"CTF balance(after) token_id={token_id_int} => {after_bal}")
+
+    return {
+        'tx_hash': tx_hash.hex(),
+        'receipt_status': int(getattr(receipt, 'status', 0)),
+        'burned': max(0, before_bal - after_bal),
+        'index_set': index_set,
+        'condition_id': condition_id,
+        'collateral': collateral,
+        'ctf': ctf_addr,
+        'ok': ok,
+    }
+
+
 def run_node(node):
     Debugging: List[str] = []
     # 依赖缺失时，直接返回结构化错误，避免前端加载节点失败
@@ -357,9 +632,15 @@ def run_node(node):
                 raise ValueError("BUY/SELL 需要 PRICE")
             if not size:
                 raise ValueError("BUY/SELL 需要 SIZE_SHARES")
-            _validate_for_order(mode, price, float(size))
-            # 统一将价格规范到三位小数，避免浮点误差导致的步长/过滤问题
+            # 统一将价格规范到三位小数，并钳制到 [0.001, 0.999]，避免 0.9995 四舍五入到 1.000 被 CLOB 拒绝
             price_norm = Decimal(str(price)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)
+            if price_norm > Decimal("0.999"):
+                _append_debug(Debugging, f"PRICE 过大（{price_norm}），已钳制到 0.999（CLOB max=0.999）")
+                price_norm = Decimal("0.999")
+            if price_norm < Decimal("0.001"):
+                _append_debug(Debugging, f"PRICE 过小（{price_norm}），已钳制到 0.001（CLOB min=0.001）")
+                price_norm = Decimal("0.001")
+            _validate_for_order(mode, str(price_norm), float(size))
             _append_debug(Debugging, f"order args => side={mode}, price={price_norm}, size={size}, tif={tif}")
             # SELL 前置：检查余额并尝试确保授权
             token_id_int = int(token_id)
@@ -420,8 +701,45 @@ def run_node(node):
                             break
                 result.update({"success": True, "action": "WITHDRAW_ORDER", "cancelled": cancelled, "matched": len(targets)})
                 success_out = True
+        elif mode in ("BURN", "DESTROY", "REDEEM"):
+            # 1) 先撤掉该 token 的所有在挂单（避免边 redeem 边成交导致余额变化）
+            open_orders = [od for od in _list_open_orders(client, Debugging) if od.get('status') in ("live", "partial_fill")]
+            targets = [od for od in open_orders if str(od.get('token_id')) == token_id]
+            cancelled = 0
+            for od in targets:
+                oid = od.get('orderID') or od.get('order_id')
+                if not oid:
+                    continue
+                for method in ("cancel_order", "cancel", "delete_order"):
+                    if hasattr(client, method):
+                        r = _with_retry(getattr(client, method), oid, debug=Debugging, label=f"{method}({oid})")
+                        cancelled += 1
+                        _append_debug(Debugging, f"cancel -> {oid} :: {r}")
+                        break
+
+            # 2) 反查 Gamma market（仅用 TOKEN_ID，不新增 Inputs）
+            mkt = _gamma_find_market_by_token_id(token_id, Debugging)
+            if not mkt:
+                raise RuntimeError("未能通过 Gamma 找到对应 market（请检查 TOKEN_ID 是否正确，或增大扫描页数/limit）")
+
+            # 3) 链上 redeemPositions（需要 web3.py + Polygon RPC）
+            token_id_int = int(token_id)
+            burn_info = _burn_redeem_positions(private_key, token_id_int, mkt, Debugging)
+
+            # 4) 判定完成：tx 成功且 burned>0 视为“确实销毁/领取成功”
+            burned = int(burn_info.get('burned') or 0)
+            ok = bool(burn_info.get('ok'))
+            success_out = bool(ok and burned > 0)
+            result.update({
+                "success": bool(ok),
+                "action": "BURN",
+                "token_id": token_id,
+                "cancelled_orders": cancelled,
+                "burn": burn_info,
+                "note": ("redeem tx 成功但本次未烧掉任何 token：可能未到可领取阶段 / 不是赢方 / 余额为0" if ok and burned == 0 else ""),
+            })
         else:
-            raise ValueError("Mode 必须是 BUY、SELL 或 WITHDRAW_ORDER")
+            raise ValueError("Mode 必须是 BUY、SELL、WITHDRAW_ORDER 或 BURN")
 
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False)
         Outputs[2]['Context'] = "true" if success_out else "false"

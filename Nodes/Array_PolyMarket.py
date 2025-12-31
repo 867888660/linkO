@@ -4,8 +4,6 @@ import copy
 from datetime import datetime, timezone
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from math import ceil
-
 try:
     # py3.9+
     from zoneinfo import ZoneInfo
@@ -39,7 +37,7 @@ NDIGITS_USD   = 2   # 美元金额/深度/数量类（>=0）
 # ====================================================================
 
 # -------------------------
-# 配置：输入 1 个（JSON 路径），输出槽= 1(聚合Json_Save) + 字段清单长度
+# 配置：输入 2 个（JSON 路径 + size限制），输出槽= 1(聚合Json_Save) + 字段清单长度
 # -------------------------
 InPutNum = 1
 
@@ -90,8 +88,14 @@ FIELD_NAMES = [
     'apr_eff_if_win',
     'query_time_beijing',
 
-    # 新增字段：务必追加在末尾，避免改变既有输出槽编号导致工作流“错位”
+    # 新增字段：务必追加在末尾，避免改变既有输出槽编号导致工作流"错位"
     'opp_token',
+    # 钱包仓位兼容字段：务必追加在末尾
+    'currentPrice',
+    'currentValue',
+    'size',  # 仓位大小/份额（兼容 size/shares/quantity/amount/balance）
+    # ArrayTrigger 控制字段：是否为最后一条（布尔）
+    'Islast',
 ]
 
 # 额外 +1 个聚合输出槽：Json_Save
@@ -126,12 +130,15 @@ Inputs[0]['name'] = 'Js_FilePath'
 Inputs[0]['Isnecessary'] = True
 Inputs[0]['IsLabel'] = False
 
+
 for i, out_def in enumerate(Outputs):
-    out_def['Kind'] = 'String'
     if i == 0:
         out_def['name'] = 'Json_Save'   # 新增的聚合输出
+        out_def['Kind'] = 'String'
     else:
         out_def['name'] = FIELD_NAMES[i - 1]   # 其它槽仍按字段命名
+        # Islast 用 Boolean，其余保持 String
+        out_def['Kind'] = 'Boolean' if out_def['name'] == 'Islast' else 'String'
 
 # -------------------------
 # 工具函数（兜底清洗）
@@ -316,11 +323,11 @@ def _parse_end_datetime(endDate_raw):
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
 
-def _calc_days_to_end(endDate_raw, now_utc=None):
+def _calc_days_to_end(endDate_raw, now_utc=None, ndigits=4):
     """
-    以北京时间口径计算 days_to_end（向上取整），并保证不为负：
-    - endDate <= now → 0
-    - 其它 → ceil((end - now)/86400)
+    计算 days_to_end（保留 ndigits 位小数），并保证不为负：
+    - endDate <= now → 0.0000
+    - 其它 → round((end - now)/86400, ndigits)
     解析失败返回 ''（不覆盖原值）。
     """
     end_dt = _parse_end_datetime(endDate_raw)
@@ -329,19 +336,27 @@ def _calc_days_to_end(endDate_raw, now_utc=None):
     if now_utc is None:
         now_utc = datetime.now(timezone.utc)
 
-    if ZoneInfo is not None:
-        tz_bj = ZoneInfo('Asia/Shanghai')
-    else:
-        # 兜底：固定 +8
-        from datetime import timedelta
-        tz_bj = timezone(timedelta(hours=8))
-
-    end_bj = end_dt.astimezone(tz_bj)
-    now_bj = now_utc.astimezone(tz_bj)
-    delta_seconds = (end_bj - now_bj).total_seconds()
+    # 用 UTC 计算即可（时区转换不改变时间差）
+    end_u = end_dt.astimezone(timezone.utc)
+    now_u = now_utc.astimezone(timezone.utc)
+    delta_seconds = (end_u - now_u).total_seconds()
     if delta_seconds <= 0:
-        return '0'
-    return str(int(ceil(delta_seconds / 86400.0)))
+        # 固定输出小数位，便于表格展示
+        if ndigits <= 0:
+            return '0'
+        return '0.' + ('0' * int(ndigits))
+
+    try:
+        d = Decimal(str(delta_seconds)) / Decimal('86400')
+        q = Decimal(1).scaleb(-int(ndigits))
+        d = d.quantize(q, rounding=ROUND_HALF_UP)
+        return format(d, 'f')
+    except Exception:
+        # 极端兜底
+        val = delta_seconds / 86400.0
+        if ndigits is None or ndigits <= 0:
+            return str(int(val))
+        return f"{val:.{int(ndigits)}f}"
 
 def _is_negative_number(x):
     """
@@ -380,9 +395,9 @@ def run_node(node):
     Array = []
     all_records = []  # 用于 Json_Save 的聚合数组
 
-    # 1) 读取输入文件路径
+    # 1) 读取输入文件路径和 size 参数
     json_path = node['Inputs'][0]['Context']
-    _dbg(debug, 'start run_node; file =', json_path, 'exists =', os.path.exists(json_path))
+
     if not json_path or not os.path.exists(json_path):
         _dbg(debug, 'early return: file path invalid or not exists')
         return Array
@@ -427,11 +442,13 @@ def run_node(node):
         url = _get(m, 'url')
         query_time_beijing = _get(m, 'query_time_beijing')
 
-        # 修正 days_to_end：当原值缺失/不合法/为负（常见于时区不一致）时，按北京时间重算
-        # 说明：如果上游已经给了正确的非负天数，这里不会覆盖，避免改变既有工作流语义。
-        calc_days = _calc_days_to_end(endDate)
-        if calc_days and (not str(days_to_end).strip() or _is_negative_number(days_to_end)):
-            _dbg(debug, f'fix days_to_end: raw={days_to_end} -> calc={calc_days} (endDate={endDate})')
+        # 统一重算 days_to_end（输出 4 位小数），并钳制到 >=0。
+        # 这样你在“当天”看到的会是类似 0.3758 的剩余天数，而不是 0 或负数。
+        calc_days = _calc_days_to_end(endDate, ndigits=4)
+        if calc_days:
+            # 若上游给了负数/整数/其它格式，这里统一覆盖为规范化小数
+            if str(days_to_end).strip() != str(calc_days):
+                _dbg(debug, f'normalize days_to_end: raw={days_to_end} -> calc={calc_days} (endDate={endDate})')
             days_to_end = calc_days
 
         options = m.get('options')
@@ -470,6 +487,15 @@ def run_node(node):
                 'opp_token': _get(src, 'opp_token'),
                 'ask': _num(_get(src, 'ask'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
                 'bid': _num(_get(src, 'bid'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
+                # 钱包仓位字段（兼容 PolyMarket_WalletPositions_BatchSave.py）
+                # currentPrice：0~1；优先 currentPrice，其次 current_price；再其次用 ask/bid 的值
+                'currentPrice': _num(_get(src, 'currentPrice', 'current_price', 'curPrice', 'cur_price', 'ask'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
+                # currentValue：USD 金额（>=0）；兼容 currentValue / CUR_VALUE / value
+                'currentValue': _num(_get(src, 'currentValue', 'current_value', 'CUR_VALUE', 'curValue', 'cur_value', 'value'), ndigits=NDIGITS_USD, lo=0),
+                # size：仓位大小/份额（>=0）；兼容 size / shares / quantity / amount / balance
+                'size': _num(_get(src, 'size', 'shares', 'quantity', 'amount', 'balance'), ndigits=NDIGITS_USD, lo=0),
+                # ArrayTrigger 控制字段：默认 false，最后一条会在循环结束后统一置 true
+                'Islast': False,
                 # 价差（单位：美分），来源通常是整数 0,1,2,... 不能按 0~1 概率清洗
                 'l1_spread_c': _int_nonneg(_get(src, 'l1_spread_c')),
                 'band_c_used': _s(_get(src, 'band_c_used')),
@@ -521,7 +547,11 @@ def run_node(node):
                 row = copy.deepcopy(Outputs)
                 row[0]['Context'] = ''  # Json_Save 循环后统一填
                 for i, field in enumerate(FIELD_NAMES, start=1):
-                    row[i]['Context'] = _s(record.get(field, ''))
+                    if field == 'Islast':
+                        row[i]['Boolean'] = False
+                        row[i]['Context'] = ''  # Boolean 类型不依赖 Context
+                    else:
+                        row[i]['Context'] = _s(record.get(field, ''))
                 Array.append(row)
         else:
             # 扁平结构：每条条目本身就是一个“option 快照”
@@ -538,12 +568,17 @@ def run_node(node):
             row = copy.deepcopy(Outputs)
             row[0]['Context'] = ''  # Json_Save 循环后统一填
             for i, field in enumerate(FIELD_NAMES, start=1):
-                row[i]['Context'] = _s(record.get(field, ''))
+                if field == 'Islast':
+                    row[i]['Boolean'] = False
+                    row[i]['Context'] = ''
+                else:
+                    row[i]['Context'] = _s(record.get(field, ''))
             Array.append(row)
 
         n_markets += 1
 
-    # 4) 生成整批 Json，一次性字符串，回填到每条记录的 Json_Save 槽
+    original_count = len(Array)
+    # 5) 生成整批 Json，一次性字符串，回填到每条记录的 Json_Save 槽
     try:
         json_save_str = json.dumps(all_records, ensure_ascii=False)
         _dbg(debug, 'json.dumps(all_records) ok; records =', len(all_records))
@@ -561,6 +596,30 @@ def run_node(node):
     for row in Array:
         row[0]['Context'] = json_save_str
 
+    # 6) 设置 Islast：仅最后一条为 True
+    try:
+        islast_idx = None
+        for idx, out_def in enumerate(Outputs):
+            if out_def.get('name') == 'Islast':
+                islast_idx = idx
+                break
+        if islast_idx is not None and Array:
+            # 先全部置 False
+            for r in Array:
+                try:
+                    r[islast_idx]['Boolean'] = False
+                    r[islast_idx]['Context'] = ''
+                except Exception:
+                    pass
+            # 最后一条置 True
+            try:
+                Array[-1][islast_idx]['Boolean'] = True
+                Array[-1][islast_idx]['Context'] = ''
+            except Exception:
+                pass
+    except Exception:
+        pass
+
     # 收尾关键信息：本次输出条目数（Array 长度）与记录数
     _dbg(debug,
          'done.',
@@ -568,7 +627,9 @@ def run_node(node):
          'options_total =', n_options_total,
          'flats_total =', n_flat_total,
          'records_appended =', n_records_appended,
-         'rows =', len(Array))
+         'original_rows =', original_count,
+         'final_rows =', len(Array)
+         )
     # === 返回值兜底：保证二维数组形状 ===
     def _looks_like_output_slot(x):
         return isinstance(x, dict) and isinstance(x.get('Id'), str) and x['Id'].startswith('Output')

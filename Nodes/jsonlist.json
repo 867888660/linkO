@@ -55,7 +55,7 @@
     },
     {
         "Filename": "Array_PolyMarket.py",
-        "Hash": "0fe8386fcb70a1b601a3019c7a92ce205f12d8d98af9515a11cbf4f5a2736816",
+        "Hash": "3860d9c85ecc29d523c3597e1f3792632880a4e1ff58583b0c8ed3fd0b7ebde0",
         "NodeKind": "ArrayTrigger",
         "NodeFunction": "组件功能：这是一个数组触发器节点，用于根据指定的数字范围生成包含输出节点序列的数组。\n\n代码功能摘要：接收起始和结束数字作为输入，通过循环遍历指定范围内的每个数字，为每个数字创建一个输出节点的深拷贝并存储到数组中，最终返回包含所有数字序列的数组。\n\n参数：\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: integer\\n    required: true\\n    description: 数字范围的起始值\\n  - name: Input2\\n    type: integer\\n    required: true\\n    description: 数字范围的结束值（包含）\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 生成的数组序列，包含指定范围内所有数字对应的输出节点\\n```\n\n运行逻辑：\\n- 从输入节点获取起始数字Start_Num和结束数字End_Num\\n- 初始化空数组Array用于存储结果\\n- 使用for循环遍历从Start_Num到End_Num+1的范围（包含结束值）\\n- 在每次循环中，将当前数字i赋值给输出节点的Num属性\\n- 对当前输出节点进行深拷贝并添加到Array数组中\\n- 循环结束后返回包含所有数字序列的Array数组\\n- 每个数组元素都是一个完整的输出节点对象，包含对应的数字值"
     },
@@ -139,9 +139,9 @@
     },
     {
         "Filename": "Crypto_Binance.py",
-        "Hash": "141a469e77a159e9d54f7d59d053f38c96900d96b13393042687a3e00cd855ac",
-        "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个Crypto行情抓取节点：输入Binance交易对名称列表（如BTCUSDT,ETHUSDT），输出这些交易对的最新价、24h成交量等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 调用Binance Spot REST接口 /api/v3/ticker/24hr 并使用 symbols=[...] 一次性批量查询\\n- 标准化字段：symbol、price(lastPrice)、vol_24h(volume)、quote_vol_24h(quoteVolume)、closeTime等\\n- 输出为JSON字符串写入OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 交易对名称列表，逗号或空格分隔，例如 \"BTCUSDT,ETHUSDT\"\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个交易对的最新价/成交量等\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为symbols字符串\\n- 解析并清洗成交易对数组（转大写，去空）\\n- GET Binance /api/v3/ticker/24hr?symbols=[...]&type=MINI\\n- 组装结果列表并输出JSON"
+        "Hash": "31e7768f3c507f058366306693b27008d7f8288c6fc4add168f98e196d4226fe",
+        "NodeKind": "Unknown",
+        "NodeFunction": "组件功能\n"
     },
     {
         "Filename": "DataBase.py",
@@ -379,7 +379,7 @@
     },
     {
         "Filename": "passivityTrigger_PolyMarket.py",
-        "Hash": "70a3a5ce8ce1c7560c05012d8fc108b4980e3ca17ec036ecc2d14c2e1c83cfab",
+        "Hash": "ba6b28f8e9215ffd534388e8de230dafd00080b3e1f990fa3da2f9d5c07b1c01",
         "NodeKind": "passivityTrigger",
         "NodeFunction": "组件功能：Agent A（爬虫+初筛，passivityTrigger 模式）。功能概览：1) 逐页抓取 /markets（withTokens/withClobTokenIds/withOutcomes），提取 clob tokenId；2) 批量调用 /prices 获取 YES ask；3) 为每个 token 计算盘口 L1（best bid/ask）、自适应 1¢ 带宽内深度、订单聚集度、带内 VWAP，并计算期限指标（days_to_end、daily_eff_if_win、apr_eff_if_win）；4) 先按价格区间 [min_yes, max_yes] 筛选，再按 l1_spread_c（L1 价差上限，单位美分）与 min_depth_1c_usd（1¢ 带宽内买卖深度较小值的美元下限）二次过滤；5) 每页处理完即单独落盘 JSON，包含规则/来源/URL 与各选项细节；6) 支持 offset_end：-1 为无上限模式（按 limit 递进，遇尾页暂停），>0 为边界模式（从 offset_start 递增至 offset_end 后停止，不回绕）；7) 每次仅处理一页并返回（Save_Path, DeBug），内部以 node._state.next_offset 记忆续跑位置。"
     },
@@ -388,6 +388,18 @@
         "Hash": "b2ca37991a035b69f97be5707a75e1d878bde80c91533339ebdc38e3d307bb26",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个图像边界框标注组件，用于在图像上绘制文本检测结果的边界框和对应文字。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n该组件接收图片路径和包含文字位置信息的JSON数据，解析JSON中的prism_wordsInfo数组获取文字的多边形边界框坐标和内容，然后使用OpenCV和PIL库在图像上绘制红色边界框和绿色文字标注，最终保存为带有\"_annotated\"后缀的标注图片。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: PicPath\\n    type: file\\n    required: true\\n    description: 输入图片文件路径\\n  - name: Bounding\\n    type: string\\n    required: true\\n    description: 包含文字位置和内容信息的JSON格式数据\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 标注后的图片保存路径\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 接收输入的图片路径和边界框JSON数据\\n- 规范化文件路径，处理双反斜杠等路径问题\\n- 检查图片文件是否存在，如不存在则尝试查找大小写不同的同名文件\\n- 解析输入的JSON字符串，提取prism_wordsInfo数组中的文字信息\\n- 尝试使用OpenCV读取图片，失败则使用PIL读取\\n- 如果图片读取失败，根据JSON中的尺寸信息创建空白画布\\n- 将OpenCV图像转换为PIL格式以支持中文字体渲染\\n- 尝试加载支持中文的系统字体（SimHei、SimSun、Microsoft YaHei等）\\n- 遍历每个文字信息，提取多边形边界框坐标点\\n- 使用OpenCV在图像上绘制红色多边形边界框\\n- 使用PIL在边界框上方绘制绿色文字内容\\n- 生成输出文件名，在原文件名后添加\"_annotated\"后缀\\n- 尝试使用OpenCV保存图片，失败则使用PIL保存\\n- 验证输出文件是否成功创建且大小不为零\\n- 返回标注后图片的完整路径"
+    },
+    {
+        "Filename": "polymarket_redeem.py",
+        "Hash": "89e32bcee7dc02d658d60d5e02e3e7a5085784141a7d15c4bbbc364541b0a927",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点仅保留必要 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME。运行时读取 RPC/合约地址等环境变量，调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n参数\n```yaml\ninputs:\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x... 或环境变量名）\n  - name: CONDITION_ID\n    type: string\n    required: true\n    description: CTF conditionId（bytes32，0x... 64 hex）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: CTF position token id（uint256，通常与 clobTokenIds 对应）\n  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 判定完成（tx 成功且 burned>0）时为 true，否则 false\n  - name: TxHash\n    type: string\n    description: 交易哈希（失败为空字符串）\n```\n\n环境变量（不新增 Inputs）\n"
+    },
+    {
+        "Filename": "PolyMarket_RefreshWallet.py",
+        "Hash": "2445ac11aaeddea87d9ede28577a0a26deb8a31dd0cbe76474e67cee6a935403",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个数据库刷新节点，用于补齐 polyMarket_Wallet 表中缺失的列信息，并在完成后复制生成 polyMarket_Sell 表。节点从数据库中检索所有包含 token 字段的表，根据 token 字段匹配并按照 query_time_beijing 筛选最新记录，将最新记录的其他列信息补充到 polyMarket_Wallet 表中（仅填充空值，已存在的值不覆盖），最后将更新后的 polyMarket_Wallet 表复制为 polyMarket_Sell 表（如果已存在则覆盖）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序连接 SQLite 数据库，读取 polyMarket_Wallet 表作为目标表，然后遍历数据库中所有表，筛选出包含 token 和 query_time_beijing 字段的表作为数据源。对于 polyMarket_Wallet 中的每一行，根据 token 字段在所有源表中查找匹配记录，按照 query_time_beijing 降序排序（空值视为最旧）选择最新记录，将源记录中存在的且目标表中对应列为空的字段值填充到目标行，最后将更新后的数据写回数据库，并将完整的 polyMarket_Wallet 表复制为 polyMarket_Sell 表。\n\n参数\n```yaml\ninputs:\n  - name: FilePath\n    type: file\n    required: true\n    description: SQLite 数据库文件路径\noutputs:\n  - name: Result\n    type: string\n    description: 执行结果摘要信息（包括处理的记录数、更新的字段数、表复制状态等）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 从输入节点获取数据库文件路径 FilePath\n- 连接 SQLite 数据库，读取 polyMarket_Wallet 表作为目标表\n- 获取数据库中所有表名，筛选出包含 token 和 query_time_beijing 字段的表作为数据源表\n- 对于 polyMarket_Wallet 中的每一行，提取其 token 值\n- 在所有源表中按 token 匹配记录，对每条匹配记录按照 query_time_beijing 进行排序（空值视为最旧，最新的在前）\n- 选择排序后的第一条记录作为最新记录\n- 遍历最新记录的所有字段，对于目标表中对应列为空（None、空字符串、NULL）的字段，使用源记录的值填充\n- 收集所有更新后的行，一次性写回 polyMarket_Wallet 表\n- 将 polyMarket_Wallet 表完整复制为 polyMarket_Sell 表（如果已存在则先删除再创建）\n- 生成执行摘要，包括处理的记录数、更新的字段数、表复制状态等信息，输出到 Result"
     },
     {
         "Filename": "PolyMarket_Research.py",
@@ -403,9 +415,15 @@
     },
     {
         "Filename": "polymarket_transaction.py",
-        "Hash": "462dccae822ef936754f41b9ff2f6cee80ee99a35910c2e1c8a9d8a5aa745dc0",
+        "Hash": "24f69ed52f24fdafb9d14256faceedc18b52a9ca9b9d38e2cab8270be854a913",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单或撤单流程，完成 API 凭据生成、构建订单对象、发送订单或执行撤单操作，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单\n- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n- 返回包含 Result 和 DeBugging 的 Outputs 数组"
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作，并支持在市场已上报 payouts 后走链上 CTF redeemPositions 进行 redeem（burn winning token 换回抵押品）。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n"
+    },
+    {
+        "Filename": "PolyMarket_WalletPositions_BatchSave.py",
+        "Hash": "aef53effdedda3285aec0880fa60c5f2b34021ccce3b1308966dbc3a1b9e85b2",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个 Polymarket 钱包仓位查询与批量保存节点，用于查询指定钱包地址在 Polymarket 上的所有仓位信息，包括 positions、value、conditionId/indexSet 等，并将结果按批次保存为多个 JSON 文件。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点通过 data-api 获取 positions 和 value，通过 gamma-api 查询 conditionId/indexSet 映射，支持自动扫描 proxyWallet 并二次查询，最终将数据按批次（每批默认 50 条）拆分成多个 JSON 文件保存。\n\n参数\n```yaml\ninputs:\n  - name: Address\n    type: string\n    required: true\n    description: 钱包地址（0x...）\n  - name: SavePath\n    type: string\n    required: true\n    description: JSON 文件保存目录路径\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串（包含统计信息）\n  - name: SavePath\n    type: string\n    description: 实际保存的目录路径\n  - name: TOTAL CUR_VALUE\n    type: string\n    description: 总当前价值（浮点数字符串）\n```\n\n运行逻辑\n- 从输入节点获取钱包地址和保存路径\n- 调用 data-api /positions 获取仓位列表\n- 调用 data-api /value 获取总资产价值\n- 对每个 tokenId 调用 gamma-api 查询 conditionId/indexSet\n- 自动收集并查询 proxyWallet（如果存在）\n- 将数据按批次（每批 50 条）拆分成多个 JSON 文件保存\n- 返回统计信息和保存路径\n"
     },
     {
         "Filename": "PPtDesign.py",

@@ -594,6 +594,22 @@ def _parse_end_ts_safe(end_date_str: str) -> float:
 
 _GAMMA_MIDNIGHT_UTC_RE = re.compile(r"^\s*(\d{4})-(\d{2})-(\d{2})T00:00:00(?:Z|\+00:00)\s*$")
 
+def _rules_hint_et_noon(rules: str) -> bool:
+    """
+    判断 rules 是否暗示“美东当天 12:00（noon）”这种结算时间。
+    典型文本：
+    - '... 12:00 in the ET timezone (noon) on the date specified in the title ...'
+    """
+    if not rules:
+        return False
+    txt = _normalize_rules(str(rules))
+    t = txt.lower()
+    # 同时满足：出现 12:00、出现 ET、并且出现 noon 或 'et timezone'
+    has_1200 = "12:00" in t
+    has_et = (" et " in f" {t} ") or ("et timezone" in t)
+    has_noon = "noon" in t
+    return bool(has_1200 and has_et and (has_noon or "et timezone" in t))
+
 def _ny_is_dst_local(year: int, month: int, day: int, hour: int, minute: int, second: int) -> bool:
     """
     无 zoneinfo 时，按美国纽约 DST 规则判断（2007+ 规则）：
@@ -619,38 +635,45 @@ def _ny_is_dst_local(year: int, month: int, day: int, hour: int, minute: int, se
     dst_end   = datetime(year, 11, dst_end_day, 2, 0, 0)
     return dst_start <= dt < dst_end
 
-def _normalize_gamma_endDate_iso(end_date_str: str) -> str:
+def _normalize_midnight_utc_to_et_time(end_date_str: str, rules: str = "") -> (str, str):
     """
-    Gamma 有时给出 'YYYY-MM-DDT00:00:00Z'（看起来像“日期占位”而非真实截止时刻），
-    这会导致北京时间白天就出现 days_to_end 为负的小数。
-
-    规则（仅用于 Gamma endDate 分支）：
-    - 若命中 midnight UTC：视为“美东当日 23:59:59”截止，转成 UTC ISO 返回
-    - 否则返回 ""
+    将 'YYYY-MM-DDT00:00:00Z'（看起来像“日期占位”）修正为更贴近真实结算的美东时间点：
+    - 若 rules 暗示 noon：用 ET 12:00:00
+    - 否则兜底：用 ET 23:59:59（EOD）
+    返回 (utc_iso, label)：
+    - utc_iso: 修正后的 UTC ISO（Z）；不满足条件返回 ""
+    - label: "noon" 或 "eod"
     """
     if not end_date_str:
-        return ""
+        return "", ""
     m = _GAMMA_MIDNIGHT_UTC_RE.match(str(end_date_str))
     if not m:
-        return ""
+        return "", ""
     try:
         y = int(m.group(1)); mo = int(m.group(2)); d = int(m.group(3))
     except Exception:
-        return ""
+        return "", ""
 
-    # 优先用 zoneinfo 精确处理 DST
+    # 选择 ET 时间点
+    is_noon = _rules_hint_et_noon(rules)
+    hh = 12 if is_noon else 23
+    minute = 0 if is_noon else 59
+    second = 0 if is_noon else 59
+    label = "noon" if is_noon else "eod"
+
+    # 优先用 zoneinfo 精确处理 DST（America/New_York）
     try:
         from zoneinfo import ZoneInfo
-        dt_local = datetime(y, mo, d, 23, 59, 59, tzinfo=ZoneInfo("America/New_York"))
+        dt_local = datetime(y, mo, d, hh, minute, second, tzinfo=ZoneInfo("America/New_York"))
         dt_utc = dt_local.astimezone(timezone.utc)
-        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ"), label
     except Exception:
         # 兜底：按规则推断 DST
-        is_dst = _ny_is_dst_local(y, mo, d, 23, 59, 59)
+        is_dst = _ny_is_dst_local(y, mo, d, hh, minute, second)
         offset_hours = -4 if is_dst else -5
-        dt_local = datetime(y, mo, d, 23, 59, 59, tzinfo=timezone(timedelta(hours=offset_hours)))
+        dt_local = datetime(y, mo, d, hh, minute, second, tzinfo=timezone(timedelta(hours=offset_hours)))
         dt_utc = dt_local.astimezone(timezone.utc)
-        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ"), label
 
 def _normalize_rules(s: str) -> str:
     if not s: return ""
@@ -702,33 +725,92 @@ _MONTH_MAP = {
     "dec": 12, "december": 12,
 }
 
-_RULE_DEADLINE_RE = re.compile(
+_RULE_BY_DEADLINE_RE = re.compile(
     r"\bby\s+([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\s*,\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*(ET|EST|EDT)\b",
     re.IGNORECASE
 )
 
-def parse_rules_deadline_iso(rules: str) -> str:
+# 常见规则文本："... at 12 PM ET on December 26, 2025"
+_RULE_AT_ON_RE = re.compile(
+    r"\bat\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\s*(ET|EST|EDT)?\s+on\s+([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\b",
+    re.IGNORECASE
+)
+
+# 另一种常见顺序："... on December 26, 2025 at 12 PM ET"
+_RULE_ON_AT_RE = re.compile(
+    r"\bon\s+([A-Za-z]{3,9})\s+(\d{1,2}),\s*(\d{4})\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(AM|PM)\s*(ET|EST|EDT)?\b",
+    re.IGNORECASE
+)
+
+def parse_rules_datetime_iso(rules: str) -> str:
     """
-    从 rules 里解析形如：
-    'by December 31, 2025, 11:59 PM ET'
-    返回 UTC ISO：'2026-01-01T04:59:00Z'
+    从 rules 里解析“明确的美东时间点”，并转成 UTC ISO（Z）。
+    支持两类常见写法：
+    1) 'by December 31, 2025, 11:59 PM ET'
+    2) 'at 12 PM ET on December 26, 2025' / 'on December 26, 2025 at 12 PM ET'
     解析失败返回 ""。
     """
     if not rules:
         return ""
-    m = _RULE_DEADLINE_RE.search(rules)
-    if not m:
-        return ""
 
-    mon_s, day_s, year_s, hh_s, mm_s, ap_s, tz_s = m.groups()
+    # 先做轻量规范化（rules 可能包含 HTML）
+    txt = _normalize_rules(str(rules))
+
+    # 1) by ... deadline
+    m = _RULE_BY_DEADLINE_RE.search(txt)
+    if m:
+        mon_s, day_s, year_s, hh_s, mm_s, ap_s, tz_s = m.groups()
+        mon = _MONTH_MAP.get(mon_s.lower().strip(), 0)
+        if mon <= 0:
+            return ""
+        day = int(day_s); year = int(year_s)
+        hh = int(hh_s); minute = int(mm_s)
+        ap = ap_s.upper().strip()
+        tz = (tz_s or "ET").upper().strip()
+
+        # 12h -> 24h
+        if ap == "PM" and hh != 12:
+            hh += 12
+        if ap == "AM" and hh == 12:
+            hh = 0
+
+        # 处理时区：EST=-5, EDT=-4, ET 尽量用 zoneinfo（失败就按月份粗略推断）
+        offset_hours = -5
+        if tz == "EDT":
+            offset_hours = -4
+        elif tz == "EST":
+            offset_hours = -5
+        else:  # ET
+            try:
+                from zoneinfo import ZoneInfo
+                dt_local = datetime(year, mon, day, hh, minute, 0, tzinfo=ZoneInfo("America/New_York"))
+                dt_utc = dt_local.astimezone(timezone.utc)
+                return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                offset_hours = -4 if 4 <= mon <= 10 else -5
+
+        dt_local = datetime(year, mon, day, hh, minute, 0, tzinfo=timezone(timedelta(hours=offset_hours)))
+        dt_utc = dt_local.astimezone(timezone.utc)
+        return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # 2) at ... on ... / on ... at ...
+    m2 = _RULE_AT_ON_RE.search(txt)
+    if m2:
+        hh_s, mm_s, ap_s, tz_s, mon_s, day_s, year_s = m2.groups()
+    else:
+        m3 = _RULE_ON_AT_RE.search(txt)
+        if not m3:
+            return ""
+        mon_s, day_s, year_s, hh_s, mm_s, ap_s, tz_s = m3.groups()
+
     mon = _MONTH_MAP.get(mon_s.lower().strip(), 0)
     if mon <= 0:
         return ""
-
     day = int(day_s); year = int(year_s)
-    hh = int(hh_s); minute = int(mm_s)
+    hh = int(hh_s)
+    minute = int(mm_s) if mm_s is not None and str(mm_s).strip() != "" else 0
     ap = ap_s.upper().strip()
-    tz = tz_s.upper().strip()
+    tz = (tz_s or "ET").upper().strip()  # 很多 rules 省略 ET，这里默认 ET
 
     # 12h -> 24h
     if ap == "PM" and hh != 12:
@@ -736,7 +818,6 @@ def parse_rules_deadline_iso(rules: str) -> str:
     if ap == "AM" and hh == 12:
         hh = 0
 
-    # 处理时区：EST=-5, EDT=-4, ET 尽量用 zoneinfo（失败就按月份粗略推断）
     offset_hours = -5
     if tz == "EDT":
         offset_hours = -4
@@ -749,12 +830,13 @@ def parse_rules_deadline_iso(rules: str) -> str:
             dt_utc = dt_local.astimezone(timezone.utc)
             return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
         except Exception:
-            # 粗略：4-10 月按 EDT，其余按 EST（足够覆盖你样例 Dec 31）
             offset_hours = -4 if 4 <= mon <= 10 else -5
 
     dt_local = datetime(year, mon, day, hh, minute, 0, tzinfo=timezone(timedelta(hours=offset_hours)))
     dt_utc = dt_local.astimezone(timezone.utc)
     return dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # unreachable
 
 def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str, str):
     """
@@ -778,6 +860,12 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
             raw = m.get("end_date_iso", None) if isinstance(m, dict) else None
             clob_end = (raw or "").strip() if raw is not None else ""
             if clob_end:
+                # CLOB 也可能给出 midnight UTC（看起来像“日期占位”），按美东当日 23:59:59 修正
+                fixed, label = _normalize_midnight_utc_to_et_time(clob_end, mm.get("rules") or "")
+                if fixed and fixed != clob_end:
+                    mm["endDate"] = fixed
+                    # 这属于“修正”，给出 Debug 方便你确认来源
+                    return mm["endDate"], f"normalized_clob_midnight_to_et_{label}: {clob_end} -> {fixed}"
                 mm["endDate"] = clob_end
                 return mm["endDate"], ""  # 成功就不打 Debug（你要“正常为空”）
             else:
@@ -794,10 +882,10 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
 
     # --- 2) rules 文本兜底（优先于 Gamma endDate） ---
     rules = mm.get("rules") or ""
-    rules_iso = parse_rules_deadline_iso(rules)
+    rules_iso = parse_rules_datetime_iso(rules)
     if rules_iso:
         mm["endDate"] = rules_iso
-        dbg.append("used_rules_deadline")
+        dbg.append("used_rules_datetime")
         return mm["endDate"], "; ".join(dbg)
 
     dbg.append("rules_deadline_parse_fail")
@@ -805,11 +893,11 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
     # --- 3) Gamma endDate（已有） ---
     gamma_end = (mm.get("endDate") or "").strip()
     if gamma_end:
-        # Gamma 偶发 'YYYY-MM-DDT00:00:00Z'：按“美东当日 23:59:59”修正（只在此分支使用）
-        fixed = _normalize_gamma_endDate_iso(gamma_end)
+        # Gamma 偶发 'YYYY-MM-DDT00:00:00Z'：按 rules 选择 noon 或 eod 修正（只在此分支使用）
+        fixed, label = _normalize_midnight_utc_to_et_time(gamma_end, mm.get("rules") or "")
         if fixed and fixed != gamma_end:
             mm["endDate"] = fixed
-            dbg.append(f"normalized_gamma_midnight_to_et_eod: {gamma_end} -> {fixed}")
+            dbg.append(f"normalized_gamma_midnight_to_et_{label}: {gamma_end} -> {fixed}")
             return mm["endDate"], "; ".join(dbg)
         # 即使 Gamma 有 endDate，也保留 Debug（因为你要求“包括没拿到 end_date_iso”也提示）
         return gamma_end, "; ".join(dbg)
