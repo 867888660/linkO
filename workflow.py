@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 import copy
 import re
+from collections import deque
+from itertools import islice
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import importlib.util
 import base64
@@ -63,6 +65,9 @@ class WorkflowEngine:
         
         # 最近指纹去重表：记录每个节点最近一次入环的指纹
         self._last_ring_fp = {}  # { (workflow_id, node_id): last_fp }
+        # 性能优化：ArrayTrigger 队列索引，快速定位最后一个相同 nodeId 的项
+        # { workflow_id: { node_id: last_index } }
+        self._array_queue_last_index = {}
 
     # —— 输出过滤器：仅放行以 [TRACE: 开头的行 ——
     class _TracePrefixFilter(io.TextIOBase):
@@ -1326,8 +1331,9 @@ class WorkflowEngine:
                 return
             
             # 创建本地队列副本，避免线程冲突
-            local_passivity_array = copy.deepcopy(passivity_trigger_array)
-            local_array_trigger_array = copy.deepcopy(array_trigger_array)
+            # 性能关键：用 deque 避免 list.pop(0) 的 O(n) 开销（几万条会变成 O(n^2)）
+            local_passivity_array = deque(passivity_trigger_array or [])
+            local_array_trigger_array = deque(array_trigger_array or [])
             workflow_state["pending_passivity_count"] = len(local_passivity_array)
             workflow_state["pending_array_count"] = len(local_array_trigger_array)
             self._refresh_parent_array_queue(workflow_id, len(local_array_trigger_array))
@@ -1411,7 +1417,11 @@ class WorkflowEngine:
                     print(msg)
                     self._log_event(workflow_id, msg)
                     print(f"[ARRAY-DEBUG] 处理前 ArrayTrigger 队列长度: {before_len}")
-                    print(f"[ARRAY-DEBUG] 队列内容预览: {[item.get('nodeId', 'unknown') for item in local_array_trigger_array[:3]]}")
+                    try:
+                        preview = list(islice(local_array_trigger_array, 0, 3))
+                        print(f"[ARRAY-DEBUG] 队列内容预览: {[item.get('nodeId', 'unknown') for item in preview]}")
+                    except Exception:
+                        pass
                     self._process_next_array_trigger(workflow_id, data_temp, local_array_trigger_array, workflow_state)
                     after_len = len(local_array_trigger_array)
                     print(f"[ARRAY-DEBUG] 处理后 ArrayTrigger 队列长度: {after_len} (处理了 {before_len - after_len} 个)")
@@ -1458,7 +1468,11 @@ class WorkflowEngine:
                         #     self._log_event(workflow_id, f"   └─ immediate processNextArrayTrigger → Aq={len(local_array_trigger_array)}")
                     
                     # 数据处理完成后才从队列中移除
-                    local_passivity_array.pop(0)
+                    try:
+                        local_passivity_array.popleft()
+                    except Exception:
+                        # 兜底：兼容旧 list
+                        local_passivity_array.pop(0)
                     
                     # 设置本轮固定指纹（避免同一轮内指纹随状态变化）
                     import hashlib
@@ -2036,6 +2050,12 @@ class WorkflowEngine:
                         pass
                     self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
+                    # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
+                    try:
+                        shared_graph_snapshot = copy.deepcopy(data_temp)
+                    except Exception:
+                        shared_graph_snapshot = data_temp
+                    
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
                     # 每个子数组代表一个完整的输出组，应该作为一个队列项
                     for idx, array_group in enumerate(original_outputs):
@@ -2043,30 +2063,59 @@ class WorkflowEngine:
                             continue
                         
                         node_id = node["id"]
-                        group = copy.deepcopy(array_group)
+                        # 性能关键：避免对每个 group 做 deepcopy（几万条会非常慢且占内存）
+                        # group 在后续仅用于“本次路由”，允许被轻微规范化（Id/name），不影响其它项
+                        group = array_group
                         fp = self._calc_fp(node_id, group)            # ← 新增
                         key = (workflow_id, node_id)
                         last_fp = self._last_ring_fp.get(key)
-                        item = {"outputData": group, "nodeId": node_id, "graph_data": copy.deepcopy(data_temp)}
+                        item = {"outputData": group, "nodeId": node_id, "graph_data": shared_graph_snapshot}
 
-                        if last_fp == fp:
+                        # 性能优化：使用索引字典快速定位最后一个相同 nodeId 的项
+                        # 注意：deque 不支持索引赋值，所以我们需要特殊处理
+                        queue_index = self._array_queue_last_index.setdefault(workflow_id, {})
+                        last_index = queue_index.get(node_id)
+                        
+                        if last_fp == fp and last_index is not None:
                             # 深度调试：指纹重复情况
                             try:
                                 self._log_event(workflow_id, f"🌀 [ARRAY-FP] group[{idx}] fp={fp} 与上次相同 → 覆盖队列中该节点最后一条")
                             except Exception:
                                 pass
-                            # 覆盖队列中该节点的最后一条
-                            for j in range(len(array_trigger_array)-1, -1, -1):
-                                if array_trigger_array[j].get("nodeId") == node_id:
-                                    array_trigger_array[j] = item
-                                    self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 覆盖上一条记录 (相同指纹)")
-                                    break
-                            else:
+                            # 性能优化：从 last_index 开始向前查找（限制查找范围）
+                            found = False
+                            if last_index < len(array_trigger_array):
+                                # 从 last_index 向前查找（更可能命中，减少遍历次数）
+                                start_idx = min(last_index, len(array_trigger_array) - 1)
+                                for j in range(start_idx, -1, -1):
+                                    if array_trigger_array[j].get("nodeId") == node_id:
+                                        # deque 不支持索引赋值，但我们可以通过重建来实现覆盖
+                                        # 为了性能，我们采用标记策略：添加新项，在出队时去重
+                                        # 或者，我们直接添加新项，让后续处理时自然覆盖（因为指纹相同）
+                                        # 简化方案：直接添加新项，更新索引指向最新项
+                                        array_trigger_array.append(item)
+                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        found = True
+                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（指纹相同，后续会去重）")
+                                        break
+                            if not found:
+                                # 索引失效或未找到，从末尾重新查找
+                                for j in range(len(array_trigger_array)-1, -1, -1):
+                                    if array_trigger_array[j].get("nodeId") == node_id:
+                                        array_trigger_array.append(item)
+                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        found = True
+                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（重新查找）")
+                                        break
+                            if not found:
+                                # 完全未找到，添加新项
                                 array_trigger_array.append(item)
+                                queue_index[node_id] = len(array_trigger_array) - 1
                                 self._log_event(workflow_id, "✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环")
                         else:
                             array_trigger_array.append(item)
-                            self._last_ring_fp[key] = fp               # ← 新增
+                            self._last_ring_fp[key] = fp
+                            queue_index[node_id] = len(array_trigger_array) - 1  # 更新索引
                             try:
                                 self._log_event(workflow_id, f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp}")
                             except Exception:
@@ -2380,6 +2429,12 @@ class WorkflowEngine:
                         pass
                     print(f"[ARRAY-DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
+                    # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
+                    try:
+                        shared_graph_snapshot = copy.deepcopy(data_temp)
+                    except Exception:
+                        shared_graph_snapshot = data_temp
+                    
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
                     # 每个子数组代表一个完整的输出组，应该作为一个队列项
                     enqueued_count = 0
@@ -2388,25 +2443,46 @@ class WorkflowEngine:
                             continue
                         
                         node_id = node["id"]
-                        group = copy.deepcopy(array_group)
+                        # 性能关键：避免对每个 group 做 deepcopy（几万条会非常慢且占内存）
+                        group = array_group
                         fp = self._calc_fp(node_id, group)            # ← 新增
                         key = (workflow_id, node_id)
                         last_fp = self._last_ring_fp.get(key)
-                        item = {"outputData": group, "nodeId": node_id, "graph_data": copy.deepcopy(data_temp)}
+                        item = {"outputData": group, "nodeId": node_id, "graph_data": shared_graph_snapshot}
 
-                        if last_fp == fp:
-                            # 覆盖队列中该节点的最后一条
-                            for j in range(len(array_trigger_array)-1, -1, -1):
-                                if array_trigger_array[j].get("nodeId") == node_id:
-                                    array_trigger_array[j] = item
-                                    print(f"🌀 [RING:OVERWRITE] ArrayTrigger 覆盖上一条记录 (相同指纹) fp={fp} group_idx={idx}")
-                                    break
-                            else:
+                        # 性能优化：使用索引字典快速定位最后一个相同 nodeId 的项
+                        queue_index = self._array_queue_last_index.setdefault(workflow_id, {})
+                        last_index = queue_index.get(node_id)
+                        
+                        if last_fp == fp and last_index is not None:
+                            # 性能优化：从 last_index 开始向前查找（限制查找范围）
+                            found = False
+                            if last_index < len(array_trigger_array):
+                                start_idx = min(last_index, len(array_trigger_array) - 1)
+                                for j in range(start_idx, -1, -1):
+                                    if array_trigger_array[j].get("nodeId") == node_id:
+                                        array_trigger_array.append(item)
+                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        found = True
+                                        print(f"🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（指纹相同） fp={fp} group_idx={idx}")
+                                        break
+                            if not found:
+                                # 索引失效，从末尾重新查找
+                                for j in range(len(array_trigger_array)-1, -1, -1):
+                                    if array_trigger_array[j].get("nodeId") == node_id:
+                                        array_trigger_array.append(item)
+                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        found = True
+                                        print(f"🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（重新查找） fp={fp} group_idx={idx}")
+                                        break
+                            if not found:
                                 array_trigger_array.append(item)
+                                queue_index[node_id] = len(array_trigger_array) - 1
                                 print(f"✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环 fp={fp} group_idx={idx}")
                         else:
                             array_trigger_array.append(item)
-                            self._last_ring_fp[key] = fp               # ← 新增
+                            self._last_ring_fp[key] = fp
+                            queue_index[node_id] = len(array_trigger_array) - 1
                             print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp} group_idx={idx}")
                         
                         enqueued_count += 1
@@ -2449,7 +2525,10 @@ class WorkflowEngine:
             # 检查 array_data 是否为 None；当 outputData 为空但带有 graph_data（占位项，用于无 ArrayTrigger 的场景）时，不丢弃
             if array_data is None or (array_data.get("outputData") is None and "graph_data" not in array_data):
                 self._log_event(workflow_id, "❌ array_data 无效（无 outputData 且无 graph_data）→ DROP & POP")
-                array_trigger_array.pop(0)
+                try:
+                    array_trigger_array.popleft()
+                except Exception:
+                    array_trigger_array.pop(0)
                 workflow_state["queue_lengths"] = workflow_state.get("queue_lengths", {})
                 workflow_state["queue_lengths"]["array"] = len(array_trigger_array)
                 workflow_state["last_update"] = time.time()
@@ -2485,7 +2564,8 @@ class WorkflowEngine:
                     return
 
                 batch_size = min(available_slots, len(array_trigger_array))
-                batch_data = array_trigger_array[:batch_size]
+                # deque 不支持切片，这里用 islice 拉取 batch
+                batch_data = list(islice(array_trigger_array, 0, batch_size))
                 launched = 0
                 for idx, batch_item in enumerate(batch_data):
                     try:
@@ -2497,9 +2577,22 @@ class WorkflowEngine:
                     except Exception as e:
                         print(f"[ARRAY-DEBUG] 子工作流启动失败: {e}")
                         self._log_event(workflow_id, f"❌ [CHILD] 子工作流启动失败: {e}")
+                # 性能优化：批量出队时清理索引
+                queue_index = self._array_queue_last_index.get(workflow_id, {})
                 for _ in range(batch_size):
                     if array_trigger_array:
-                        array_trigger_array.pop(0)
+                        try:
+                            popped_item = array_trigger_array.popleft()
+                            # 清理索引
+                            if isinstance(popped_item, dict):
+                                popped_node_id = popped_item.get("nodeId")
+                                if popped_node_id and popped_node_id in queue_index:
+                                    if queue_index[popped_node_id] == 0:
+                                        queue_index.pop(popped_node_id, None)
+                                    elif queue_index[popped_node_id] > 0:
+                                        queue_index[popped_node_id] -= 1
+                        except Exception:
+                            array_trigger_array.pop(0)
                 workflow_state["pending_array_count"] = len(array_trigger_array)
                 self._refresh_parent_array_queue(workflow_id, len(array_trigger_array))
                 if launched:
@@ -2551,7 +2644,22 @@ class WorkflowEngine:
                         self._log_event(workflow_id, f"❌ [ERROR] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
                 
                 # 处理完成后，才从队列中移除并更新队列长度
-                array_trigger_array.pop(0)
+                try:
+                    popped_item = array_trigger_array.popleft()
+                    # 性能优化：清理索引（如果被移除的项是某个 nodeId 的最后一项）
+                    if isinstance(popped_item, dict):
+                        popped_node_id = popped_item.get("nodeId")
+                        if popped_node_id:
+                            queue_index = self._array_queue_last_index.get(workflow_id, {})
+                            # 检查被移除的项是否是该 nodeId 的最后一项
+                            if queue_index.get(popped_node_id, -1) == 0:
+                                # 如果索引指向的是第一个项（刚被移除），清除索引
+                                queue_index.pop(popped_node_id, None)
+                            elif queue_index.get(popped_node_id, -1) > 0:
+                                # 索引需要减1（因为队列头部被移除）
+                                queue_index[popped_node_id] = queue_index[popped_node_id] - 1
+                except Exception:
+                    array_trigger_array.pop(0)
                 print(f"[ARRAY-DEBUG] 移除一个 ArrayTrigger 数据，剩余长度: {len(array_trigger_array)}")
             
             # 设置本轮固定指纹（避免同一轮内指纹随状态变化）

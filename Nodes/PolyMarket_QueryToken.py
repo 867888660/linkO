@@ -246,6 +246,60 @@ def _find_market_by_token(pm, token_id: str):
     closed = os.environ.get("PMQT_CLOSED", "").strip().lower() in ("1", "true", "yes")
     retry = int(os.environ.get("PMQT_RETRY", "1"))
 
+    # 0) 直查：用 clob_token_ids 直接反查 market（命中则无需翻页）
+    try:
+        direct = pm.robust_get(
+            f"{pm.GAMMA}/markets",
+            params={"clob_token_ids": token_id, "limit": 10, "offset": 0, "closed": str(closed).lower()},
+            retry=retry
+        )
+    except Exception:
+        direct = None
+    if isinstance(direct, list) and direct:
+        for stub in direct:
+            if not isinstance(stub, dict):
+                continue
+            # 复用你原来的"快路径 + 慢路径"解析（不改结构）
+            opt_name = ""
+            token_ids = []
+            outs = stub.get("outcomes") or []
+            if isinstance(outs, list):
+                for o in outs:
+                    if not isinstance(o, dict):
+                        continue
+                    tid = o.get("clobTokenId") or o.get("tokenId") or o.get("token_id")
+                    if tid:
+                        tid = str(tid).strip()
+                        token_ids.append(tid)
+                        if tid == token_id:
+                            name = (o.get("name") or o.get("outcome") or "").strip()
+                            if name:
+                                opt_name = name
+                if not opt_name and outs:
+                    clob_ids = stub.get("clobTokenIds") or []
+                    if isinstance(clob_ids, str):
+                        clob_ids = [clob_ids]
+                    elif not isinstance(clob_ids, list):
+                        clob_ids = []
+                    if (len(outs) == len(clob_ids) and
+                        all(isinstance(x, str) for x in outs) and
+                        all(isinstance(x, str) for x in clob_ids)):
+                        for name, tid in zip(outs, clob_ids):
+                            tid_str = str(tid).strip()
+                            if tid_str not in token_ids:
+                                token_ids.append(tid_str)
+                            if tid_str == token_id:
+                                opt_name = name.strip()
+            if token_id in token_ids:
+                token_ids = [t for t in token_ids if t]
+                return stub, opt_name, token_ids
+            try:
+                token_ids_fb = pm.extract_token_ids_from_market_stub(stub) or []
+            except Exception:
+                token_ids_fb = []
+            if token_id in token_ids_fb:
+                return stub, opt_name, token_ids_fb
+
     for p in range(max_pages):
         offset = p * max(1, limit)
         stubs = pm.fetch_markets(limit=limit, offset=offset, closed=closed, retry=retry) or []
@@ -402,6 +456,19 @@ def _get_best_ask_fallback(pm, token_id: str):
         pass
     return None
 
+
+def _get_best_bid_fallback(pm, token_id: str):
+    """当 /book 没 bid 时，用 /price 兜底拿 best bid。"""
+    try:
+        rr = pm.SESS.get(f"{pm.CLOB}/price", params={"token_id": token_id, "side": "SELL"}, timeout=6)
+        if rr.status_code == 200:
+            pj = rr.json() or {}
+            if pj.get("price") is not None:
+                return float(pj["price"])
+    except Exception:
+        pass
+    return None
+
 def run_node(node):
     token = (node.get('Inputs') or [{}])[0].get('Context')
     token_id = _strip_quotes(token).strip()
@@ -416,70 +483,83 @@ def run_node(node):
 
     pm = _load_pm_module()
     stub, option_name, token_ids_in_market = _find_market_by_token(pm, token_id)
-    if not stub:
-        return Outputs
-
-    mid = stub.get("id")
-    condition_id = stub.get("conditionId") or stub.get("condition_id") or mid or ""
-    question = stub.get("question") or stub.get("title") or ""
-    slug = stub.get("slug") or ""
+    
+    # 即使找不到 market，也继续查询价格和深度信息（参考 PolyMarket_Research.py）
+    # 初始化默认值
+    mid = ""
+    condition_id = ""
+    question = ""
+    slug = ""
     rules = ""
-    try:
-        rules = pm._normalize_rules(stub.get("description") or "")
-    except Exception:
-        rules = str(stub.get("description") or "")
-    resolution_source = stub.get("resolutionSource") or stub.get("resolution_source") or ""
-
-    # option_name 若还没有，详情页补一次
-    if not option_name and mid:
-        option_name = _get_option_name_via_detail(pm, str(mid), token_id) or ""
-
-    # opp_token：最朴素兜底（该 market 内刚好 2 个 token 就取另一个）
+    resolution_source = ""
     opp_token = ""
-    if isinstance(token_ids_in_market, list):
-        tids = [str(t).strip() for t in token_ids_in_market if str(t).strip()]
-        if len(tids) == 2 and token_id in tids:
-            opp_token = tids[0] if tids[1] == token_id else tids[1]
+    end_date = ""
+    delta_days = 0.0
+    
+    if stub:
+        # 找到了 market，提取信息
+        mid = stub.get("id") or ""
+        condition_id = stub.get("conditionId") or stub.get("condition_id") or mid or ""
+        question = stub.get("question") or stub.get("title") or ""
+        slug = stub.get("slug") or ""
+        try:
+            rules = pm._normalize_rules(stub.get("description") or "")
+        except Exception:
+            rules = str(stub.get("description") or "")
+        resolution_source = stub.get("resolutionSource") or stub.get("resolution_source") or ""
 
-    # option_name 再兜底：若是二元市场，优先用 yesToken/noToken 映射
-    if mid and (not option_name):
-        yes_id, no_id = _get_yes_no_token_ids(pm, str(mid))
-        if yes_id and token_id == yes_id:
-            option_name = "Yes"
-        elif no_id and token_id == no_id:
-            option_name = "No"
-        # 如果 yesToken/noToken 都获取不到或都不匹配，保持为空或设为 Unknown
-        # 不再强制设为 "Yes"，避免误判
-        if not option_name:
-            option_name = "Unknown"
+        # option_name 若还没有，详情页补一次
+        if not option_name and mid:
+            option_name = _get_option_name_via_detail(pm, str(mid), token_id) or ""
 
-    # 解析 endDate（复用 passivityTrigger 逻辑）
-    mm = {
-        "condition_id": condition_id,
-        "question": question,
-        "endDate": stub.get("endDate") or stub.get("end_time") or stub.get("endTime") or "",
-        "rules": rules,
-        "resolutionSource": resolution_source,
-        "slug": slug,
-    }
-    try:
-        end_date, _dbg = pm.resolve_end_date_and_debug(str(mid), mm, retry=1)
-    except Exception:
-        end_date = mm.get("endDate") or ""
-    mm["endDate"] = end_date or (mm.get("endDate") or "")
+        # opp_token：最朴素兜底（该 market 内刚好 2 个 token 就取另一个）
+        if isinstance(token_ids_in_market, list):
+            tids = [str(t).strip() for t in token_ids_in_market if str(t).strip()]
+            if len(tids) == 2 and token_id in tids:
+                opp_token = tids[0] if tids[1] == token_id else tids[1]
 
-    # days_to_end 与收益率（口径对齐 passivityTrigger）
-    end_ts = 0.0
-    # 优先用 passivityTrigger 内置解析；若失败（=0）再用强容错解析兜底
-    try:
-        end_ts = float(pm._parse_end_ts_safe(mm.get("endDate") or ""))
-    except Exception:
+        # option_name 再兜底：若是二元市场，优先用 yesToken/noToken 映射
+        if mid and (not option_name):
+            yes_id, no_id = _get_yes_no_token_ids(pm, str(mid))
+            if yes_id and token_id == yes_id:
+                option_name = "Yes"
+            elif no_id and token_id == no_id:
+                option_name = "No"
+            # 如果 yesToken/noToken 都获取不到或都不匹配，保持为空或设为 Unknown
+            # 不再强制设为 "Yes"，避免误判
+            if not option_name:
+                option_name = "Unknown"
+
+        # 解析 endDate（复用 passivityTrigger 逻辑）
+        mm = {
+            "condition_id": condition_id,
+            "question": question,
+            "endDate": stub.get("endDate") or stub.get("end_time") or stub.get("endTime") or "",
+            "rules": rules,
+            "resolutionSource": resolution_source,
+            "slug": slug,
+        }
+        try:
+            end_date, _dbg = pm.resolve_end_date_and_debug(str(mid), mm, retry=1)
+        except Exception:
+            end_date = mm.get("endDate") or ""
+        mm["endDate"] = end_date or (mm.get("endDate") or "")
+
+        # days_to_end 与收益率（口径对齐 passivityTrigger）
         end_ts = 0.0
-    if not end_ts:
-        end_ts = _parse_end_ts_flexible(mm.get("endDate") or "")
-    delta_days = (end_ts - time.time()) / 86400.0 if end_ts else 0.0
+        # 优先用 passivityTrigger 内置解析；若失败（=0）再用强容错解析兜底
+        try:
+            end_ts = float(pm._parse_end_ts_safe(mm.get("endDate") or ""))
+        except Exception:
+            end_ts = 0.0
+        if not end_ts:
+            end_ts = _parse_end_ts_flexible(mm.get("endDate") or "")
+        delta_days = (end_ts - time.time()) / 86400.0 if end_ts else 0.0
+    else:
+        # 找不到 market，设置默认值
+        option_name = "Unknown"
 
-    # 盘口/深度
+    # 盘口/深度（无论是否找到 market，都尝试查询）
     (best_bid, best_ask,
      depth_bid_1c_usd, depth_ask_1c_usd,
      n_bid_1c, n_ask_1c,
@@ -488,18 +568,23 @@ def run_node(node):
      depth_bid_1c_qty, depth_ask_1c_qty,
      vwap_bid_1c, vwap_ask_1c) = pm.compute_depth_1c_usd(token_id, retry=1)
 
-    l1_spread_c_val = ''
-    if best_bid is not None and best_ask is not None:
-        try:
-            l1_spread_c_val = str(int(math.ceil(max(0.0, (best_ask - best_bid) * 100.0) - 1e-9)))
-        except Exception:
-            l1_spread_c_val = ''
-
     ask = best_ask
     bid = best_bid
     # 价格兜底：/book 没 ask 时用 /price(/prices)
     if ask is None:
         ask = _get_best_ask_fallback(pm, token_id)
+    # 价格兜底：/book 没 bid 时用 /price
+    if bid is None:
+        bid = _get_best_bid_fallback(pm, token_id)
+    
+    # 重新计算 l1_spread_c（使用兜底后的 bid 和 ask）
+    l1_spread_c_val = ''
+    if bid is not None and ask is not None:
+        try:
+            l1_spread_c_val = str(int(math.ceil(max(0.0, (ask - bid) * 100.0) - 1e-9)))
+        except Exception:
+            l1_spread_c_val = ''
+    
     price = float(ask) if ask is not None else None
 
     roi_if_win = ''
@@ -530,7 +615,7 @@ def run_node(node):
     record.update({
         'condition_id': str(condition_id),
         'question': str(question),
-        'endDate': str(mm.get("endDate") or ''),
+        'endDate': str(end_date or ''),
         'days_to_end': _safe_num(delta_days, nd=4) if delta_days else '',
         'rules': str(rules or ''),
         'resolutionSource': str(resolution_source or ''),
