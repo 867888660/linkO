@@ -48,6 +48,12 @@
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },
     {
+        "Filename": "apr_eff.py",
+        "Hash": "aed0ec144908ff372b025f543013748690179e2b7b835803805fd2cee5ae9ef6",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个年化收益率计算组件，用于根据投资回报率和剩余天数计算有效年化收益率（APR）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n程序接收两个输入参数：投资回报率（roi_if_win）和剩余天数（days_to_end），通过复利计算公式将短期收益率转换为年化收益率。计算公式为：apr_eff_if_win = (1 + roi_if_win)^(365/days_to_end) - 1。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: days_to_end\\n    type: number\\n    required: true\\n    description: 距离结束的天数\\n  - name: roi_if_win\\n    type: number\\n    required: true\\n    description: 如果获胜的投资回报率（ROI）\\noutputs:\\n  - name: apr_eff_if_win\\n    type: number\\n    description: 有效年化收益率（APR）\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 程序启动时定义输入输出节点数量，设置为2个输入和1个输出\\n- 初始化输入输出数组，为每个节点分配基础属性包括ID、名称、类型等\\n- 配置节点类型为Normal，设置标签属性Label1\\n- 设置输入节点days_to_end和roi_if_win的数据类型为Num（数字）\\n- 设置输出节点apr_eff_if_win的数据类型为Num（数字）\\n- 执行run_node函数时从输入节点获取days_to_end和roi_if_win的数值\\n- 验证输入数据的有效性，确保days_to_end大于0且roi_if_win不为None\\n- 使用年化计算公式：apr_eff_if_win = (1 + roi_if_win)^(365/days_to_end) - 1\\n- 将计算结果赋值给输出节点的Context属性\\n- 返回包含处理结果的Outputs数组"
+    },
+    {
         "Filename": "Array_Model.py",
         "Hash": "cc2c606123004889d27caa14042d1fe852fbde6e26e03a28245ca9f6d6b752d3",
         "NodeKind": "ArrayTrigger",
@@ -55,7 +61,7 @@
     },
     {
         "Filename": "Array_PolyMarket.py",
-        "Hash": "3860d9c85ecc29d523c3597e1f3792632880a4e1ff58583b0c8ed3fd0b7ebde0",
+        "Hash": "d6566ef1495e4c991b471c785a44d8b01d2e80fec2abe1ce54a210189e96443e",
         "NodeKind": "ArrayTrigger",
         "NodeFunction": "组件功能：这是一个数组触发器节点，用于根据指定的数字范围生成包含输出节点序列的数组。\n\n代码功能摘要：接收起始和结束数字作为输入，通过循环遍历指定范围内的每个数字，为每个数字创建一个输出节点的深拷贝并存储到数组中，最终返回包含所有数字序列的数组。\n\n参数：\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: integer\\n    required: true\\n    description: 数字范围的起始值\\n  - name: Input2\\n    type: integer\\n    required: true\\n    description: 数字范围的结束值（包含）\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 生成的数组序列，包含指定范围内所有数字对应的输出节点\\n```\n\n运行逻辑：\\n- 从输入节点获取起始数字Start_Num和结束数字End_Num\\n- 初始化空数组Array用于存储结果\\n- 使用for循环遍历从Start_Num到End_Num+1的范围（包含结束值）\\n- 在每次循环中，将当前数字i赋值给输出节点的Num属性\\n- 对当前输出节点进行深拷贝并添加到Array数组中\\n- 循环结束后返回包含所有数字序列的Array数组\\n- 每个数组元素都是一个完整的输出节点对象，包含对应的数字值"
     },
@@ -139,9 +145,9 @@
     },
     {
         "Filename": "Crypto_Binance.py",
-        "Hash": "31e7768f3c507f058366306693b27008d7f8288c6fc4add168f98e196d4226fe",
+        "Hash": "dc0eebc9c2f368a458a8f5f3991eac574e0441a4c0c41ca803f6553d81f6324b",
         "NodeKind": "Unknown",
-        "NodeFunction": "组件功能\n"
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个加密货币行情抓取节点：从 Binance Spot REST API 批量拉取交易对行情数据，可选集成 CoinGecko 获取 FDV/市值/供给等基本面数据，并合并输出为 JSON 字符串。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序读取输入的 Symbols/Config 字符串（支持纯文本或 JSON 格式），"
     },
     {
         "Filename": "DataBase.py",
@@ -190,6 +196,12 @@
         "Hash": "d0070a93350a8212ad5c6a80b176b5963a089fe4856152d261470b43009e5bca",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个豆包大语言模型调用组件，用于通过豆包API进行文本生成和多模态对话，支持文本和图像输入，可根据配置返回原始文本或JSON格式的结构化数据。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n该组件集成豆包API调用功能，支持系统提示词和用户提示词配置，具备图像转Base64编码处理能力，提供多种输出格式选择（原始文本/JSON），并包含完整的JSON解析和清理机制，同时记录token使用情况。\\n\\n参数\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 豆包模型生成的回答内容\\n```\\n\\n运行逻辑\\n- 清空并重新初始化输出数组，准备接收节点配置的输出结构\\n- 遍历输入节点，将图像文件转换为Base64编码格式，存储到临时数组中\\n- 根据OriginalTextSelector配置构建系统提示词，组合SystemPrompt和ExprotAfterPrompt\\n- 构建消息数组，包含系统角色和用户角色的提示内容\\n- 将Base64编码的图像添加到消息数组中，支持多模态输入\\n- 配置豆包API调用参数，包括模型名称、温度、最大token数、top_p等参数\\n- 发送POST请求到豆包API端点，获取模型生成的响应内容\\n- 检查API响应状态，如果失败则抛出异常信息\\n- 提取响应中的生成内容和token使用统计信息\\n- 根据OriginalTextSelector配置选择输出格式处理方式\\n- 如果选择JSON格式，则调用字符串转JSON函数进行结构化解析\\n- 使用正则表达式和字符串处理技术清理和提取有效的JSON内容\\n- 将解析后的结果按照输出节点的数据类型进行分配和转换\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的完整输出数组"
+    },
+    {
+        "Filename": "EndTime.py",
+        "Hash": "f27cac8e18798a2bbea57f0619cc6f7e73ab896490f52b8df585e3984b1eba8e",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能：这是一个计算两个时间差的功能组件，用于计算两个时间之间的差值（以天为单位）。\\n\\n代码功能摘要：接收两个时间字符串，做基础清洗与补齐（可容忍月/日不补0、可仅填日期、可带Z或不带时区），解析为datetime对象后计算时间差，输出天数差（可为负数），保留小数点后5位。\\n\\n参数：\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: string\\n    required: true\\n    description: 第一个时间字符串，例如\"2025-12-31T12:00:00Z\" 或 \"2025-12-31\"\\n  - name: Input2\\n    type: string\\n    required: true\\n    description: 第二个时间字符串，例如\"2025-12-31T14:00:00Z\" 或 \"2025-12-31 14:00:00\"\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 时间差（天），保留小数点后5位（可为负）\\n```\\n\\n运行逻辑：\\n- 读取两个输入字符串\\n- 去除首尾空白与引号，规范化为可解析的ISO格式\\n- 解析为datetime（缺省时区按UTC处理）\\n- 计算时间差（Input1 - Input2）\\n- 换算为天并格式化到小数点后5位输出"
     },
     {
         "Filename": "Esp32_connect.py",
@@ -277,7 +289,7 @@
     },
     {
         "Filename": "IfNode.py",
-        "Hash": "bae93937c4a7522047770ab13c24e26c4e0da24f5c044d7c6f9478d392969304",
+        "Hash": "191a9c0994ad4a0e90c1ffe83c21a301e0a7042f612c8b2d17f469172ee6b7e7",
         "NodeKind": "IfNode",
         "NodeFunction": "组件功能：这是一个条件判断节点，用于根据配置的多个判断条件对输入参数进行逻辑判断，并输出布尔值结果。\\n\\n代码功能摘要：该节点支持对String、Number、Boolean三种类型的输入参数进行多条件判断，通过配置判断主体、条件操作符和目标值，实现复杂的业务规则判断。支持And/Or两种逻辑组合方式，可以灵活处理多个条件的组合判断。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: boolean\\n    description: 条件判断的最终结果，true表示条件满足，false表示条件不满足\\n```\\n\\n运行逻辑：\\n- 清空并重新初始化输出数组，将所有输出的Boolean值设为False\\n- 遍历每个输出节点，提取其配置的判断条件参数：IfLogicSubjectArray（判断主体数组）、IfLogicConditionArray（判断条件数组）、IfLogicContentArray（判断内容数组）、IfLogicKind（逻辑组合方式）\\n- 对每组判断条件进行并行处理，根据最小数组长度确定实际处理的条件数量\\n- 对于每个判断条件，根据Subject名称在输入数组中查找对应的输入参数\\n- 根据输入参数的类型执行相应的判断逻辑：String类型支持include/exclude/empty/not empty判断；Number类型支持>/</==/!=/>=/<= 数值比较；Boolean类型支持true/false判断\\n- 收集所有单个条件的判断结果到multi_results数组中\\n- 根据IfLogicKind的值进行最终结果计算：'And'模式下所有条件都为true时结果才为true；'Or'模式下任一条件为true时结果就为true\\n- 将最终判断结果赋值给输出的Boolean字段，并设置输出类型为Boolean\\n- 返回处理完成的输出数组"
     },
@@ -372,10 +384,22 @@
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基础的节点模板程序，用于创建具有单一输入和输出的处理节点，可以根据需求自定义输入输出属性和处理逻辑。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n程序定义了一个标准的节点结构模板，包含输入输出节点的初始化、属性配置和基础的运行框架。核心处理逻辑在run_node函数中实现，当前版本仅提供框架结构，具体业务逻辑需要根据实际需求进行填充。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: string\\n    required: true\\n    description: 输入数据内容\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 处理后的输出结果\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 程序启动时定义输入输出节点数量，当前设置为各1个\\n- 初始化输入输出数组，为每个节点分配基础属性包括ID、名称、类型等\\n- 配置节点类型为Normal，设置标签属性Label1\\n- 为所有输入输出节点指定数据类型为String\\n- 执行run_node函数时获取输入节点的Context内容作为file_path\\n- 初始化content变量用于存储处理结果，初始化Debugging列表用于调试信息收集\\n- 将处理后的content内容赋值给输出节点的Context属性\\n- 返回包含处理结果的Outputs数组"
     },
     {
+        "Filename": "OneMinusX.py",
+        "Hash": "50972e58f19e7cd3f95281721e847301fd9cad711fb43f0c819bb36d55bd0907",
+        "NodeKind": "Normal",
+        "NodeFunction": "Unknown"
+    },
+    {
         "Filename": "oneo.py",
         "Hash": "b62d6e77fd6264730b7c77eab0bbc662158e65c635b6d970213c85910671246a",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个调用大语言模型(LLM)接口的节点程序，通过HTTP请求调用OpenAI API获取AI回复并处理返回结果。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n核心功能是构建HTTP请求调用OpenAI的o1-preview-ca模型，发送用户提示词获取AI回复，支持原始文本和JSON两种输出模式，并提供完整的token使用统计信息。\n\n参数\n```yaml\ninputs:\n  - name: ExportPrompt\n    type: string\n    required: true\n    description: 发送给AI的提示词内容\n  - name: OriginalTextSelector\n    type: string\n    required: true\n    description: 输出模式选择，可选值为OriginalText或Json\n    default: OriginalText\n  - name: temperature\n    type: number\n    required: true\n    description: 控制AI回复的随机性，范围0-1\n    default: 0.7\n  - name: max_tokens\n    type: integer\n    required: true\n    description: AI回复的最大token数量限制\n    default: 1000\n  - name: Top_p\n    type: number\n    required: true\n    description: 核采样参数，控制回复的多样性\n    default: 1.0\n  - name: frequency_penalty\n    type: number\n    required: true\n    description: 频率惩罚参数，减少重复内容\n    default: 0.0\n  - name: presence_penalty\n    type: number\n    required: true\n    description: 存在惩罚参数，鼓励谈论新话题\n    default: 0.0\noutputs:\n  - name: OutPut1\n    type: string\n    description: AI的回复内容，包含prompt_tokens、completion_tokens和total_tokens统计信息\n```\n\n运行逻辑\n- 清空并重新初始化输出数组，获取节点配置参数\n- 根据OriginalTextSelector模式处理ExportPrompt，如果是OriginalText模式则截取Please之前的内容\n- 建立HTTPS连接到api.chatanywhere.com.cn，构建包含模型参数和消息的JSON请求体\n- 设置请求头包括Authorization Bearer token和Content-Type，发送POST请求到/v1/chat/completions端点\n- 接收并解析API响应的JSON数据，提取AI回复内容\n- 如果是Json模式，使用ensure_wrapped_with_braces函数确保JSON格式正确，然后解析为字典对象\n- 调用process_input_str和clean_input_string等辅助函数处理和清理返回的文本内容\n- 根据输出模式将结果分配到对应的输出节点：Json模式按键值对分配，OriginalText模式直接赋值\n- 提取并记录token使用统计信息包括prompt_tokens、completion_tokens和total_tokens\n- 返回处理完成的Outputs数组，包含AI回复和完整的使用统计"
+    },
+    {
+        "Filename": "passivityTrigger_PolyDiction.py",
+        "Hash": "0115d1d53dfc5e54f2c9f12ed2e28093cb198e0a9a93f08dbb645c93ffb87406",
+        "NodeKind": "passivityTrigger",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个Polymarket市场数据抓取节点：输入分页参数、保存路径和类别过滤条件，调用Polymarket Gamma API（/markets）逐页抓取市场列表，提取核心字段（question、rules、endDate、category等），每页处理完成后单独保存为JSON文件，输出保存路径和调试信息。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序读取输入的分页参数（limit、offset_start、offset_end）、closed标志、重试次数、保存路径和类别过滤条件，调用Polymarket Gamma API的/markets接口获取市场列表数据，对于缺失字段的市场，通过详情页接口补充完整信息，解析并标准化endDate字段（优先使用CLOB接口的end_date_iso，其次解析rules文本中的时间，最后使用Gamma的endDate），将处理后的数据保存为JSON文件，通过node._state.next_offset记忆续跑位置实现分页处理，每次调用仅处理一页数据。\n\n参数\n```yaml\ninputs:\n  - name: limit\n    type: number\n    required: true\n    description: 每页抓取数量，例如 100\n  - name: offset_start\n    type: number\n    required: true\n    description: 起始偏移量，例如 0\n  - name: closed\n    type: boolean\n    required: true\n    description: 是否包含已关闭的市场，false表示仅开放市场\n  - name: retry\n    type: number\n    required: true\n    description: 请求失败时的重试次数，例如 1\n  - name: save_path\n    type: string\n    required: true\n    description: JSON文件保存路径，例如 \"./output\"\n  - name: offset_end\n    type: number\n    required: true\n    description: 结束偏移量，-1为无上限模式（遇尾页暂停），>0为边界模式（递增至该值后停止）\n  - name: category_filter\n    type: string\n    required: true\n    description: 类别过滤，\"All\"表示全部类别，或指定tag_id/tag slug/tag label\noutputs:\n  - name: Save_Path\n    type: string\n    description: 保存的JSON文件完整路径\n  - name: DeBug\n    type: string\n    description: 调试信息，包含配置参数、抓取数量、处理状态等\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 读取Input1作为limit（每页数量）\n- 读取Input2作为offset_start（起始偏移量）\n- 读取Input3作为closed（是否包含已关闭市场）\n- 读取Input4作为retry（重试次数）\n- 读取Input5作为save_path（保存路径），若不存在则创建目录\n- 读取Input6作为offset_end（结束偏移量）\n- 读取Input7作为category_filter（类别过滤），解析为tag_id（支持\"All\"、数字ID、tag slug/label）\n- 从node._state.next_offset获取当前偏移量（首次使用offset_start）\n- 调用Polymarket Gamma API /markets接口获取市场列表（带tag_id过滤）\n- 从列表页提取基础信息（question、rules、endDate、category等）\n- 对于缺失字段的市场，调用详情页接口补充完整信息\n- 解析endDate：优先使用CLOB接口的end_date_iso，其次解析rules文本中的美东时间，最后使用Gamma的endDate，若为midnight UTC则按规则修正为ET时间点\n- 计算days_to_end（距离结束日期的天数）\n- 添加元信息（query_time_beijing、offset、url）\n- 将处理后的数据保存为JSON文件（每页一个文件）\n- 更新node._state.next_offset为下一页偏移量\n- 输出Save_Path（文件路径）和DeBug（调试信息）"
     },
     {
         "Filename": "passivityTrigger_PolyMarket.py",
@@ -390,10 +414,22 @@
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个图像边界框标注组件，用于在图像上绘制文本检测结果的边界框和对应文字。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n该组件接收图片路径和包含文字位置信息的JSON数据，解析JSON中的prism_wordsInfo数组获取文字的多边形边界框坐标和内容，然后使用OpenCV和PIL库在图像上绘制红色边界框和绿色文字标注，最终保存为带有\"_annotated\"后缀的标注图片。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: PicPath\\n    type: file\\n    required: true\\n    description: 输入图片文件路径\\n  - name: Bounding\\n    type: string\\n    required: true\\n    description: 包含文字位置和内容信息的JSON格式数据\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 标注后的图片保存路径\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 接收输入的图片路径和边界框JSON数据\\n- 规范化文件路径，处理双反斜杠等路径问题\\n- 检查图片文件是否存在，如不存在则尝试查找大小写不同的同名文件\\n- 解析输入的JSON字符串，提取prism_wordsInfo数组中的文字信息\\n- 尝试使用OpenCV读取图片，失败则使用PIL读取\\n- 如果图片读取失败，根据JSON中的尺寸信息创建空白画布\\n- 将OpenCV图像转换为PIL格式以支持中文字体渲染\\n- 尝试加载支持中文的系统字体（SimHei、SimSun、Microsoft YaHei等）\\n- 遍历每个文字信息，提取多边形边界框坐标点\\n- 使用OpenCV在图像上绘制红色多边形边界框\\n- 使用PIL在边界框上方绘制绿色文字内容\\n- 生成输出文件名，在原文件名后添加\"_annotated\"后缀\\n- 尝试使用OpenCV保存图片，失败则使用PIL保存\\n- 验证输出文件是否成功创建且大小不为零\\n- 返回标注后图片的完整路径"
     },
     {
-        "Filename": "polymarket_redeem.py",
-        "Hash": "89e32bcee7dc02d658d60d5e02e3e7a5085784141a7d15c4bbbc364541b0a927",
+        "Filename": "PolyMarket_QueryToken.py",
+        "Hash": "a7eac551888bc5c4831646cb75c5b6ef53eed6c51b856eb052bc0fe0c9517b8e",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点仅保留必要 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME。运行时读取 RPC/合约地址等环境变量，调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n参数\n```yaml\ninputs:\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x... 或环境变量名）\n  - name: CONDITION_ID\n    type: string\n    required: true\n    description: CTF conditionId（bytes32，0x... 64 hex）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: CTF position token id（uint256，通常与 clobTokenIds 对应）\n  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 判定完成（tx 成功且 burned>0）时为 true，否则 false\n  - name: TxHash\n    type: string\n    description: 交易哈希（失败为空字符串）\n```\n\n环境变量（不新增 Inputs）\n"
+        "NodeFunction": "组件功能：输入一个 Polymarket 的 clob tokenId，自动从 Polymarket API 查找该 token 所属市场，"
+    },
+    {
+        "Filename": "polymarket_redeem copy.py",
+        "Hash": "602d7dc832ca049b3efdcd67269e59b25d7b3489b5cebbee106c95b94a074e6e",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME、TX_HASH_HINT、API_KEY。运行时读取 RPC/合约地址等环境变量，调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n参数\n```yaml\ninputs:\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x... 或环境变量名）\n  - name: CONDITION_ID\n    type: string\n    required: true\n    description: CTF conditionId（bytes32，0x... 64 hex）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: CTF position token id（uint256，通常与 clobTokenIds 对应）\n  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\n  - name: TX_HASH_HINT\n    type: string\n    required: false\n    description: 上游 transaction 节点输出的 tx_hash_hint；redeem 将优先从该 tx 的 receipt.logs 解析参数，失败再扫链\n  - name: API_KEY\n    type: string\n    required: false\n    description: Alchemy API Key（当未设置 POLYGON_RPC/RPC_URL 时，用它自动拼出 Polygon RPC）\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 判定完成（tx 成功且 burned>0）时为 true，否则 false\n  - name: TxHash\n    type: string\n    description: 交易哈希（失败为空字符串）\n```\n\n环境变量（不新增 Inputs）\n"
+    },
+    {
+        "Filename": "polymarket_redeem.py",
+        "Hash": "329035afb9e5ea3aafa6d4ec24721c3fd1f9f3a26441654349120afcd28a8146",
+        "NodeKind": "Normal",
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME、TX_HASH_HINT、API_KEY、COLLATERAL_CANDIDATES、PARENT_COLLECTION_ID、POLYGONSCAN_API_KEY。运行时读取 RPC/合约地址等环境变量，调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n参数\n```yaml\ninputs:\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x... 或环境变量名）\n  - name: CONDITION_ID\n    type: string\n    required: true\n    description: CTF conditionId（bytes32，0x... 64 hex）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: CTF position token id（uint256，通常与 clobTokenIds 对应）\n  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\n  - name: TX_HASH_HINT\n    type: string\n    required: false\n    description: 上游 transaction 节点输出的 tx_hash_hint；redeem 将优先从该 tx 的 receipt.logs 解析参数，失败再扫链\n  - name: API_KEY\n    type: string\n    required: false\n    description: Alchemy API Key（当未设置 POLYGON_RPC/RPC_URL 时，用它自动拼出 Polygon RPC）\n  - name: COLLATERAL_CANDIDATES\n    type: string\n    required: false\n    description: 额外抵押品候选地址（逗号分隔）。用于补充/覆盖自动探测（例如加入 WCOL / 其他 collateral）\n  - name: PARENT_COLLECTION_ID\n    type: string\n    required: false\n    description: 强制指定 parentCollectionId（bytes32，0x... 64 hex）。提供后将优先使用\n  - name: POLYGONSCAN_API_KEY\n    type: string\n    required: false\n    description: Polygonscan/Etherscan API Key（v2）。提供后脚本会优先用它（无需设置环境变量）\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 判定完成（tx 成功且 burned>0）时为 true，否则 false\n  - name: TxHash\n    type: string\n    description: 交易哈希（失败为空字符串）\n```\n\n环境变量（不新增 Inputs）\n"
     },
     {
         "Filename": "PolyMarket_RefreshWallet.py",
@@ -415,9 +451,9 @@
     },
     {
         "Filename": "polymarket_transaction.py",
-        "Hash": "24f69ed52f24fdafb9d14256faceedc18b52a9ca9b9d38e2cab8270be854a913",
+        "Hash": "fa649c1b6d83c0cda38d7ef8c21fb7ffec646563736a3a22305dc07f37a9660a",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作，并支持在市场已上报 payouts 后走链上 CTF redeemPositions 进行 redeem（burn winning token 换回抵押品）。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n"
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作，并支持在市场已上报 payouts 后走链上 CTF redeemPositions 进行 redeem（burn winning token 换回抵押品）。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n  - name: tx_hash_hint\n    type: string\n    description: 相关链上交易哈希“提示”。注意：下单成功不一定立刻有链上 tx_hash，可能为空；若只有 1 个哈希则直接输出 0x...；若有多个则输出 JSON 列表字符串。\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n"
     },
     {
         "Filename": "PolyMarket_WalletPositions_BatchSave.py",
@@ -439,9 +475,9 @@
     },
     {
         "Filename": "QueryTime.py",
-        "Hash": "ed571e0c27b47c2225e362befc22b361707830b90f926edb32a8cd0b800d2c3a",
+        "Hash": "1f8c521c9349ae760f287dd1857a3dd8f413f78feb0375637cc6ac5daffbf25b",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能：这是一个获取当前日期的功能组件，用于输出格式化的当前系统日期。\\n\\n代码功能摘要：使用Python的datetime模块获取当前系统时间，并通过strftime方法将其格式化为\"YYYY-MM-DD\"格式的日期字符串输出。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 格式为\"YYYY-MM-DD\"的当前日期字符串\\n```\\n\\n运行逻辑：\\n- 调用datetime.now()方法获取当前系统时间\\n- 使用strftime('%Y-%m-%d')方法将时间对象格式化为\"YYYY-MM-DD\"格式的字符串\\n- 将格式化后的日期字符串赋值给Outputs[0]['Context']作为输出结果\\n- 返回包含当前日期的Outputs数组"
+        "NodeFunction": "组件功能：这是一个获取当前UTC时间的功能组件，用于输出格式化的当前世界时（UTC）。\\n\\n代码功能摘要：使用Python的datetime模块获取当前UTC时间，并通过strftime方法将其格式化为\"YYYY-MM-DDTHH:MM:SSZ\"格式的时间字符串输出。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 格式为\"YYYY-MM-DDTHH:MM:SSZ\"的当前UTC时间字符串\\n```\\n\\n运行逻辑：\\n- 调用datetime.now(timezone.utc)方法获取当前UTC时间\\n- 使用strftime('%Y-%m-%dT%H:%M:%SZ')方法将时间对象格式化为\"YYYY-MM-DDTHH:MM:SSZ\"格式的字符串\\n- 将格式化后的时间字符串赋值给Outputs[0]['Context']作为输出结果\\n- 返回包含当前UTC时间的Outputs数组"
     },
     {
         "Filename": "QuestionExceel.py",
@@ -547,9 +583,9 @@
     },
     {
         "Filename": "Stocks_Finnhub.py",
-        "Hash": "82553cde11688d158b77272285ea57fb3eb87d67a049efb7f9bceed18b54fb96",
+        "Hash": "394ade95ab6ddb43b449d4b465814597f57368fdd49194f1b09e71b6b2d56a26",
         "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，输出每个Ticker的最新价等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析Ticker输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 从Input2读取Finnhub API Key（token），作为鉴权参数调用接口\\n- 对每个symbol调用Finnhub Quote接口获取最新价（current price）\\n- 将结果标准化为统一字段结构并输出JSON字符串到OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 美股Ticker列表，逗号或空格分隔，例如 \"AAPL,MSFT\"\\n  - name: ApiKey\\n    type: string\\n    required: true\\n    description: Finnhub API Key（token），用于接口鉴权\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为Ticker列表字符串\\n- 解析并清洗为symbols数组（统一转大写、去空、去重）\\n- 读取Input2作为Finnhub API Key（token），若为空则返回错误\\n- 并发请求Finnhub Quote接口（/quote）获取每个Ticker的现价\\n- 组装输出：symbol、price、ts_utc、source等字段\\n- 输出JSON字符串写入OutPut1"
+        "NodeFunction": "组件功能（简述代码整体功能）\n这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，调用 Finnhub Stock Quote（/quote）获取每个Ticker的最新价，输出JSON字符串。\n\n【黄金/白银常用符号（重点：别用错）】\n- ✅ 本节点推荐用（美股ETF，能直接查）：GLD（黄金ETF）、IAU（黄金ETF）、SLV（白银ETF）\n- ⚠️ 容易混淆：GOLD 通常是股票（Barrick Gold），SIL 通常是“白银矿业ETF”，都不是金银现货/期货价格\n- ❌ 期货/现货符号（本节点/quote通常查不到）：GC、SI、XAUUSD、XAGUSD（这些需要期货/外汇类接口或另建节点）\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序读取输入的Symbols字符串并解析为symbols数组（支持逗号/空格/换行分隔），从ApiKey输入读取Finnhub token用于鉴权，然后逐个symbol调用 Finnhub /quote 获取现价，将返回结果标准化为统一字段（如 symbol、price、ts_utc、source 等）后，最终组装为JSON字符串输出。\n\n参数\n```yaml\ninputs:\n  - name: Symbols\n    type: string\n    required: true\n    description: 美股Ticker列表，逗号/空格/换行分隔，例如 \"AAPL,MSFT\" 或 \"GLD IAU SLVGLD（黄金ETF）、IAU（黄金ETF）、SLV（白银ETF）\"\n  - name: ApiKey\n    type: string\n    required: true\n    description: Finnhub API Key（token），用于接口鉴权\noutputs:\n  - name: Result\n    type: string\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 读取Input1作为Ticker列表字符串（Symbols）\n- 解析并清洗为symbols数组（统一转大写、去空、去重）\n- 读取Input2作为Finnhub API Key（ApiKey/token），若为空则返回错误\n- 逐个请求 Finnhub Stock Quote 接口（/quote）获取每个Ticker的现价\n- 组装输出字段：symbol、price、ts_utc、source等\n- 将结果序列化为JSON字符串写入OutPut1（Result）"
     },
     {
         "Filename": "TeamWorkTrigger.py",

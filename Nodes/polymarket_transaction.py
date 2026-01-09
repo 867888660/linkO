@@ -8,6 +8,7 @@ from typing import Optional, List, Dict, Any
 # 标准库 HTTP（用于 Gamma API 查询；不引入额外第三方依赖）
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
+from urllib.parse import urlencode
 
 # 可选：链上 redeem（需要 web3.py）。若缺失则在 BURN 模式给出友好提示。
 try:
@@ -28,7 +29,7 @@ except Exception:
     _IMPORTS_OK = False
 
 # **节点输入输出定义**
-OutPutNum = 4
+OutPutNum = 5
 InPutNum = 8
 NodeKind = 'Normal'
 # **Initialize Outputs and Inputs arrays and assign names directly**
@@ -51,6 +52,7 @@ Outputs[0]['name'] = 'Result'
 Outputs[1]['name'] = 'DeBugging'  # DeBugging用于解锁调试功能，输出调试信息
 Outputs[2]['name'] = 'Success'    # 单独输出布尔结果（字符串形式）
 Outputs[3]['name'] = 'OrderID'    # 单独输出订单ID（若有）
+Outputs[4]['name'] = 'tx_hash_hint'  # 相关链上交易哈希提示（单个时直接输出 0x...；多个时输出 JSON 列表；无则为空）
 Inputs[0]['IsLabel'] = True
 Inputs[0]['Context'] = 'BUY'#BUY|SELL|WITHDRAW_ORDER
 Inputs[6]['IsLabel'] = True
@@ -82,7 +84,8 @@ FunctionIntroduction = (
     '  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n'
     '  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n'
     '  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n'
-    '  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n```\n'
+    '  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n'
+    '  - name: tx_hash_hint\n    type: string\n    description: 相关链上交易哈希“提示”。注意：下单成功不一定立刻有链上 tx_hash，可能为空；若只有 1 个哈希则直接输出 0x...；若有多个则输出 JSON 列表字符串。\n```\n'
     '\n运行逻辑（用 - 列表描写详细流程）\n'
     '- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n'
     '- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n'
@@ -357,6 +360,157 @@ def _http_get_json(url: str, timeout: float, debug: Optional[List[str]] = None) 
         raise
 
 
+def _is_tx_hash_like(s: str) -> bool:
+    v = str(s or "").strip()
+    if not v:
+        return False
+    if v.startswith("0x") and len(v) == 66:
+        return True
+    # 允许不严格长度的 hash（某些接口可能返回不同格式），但至少需要 0x 前缀与一定长度
+    return bool(v.startswith("0x") and len(v) >= 10)
+
+
+def _extract_tx_hashes(obj: Any) -> List[str]:
+    """从 trades/fills 的返回结构中尽力提取 tx hash 列表（去重）。"""
+    out: List[str] = []
+
+    def _add(v: Any) -> None:
+        if v is None:
+            return
+        s = str(v).strip()
+        if not _is_tx_hash_like(s):
+            return
+        if s not in out:
+            out.append(s)
+
+    # 常见返回形态：list[dict] 或 dict{data:[...]}
+    # 另外：有些接口会直接在 dict 顶层给出 transactionsHashes/transactionHashes 列表（例如 post_order 响应）
+    if isinstance(obj, dict):
+        for k in ("transactionsHashes", "transactionHashes", "transaction_hashes", "tx_hashes"):
+            v = obj.get(k)
+            if isinstance(v, list):
+                for it in v:
+                    _add(it)
+            elif isinstance(v, str):
+                _add(v)
+
+    records: Optional[List[Any]] = None
+    if isinstance(obj, list):
+        records = obj
+    elif isinstance(obj, dict):
+        for k in ("data", "results", "trades", "fills"):
+            v = obj.get(k)
+            if isinstance(v, list):
+                records = v
+                break
+    if not isinstance(records, list):
+        return out
+
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        for k in (
+            "tx_hash", "txHash", "transaction_hash", "transactionHash",
+            "hash", "txid", "txn_hash", "txnHash",
+            "maker_tx_hash", "taker_tx_hash", "settlement_tx_hash",
+        ):
+            if k in r:
+                _add(r.get(k))
+        txo = r.get("transaction") or r.get("settlement")
+        if isinstance(txo, dict):
+            for k in ("hash", "tx_hash", "transactionHash", "transaction_hash"):
+                if k in txo:
+                    _add(txo.get(k))
+
+    return out
+
+
+def _clob_query_trades_fills_for_tx_hashes(
+    host: str,
+    token_id: str,
+    order_id: str,
+    debug: List[str],
+    lookback_seconds: int = 3600,
+) -> List[str]:
+    """
+    “尽力而为”的 tx_hash 探测：
+    - 先查 {HOST}/trades，失败再查 {HOST}/fills（参照 passivityTrigger_PolyMarket.py 的做法）
+    - 参数同时兼容 start_time / since
+    - 下单成功不保证立刻有链上 tx；因此允许返回空列表
+    """
+    base = str(host or "").strip().rstrip("/")
+    if not base:
+        return []
+    since = int(time.time()) - int(max(60, lookback_seconds))
+
+    params_variants: List[Dict[str, Any]] = []
+    if token_id:
+        params_variants.append({"token_id": str(token_id), "start_time": since})
+        params_variants.append({"token_id": str(token_id), "since": since})
+    if order_id:
+        params_variants.append({"order_id": str(order_id)})
+        params_variants.append({"orderID": str(order_id)})
+        if token_id:
+            params_variants.append({"token_id": str(token_id), "order_id": str(order_id)})
+
+    eps = ("/trades", "/fills")
+    got: List[str] = []
+    for p in params_variants:
+        for ep in eps:
+            url = f"{base}{ep}?{urlencode(p)}"
+            try:
+                _append_debug(debug, f"[txhint] GET {ep} params={p}")
+                payload = _http_get_json(url, REQUEST_TIMEOUT_SECONDS, debug)
+                hs = _extract_tx_hashes(payload)
+                if hs:
+                    _append_debug(debug, f"[txhint] {ep} matched tx_hashes: {hs[:5]}{' ...' if len(hs) > 5 else ''}")
+                    for h in hs:
+                        if h not in got:
+                            got.append(h)
+            except Exception as e:
+                _append_debug(debug, f"[txhint] {ep} query failed: {e}")
+    return got
+
+
+def _tx_hash_hint_after_order(
+    host: str,
+    token_id: str,
+    order_id: str,
+    debug: List[str],
+) -> List[str]:
+    """
+    下单后短轮询 trades/fills，尽力拿到最新相关 tx hash。
+    注意：这是“提示”输出，不作为成功判定依据。
+    """
+    # 默认不对 /trades、/fills 做“匿名 HTTP 查询”，因为它们往往需要鉴权（否则 401/404）
+    # 如需开启，设置：POLYMARKET_TXHINT_HTTP_ENABLE=1
+    http_enable = str(os.getenv("POLYMARKET_TXHINT_HTTP_ENABLE", "0") or "0").strip() in ("1", "true", "yes", "on")
+    if not http_enable:
+        _append_debug(debug, "[txhint] 已跳过 /trades,/fills HTTP 查询（默认关闭，避免 401/404）。如需开启请设置 POLYMARKET_TXHINT_HTTP_ENABLE=1")
+        return []
+
+    attempts = int(os.getenv("POLYMARKET_TXHINT_ATTEMPTS", "3") or 3)
+    attempts = max(1, min(attempts, 10))
+    initial_wait = float(os.getenv("POLYMARKET_TXHINT_INITIAL_WAIT", "0.8") or 0.8)
+    initial_wait = max(0.0, min(initial_wait, 10.0))
+    if initial_wait > 0:
+        time.sleep(initial_wait)
+
+    got: List[str] = []
+    for attempt in range(1, attempts + 1):
+        hs = _clob_query_trades_fills_for_tx_hashes(host, token_id, order_id, debug)
+        for h in hs:
+            if h not in got:
+                got.append(h)
+        if got:
+            return got
+        if attempt < attempts:
+            sleep_s = min(1.0 + 0.8 * attempt, 5.0)
+            _append_debug(debug, f"[txhint] 暂未发现 tx_hash，{sleep_s:.1f}s 后再试 ({attempt}/{attempts})")
+            time.sleep(sleep_s)
+    return got
+
+
 def _gamma_find_market_by_token_id(token_id: str, debug: List[str], limit: int = 200, max_pages: int = 200) -> Optional[Dict[str, Any]]:
     """仅靠 token_id 反查 Gamma market（不新增 Inputs）。
     Gamma /markets 是分页接口，字段 clobTokenIds 映射到一对 YES/NO token。"""
@@ -581,6 +735,9 @@ def run_node(node):
             "依赖检查失败",
             "请在环境中安装: pip install eth-account py-clob-client",
         ])
+        Outputs[2]['Context'] = "false"
+        Outputs[3]['Context'] = ""
+        Outputs[4]['Context'] = ""
         return Outputs
     def _get_input(idx: int):
         try:
@@ -626,6 +783,7 @@ def run_node(node):
         result: Dict[str, object] = {"success": False}
         order_id_out: str = ""
         success_out: bool = False
+        tx_hash_hint: List[str] = []
 
         if mode in ("BUY", "SELL"):
             if not price:
@@ -674,6 +832,18 @@ def run_node(node):
                 order_id_out = str(resp.get("orderID") or "")
             except Exception:
                 order_id_out = ""
+            # tx_hash_hint：
+            # 1) 优先从 post_order 响应里直接提取（matched 时经常自带 transactionsHashes）
+            try:
+                tx_hash_hint = _extract_tx_hashes(resp)
+            except Exception:
+                tx_hash_hint = []
+            # 2) 若仍为空，再按需开启“外部查询”补齐（默认关闭，避免 401/404）
+            if (not tx_hash_hint) and order_id_out:
+                try:
+                    tx_hash_hint = _tx_hash_hint_after_order(host, token_id, order_id_out, Debugging)
+                except Exception as e:
+                    _append_debug(Debugging, f"[txhint] lookup failed (ignore): {e}")
 
         elif mode == "WITHDRAW_ORDER":
             open_orders = [od for od in _list_open_orders(client, Debugging) if od['status'] in ("live", "partial_fill")]
@@ -738,12 +908,32 @@ def run_node(node):
                 "burn": burn_info,
                 "note": ("redeem tx 成功但本次未烧掉任何 token：可能未到可领取阶段 / 不是赢方 / 余额为0" if ok and burned == 0 else ""),
             })
+            # BURN 模式：tx_hash 是确定存在的（已发送链上交易），直接作为 hint 输出
+            try:
+                txh = str(burn_info.get("tx_hash") or "").strip()
+                if txh:
+                    tx_hash_hint = [txh]
+            except Exception:
+                tx_hash_hint = []
         else:
             raise ValueError("Mode 必须是 BUY、SELL、WITHDRAW_ORDER 或 BURN")
+
+        # 同步到 Result（便于上层统一落库/追踪）；Outputs[4] 仍会单独输出一份
+        try:
+            result["tx_hash_hint"] = tx_hash_hint
+        except Exception:
+            pass
 
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False)
         Outputs[2]['Context'] = "true" if success_out else "false"
         Outputs[3]['Context'] = order_id_out
+        # Output 展示：单个 => 0x..；多个 => JSON 列表；空 => ""
+        if not tx_hash_hint:
+            Outputs[4]['Context'] = ""
+        elif len(tx_hash_hint) == 1:
+            Outputs[4]['Context'] = str(tx_hash_hint[0])
+        else:
+            Outputs[4]['Context'] = json.dumps(tx_hash_hint, ensure_ascii=False)
     except Exception as e:
         err_msg = str(e)
         Outputs[0]['Context'] = json.dumps({"success": False, "error": err_msg}, ensure_ascii=False)
@@ -757,6 +947,7 @@ def run_node(node):
             _append_debug(Debugging, "- 网络：确认当前链 ID 与主机配置正确（如 Polygon 主网 137 与 https://clob.polymarket.com）。")
         Outputs[2]['Context'] = "false"
         Outputs[3]['Context'] = ""
+        Outputs[4]['Context'] = ""
 
     Outputs[1]['Context'] = "\n".join(Debugging)
     return Outputs

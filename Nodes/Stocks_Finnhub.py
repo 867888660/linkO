@@ -21,7 +21,32 @@ Inputs = [{'Num': None, 'Kind': None, 'Id': f'Input{i + 1}', 'Context': None, 'I
 # **Initialize Outputs and Inputs arrays and assign names directly**
 NodeKind = 'Normal'
 Lable = [{'Id': 'Label1', 'Kind': 'None'}]
-FunctionIntroduction = '组件功能（简述代码整体功能）\\n这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，输出每个Ticker的最新价等基础信息（JSON字符串）。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n- 解析Ticker输入字符串为symbols数组（支持逗号/空格/换行分隔）\\n- 从Input2读取Finnhub API Key（token），作为鉴权参数调用接口\\n- 对每个symbol调用Finnhub Quote接口获取最新价（current price）\\n- 将结果标准化为统一字段结构并输出JSON字符串到OutPut1\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Symbols\\n    type: string\\n    required: true\\n    description: 美股Ticker列表，逗号或空格分隔，例如 \"AAPL,MSFT\"\\n  - name: ApiKey\\n    type: string\\n    required: true\\n    description: Finnhub API Key（token），用于接口鉴权\\noutputs:\\n  - name: Result\\n    type: string\\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 读取Input1作为Ticker列表字符串\\n- 解析并清洗为symbols数组（统一转大写、去空、去重）\\n- 读取Input2作为Finnhub API Key（token），若为空则返回错误\\n- 并发请求Finnhub Quote接口（/quote）获取每个Ticker的现价\\n- 组装输出：symbol、price、ts_utc、source等字段\\n- 输出JSON字符串写入OutPut1'
+FunctionIntroduction = (
+    '组件功能（简述代码整体功能）\n'
+    '这是一个Stocks行情抓取节点：输入美股Ticker列表与Finnhub API Key，调用 Finnhub Stock Quote（/quote）获取每个Ticker的最新价，输出JSON字符串。\n\n'
+    '【黄金/白银常用符号（重点：别用错）】\n'
+    '- ✅ 本节点推荐用（美股ETF，能直接查）：GLD（黄金ETF）、IAU（黄金ETF）、SLV（白银ETF）\n'
+    '- ⚠️ 容易混淆：GOLD 通常是股票（Barrick Gold），SIL 通常是“白银矿业ETF”，都不是金银现货/期货价格\n'
+    '- ❌ 期货/现货符号（本节点/quote通常查不到）：GC、SI、XAUUSD、XAGUSD（这些需要期货/外汇类接口或另建节点）\n\n'
+    '代码功能摘要（概括核心算法或主要处理步骤）\n'
+    '程序读取输入的Symbols字符串并解析为symbols数组（支持逗号/空格/换行分隔），'
+    '从ApiKey输入读取Finnhub token用于鉴权，然后逐个symbol调用 Finnhub /quote 获取现价，'
+    '将返回结果标准化为统一字段（如 symbol、price、ts_utc、source 等）后，'
+    '最终组装为JSON字符串输出。\n\n'
+    '参数\n```yaml\n'
+    'inputs:\n'
+    '  - name: Symbols\n    type: string\n    required: true\n    description: 美股Ticker列表，逗号/空格/换行分隔，例如 "AAPL,MSFT" 或 "GLD IAU SLVGLD（黄金ETF）、IAU（黄金ETF）、SLV（白银ETF）"\n'
+    '  - name: ApiKey\n    type: string\n    required: true\n    description: Finnhub API Key（token），用于接口鉴权\n'
+    'outputs:\n'
+    '  - name: Result\n    type: string\n    description: JSON字符串，包含每个Ticker的最新价等基础信息\n```\n'
+    '\n运行逻辑（用 - 列表描写详细流程）\n'
+    '- 读取Input1作为Ticker列表字符串（Symbols）\n'
+    '- 解析并清洗为symbols数组（统一转大写、去空、去重）\n'
+    '- 读取Input2作为Finnhub API Key（ApiKey/token），若为空则返回错误\n'
+    '- 逐个请求 Finnhub Stock Quote 接口（/quote）获取每个Ticker的现价\n'
+    '- 组装输出字段：symbol、price、ts_utc、source等\n'
+    '- 将结果序列化为JSON字符串写入OutPut1（Result）'
+)
 
 # **Assign properties to Inputs**
 for output in Outputs:

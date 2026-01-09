@@ -91,6 +91,87 @@ class State(TypedDict):
     tool_results: List[Dict[str, Any]]
     llm_traces: List[Dict[str, Any]]
 
+# ---------- 2. 从工具 Inputs 字段或代码中提取输入参数 ----------
+def _extract_inputs_from_tool_or_code(tool: Dict[str, Any], code: str, path: Path) -> List[Dict[str, Any]]:
+    """
+    当 FunctionIntroduction 中没有 YAML 时，尝试从工具的 Inputs 字段或代码中的 Inputs 数组提取输入参数。
+    返回格式：[{name: str, type: str, required: bool, description: str}, ...]
+    """
+    inputs = []
+    
+    # 方法1：从工具的 Inputs 字段提取
+    tool_inputs = tool.get("Inputs", [])
+    if tool_inputs:
+        for inp in tool_inputs:
+            name = inp.get("name", "").strip()
+            if name:
+                kind = inp.get("Kind", "String")
+                param = inp.get("Parameters", "")
+                required = inp.get("Isnecessary", False) or (param and param.strip() != "auto_input")
+                desc = inp.get("Description", "") or inp.get("Context", "")
+                inputs.append({
+                    "name": name,
+                    "type": kind.lower() if isinstance(kind, str) else "string",
+                    "required": bool(required),
+                    "description": str(desc) if desc else f"参数 {name}"
+                })
+        if inputs:
+            print(f"    ↳ 从工具 Inputs 字段提取到 {len(inputs)} 个输入参数")
+            return inputs
+    
+    # 方法2：从代码中解析 Inputs 数组
+    try:
+        tree = ast.parse(code)
+        for ast_node in ast.walk(tree):
+            if isinstance(ast_node, ast.Assign):
+                for target in ast_node.targets:
+                    if isinstance(target, ast.Name) and target.id == "Inputs":
+                        # 找到了 Inputs 数组定义
+                        if isinstance(ast_node.value, (ast.List, ast.Tuple)):
+                            for elt in ast_node.value.elts:
+                                if isinstance(elt, ast.Dict):
+                                    # 解析字典字面量
+                                    name_val = None
+                                    kind_val = "String"
+                                    desc_val = ""
+                                    required_val = False
+                                    
+                                    for key, val in zip(elt.keys, elt.values):
+                                        if isinstance(key, (ast.Str, ast.Constant)):
+                                            key_str = key.s if hasattr(key, 's') else key.value
+                                        else:
+                                            continue
+                                        
+                                        if key_str == "name":
+                                            if isinstance(val, (ast.Str, ast.Constant)):
+                                                name_val = val.s if hasattr(val, 's') else val.value
+                                        elif key_str == "Kind":
+                                            if isinstance(val, (ast.Str, ast.Constant)):
+                                                kind_val = val.s if hasattr(val, 's') else val.value
+                                        elif key_str in ("Description", "Context"):
+                                            if isinstance(val, (ast.Str, ast.Constant)):
+                                                desc_val = val.s if hasattr(val, 's') else val.value
+                                        elif key_str == "Isnecessary":
+                                            if isinstance(val, ast.Constant):
+                                                required_val = bool(val.value)
+                                    
+                                    if name_val:
+                                        inputs.append({
+                                            "name": str(name_val),
+                                            "type": str(kind_val).lower() if kind_val else "string",
+                                            "required": required_val,
+                                            "description": str(desc_val) if desc_val else f"参数 {name_val}"
+                                        })
+                            
+                            if inputs:
+                                print(f"    ↳ 从代码 Inputs 数组提取到 {len(inputs)} 个输入参数")
+                                return inputs
+    except Exception as e:
+        # 解析失败，忽略
+        pass
+    
+    return []
+
 # ---------- 2. 找脚本 ----------
 def _find_script(node_name: str) -> Optional[Path]:
     base = node_name[:-3] if node_name.lower().endswith(".py") else node_name
@@ -592,48 +673,148 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
 
     # ---------- 1. 生成工具文档（重复工具去重） ---------- #
     import json                           # 确保可用
-    nodes_dir = os.path.join(os.getcwd(), "Nodes")
+    # ★ 修复：使用已定义的 NODES_DIR_ABS 而不是 os.getcwd()
+    nodes_dir = str(NODES_DIR_ABS.resolve())
     tool_docs = []                        # 用于收集各工具描述
     seen_tools = set()
 
+    print(f"[DEBUG] 工具目录: {nodes_dir}")
+    print(f"[DEBUG] 工具列表: {[t.get('name') or t.get('filename') for t in tools]}")
+
     for idx, tool in enumerate(tools, 1):
         fname = (tool.get("filename") or tool.get("name") or "").strip()
-        if not fname or fname in seen_tools:
+        if not fname:
+            print(f"[{idx}] ⚠️ 工具缺少 filename/name，跳过")
+            continue
+        if fname in seen_tools:
+            print(f"[{idx}] ⚠️ 工具 {fname} 已处理过，跳过重复")
             continue
         seen_tools.add(fname)
 
         base = os.path.basename(fname if fname.endswith(".py") else f"{fname}.py")
-        path = os.path.join(nodes_dir, base)
-        print(f"[{idx}] 检索 {path}")
-        if not os.path.isfile(path):
-            print("    ↳ 文件不存在，跳过")
-            continue
+        # ★ 修复：使用 Path 进行路径查找，支持子目录
+        path = NODES_DIR_ABS / base
+        # 如果直接路径不存在，尝试递归查找
+        if not path.is_file():
+            # 尝试递归查找
+            found = None
+            for p in NODES_DIR_ABS.rglob(base):
+                if p.is_file():
+                    found = p
+                    break
+            if found:
+                path = found
+            else:
+                print(f"[{idx}] ⚠️ 文件不存在: {path}")
+                print(f"    尝试查找: {base} 在 {NODES_DIR_ABS}")
+                continue
+        print(f"[{idx}] ✓ 找到工具文件: {path}")
 
         try:
-            code = open(path, "r", encoding="utf-8").read()
+            # 使用 Path 对象读取文件
+            code = path.read_text(encoding="utf-8")
         except Exception as e:
             print(f"    ↳ 读取失败：{e}")
             continue
 
-        # 兼容三引号/单引号/双引号的字符串字面量
-        m_intro = re.search(
-            r"FunctionIntroduction\s*=\s*(?P<lit>(?P<q>'''|\"\"\"|'|\").*?(?P=q))",
-            code, re.DOTALL,
-        )
-        if not m_intro:
-            print("    ↳ 无 FunctionIntroduction，跳过")
-            continue
-
-        # 解析 FunctionIntroduction 字符串字面值（使用 ast 以正确处理转义与换行）
+        # 兼容多种格式的 FunctionIntroduction：
+        # 1. 单行字符串：FunctionIntroduction = "..."
+        # 2. 三引号字符串：FunctionIntroduction = """..."""
+        # 3. 括号包裹的多行拼接：FunctionIntroduction = ('...' '...')
+        intro = None
+        
+        # ★ 方法1：尝试用 AST 解析整个文件，直接获取 FunctionIntroduction 的值
         try:
-            intro = ast.literal_eval(m_intro.group("lit"))
-        except Exception:
-            intro = m_intro.group("lit")
+            tree = ast.parse(code)
+            for ast_node in ast.walk(tree):  # ★ 修复：使用 ast_node 避免覆盖函数参数 node
+                if isinstance(ast_node, ast.Assign):
+                    for target in ast_node.targets:
+                        if isinstance(target, ast.Name) and target.id == "FunctionIntroduction":
+                            # 找到了 FunctionIntroduction 赋值
+                            if isinstance(ast_node.value, (ast.Str, ast.Constant)):
+                                # 单行字符串
+                                intro = ast_node.value.s if hasattr(ast_node.value, 's') else ast_node.value.value
+                            elif isinstance(ast_node.value, ast.JoinedStr):
+                                # f-string，转换为普通字符串
+                                try:
+                                    intro = ast.literal_eval(ast_node.value)
+                                except:
+                                    pass
+                            elif isinstance(ast_node.value, ast.Tuple) or isinstance(ast_node.value, ast.List):
+                                # 括号/列表包裹的多个字符串，拼接它们
+                                parts = []
+                                for elt in ast_node.value.elts:
+                                    if isinstance(elt, (ast.Str, ast.Constant)):
+                                        val = elt.s if hasattr(elt, 's') else elt.value
+                                        parts.append(str(val))
+                                if parts:
+                                    intro = "".join(parts)
+                            elif isinstance(ast_node.value, ast.BinOp) and isinstance(ast_node.value.op, ast.Add):
+                                # 字符串相加：'a' + 'b'
+                                # 递归处理（简化版，只处理两层）
+                                def get_str_val(n):
+                                    if isinstance(n, (ast.Str, ast.Constant)):
+                                        return n.s if hasattr(n, 's') else n.value
+                                    elif isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add):
+                                        return str(get_str_val(n.left)) + str(get_str_val(n.right))
+                                    return ""
+                                intro = get_str_val(ast_node.value)
+                            break
+        except Exception as e:
+            # AST 解析失败，回退到正则表达式
+            pass
+        
+        # ★ 方法2：如果 AST 解析失败，使用正则表达式匹配
+        if not intro:
+            # 先尝试匹配标准字符串字面量（单引号/双引号/三引号）
+            m_intro = re.search(
+                r"FunctionIntroduction\s*=\s*(?P<lit>(?P<q>'''|\"\"\"|'|\").*?(?P=q))",
+                code, re.DOTALL,
+            )
+            if m_intro:
+                try:
+                    intro = ast.literal_eval(m_intro.group("lit"))
+                except Exception:
+                    intro = m_intro.group("lit")
+        
+        # ★ 方法3：如果还没找到，尝试匹配括号包裹的多行拼接
+        if not intro:
+            # 简化版：找到 FunctionIntroduction = ( 到匹配的 ) 之间的内容
+            m_paren = re.search(
+                r"FunctionIntroduction\s*=\s*\(((?:[^()]|\([^()]*\))*)\)",
+                code, re.DOTALL,
+            )
+            if m_paren:
+                content = m_paren.group(1)
+                # 提取所有字符串字面量并拼接
+                parts = []
+                for m_str in re.finditer(
+                    r"(?P<q>'''|\"\"\"|'|\")(?P<content>.*?)(?P=q)",
+                    content, re.DOTALL
+                ):
+                    try:
+                        part = ast.literal_eval(m_str.group(0))
+                        parts.append(part)
+                    except Exception:
+                        parts.append(m_str.group("content"))
+                if parts:
+                    intro = "".join(parts)
+                    print(f"    ↳ 成功解析括号格式的 FunctionIntroduction（{len(parts)} 个片段）")
+        
+        if not intro:
+            print("    ↳ 无 FunctionIntroduction 或格式不支持，跳过")
+            if "FunctionIntroduction" in code:
+                print(f"    ↳ 发现 FunctionIntroduction 关键字，但无法解析")
+                idx = code.find("FunctionIntroduction")
+                preview = code[idx:idx+150].replace("\n", "\\n")
+                print(f"    ↳ 预览: {preview[:100]}...")
+            continue
 
         # 提取 YAML 元数据：
         # 1) 优先匹配 ```yaml / ```yml 代码块；
         # 2) 其次匹配任意 ``` 代码块；
         # 3) 兜底：从文本中截取以 inputs: 开头到结尾的片段作为 YAML。
+        inputs = []
         m_yaml = re.search(r"```ya?ml\s*(.*?)\s*```", intro, re.DOTALL | re.I)
         if not m_yaml:
             m_any = re.search(r"```\s*(.*?)\s*```", intro, re.DOTALL)
@@ -643,26 +824,44 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
                 # 尝试从 inputs: 开始抓取到文本结尾
                 m_inputs = re.search(r"(^|\n)\s*inputs\s*:\s*[\s\S]*", intro, re.I)
                 if not m_inputs:
-                    print("    ↳ FunctionIntroduction 内无可识别 YAML，跳过")
-                    continue
-                yaml_txt = m_inputs.group(0)
+                    # ★ 增强兼容性：如果没有 YAML，尝试从工具的 Inputs 字段或代码中提取
+                    print("    ↳ FunctionIntroduction 内无可识别 YAML，尝试从 Inputs 字段生成工具文档...")
+                    inputs = _extract_inputs_from_tool_or_code(tool, code, path)
+                    if not inputs:
+                        print("    ↳ 无法从 Inputs 字段提取，跳过")
+                        continue
+                else:
+                    yaml_txt = m_inputs.group(0)
+                    yaml_txt = textwrap.dedent(yaml_txt.replace(r"\n", "\n")).strip()
+                    try:
+                        meta = yaml.safe_load(yaml_txt) or {}
+                        inputs = meta.get("inputs", []) if isinstance(meta, dict) else []
+                    except Exception as e:
+                        print(f"    ↳ yaml 解析失败：{e}")
+                        inputs = [
+                            {"name": m.group(1)}
+                            for m in re.finditer(r"-\s*name:\s*([^\s]+)", yaml_txt)
+                        ]
         else:
             yaml_txt = m_yaml.group(1)
-
-        yaml_txt = textwrap.dedent(yaml_txt.replace(r"\n", "\n")).strip()
-        try:
-            meta = yaml.safe_load(yaml_txt) or {}
-            inputs = meta.get("inputs", []) if isinstance(meta, dict) else []
-        except Exception as e:
-            print(f"    ↳ yaml 解析失败：{e}")
-            inputs = [
-                {"name": m.group(1)}
-                for m in re.finditer(r"-\s*name:\s*([^\s]+)", yaml_txt)
-            ]
+            yaml_txt = textwrap.dedent(yaml_txt.replace(r"\n", "\n")).strip()
+            try:
+                meta = yaml.safe_load(yaml_txt) or {}
+                inputs = meta.get("inputs", []) if isinstance(meta, dict) else []
+            except Exception as e:
+                print(f"    ↳ yaml 解析失败：{e}")
+                inputs = [
+                    {"name": m.group(1)}
+                    for m in re.finditer(r"-\s*name:\s*([^\s]+)", yaml_txt)
+                ]
 
         if not inputs:
-            print("    ↳ 未找到 inputs，跳过")
-            continue
+            # ★ 最后尝试：从工具的 Inputs 字段或代码中提取
+            print("    ↳ 未找到 inputs，尝试从 Inputs 字段生成工具文档...")
+            inputs = _extract_inputs_from_tool_or_code(tool, code, path)
+            if not inputs:
+                print("    ↳ 无法从 Inputs 字段提取，跳过")
+                continue
 
         # ---------- ① 初始化：全部写成占位符 ---------- #
         arg_pairs, desc_lines = [], []
@@ -738,6 +937,15 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
         print("    ↳ 工具描述已生成")
         tool_docs.append(tool_doc)
 
+    # ★ 调试：显示工具文档生成结果
+    print(f"[DEBUG] 成功生成 {len(tool_docs)} 个工具文档（共 {len(tools)} 个工具）")
+    if len(tool_docs) == 0:
+        if len(tools) > 0:
+            print("⚠️ 警告：有工具但未生成任何工具文档，请检查工具文件是否存在且包含 FunctionIntroduction")
+        else:
+            print("⚠️ 警告：工具列表为空，node.get('Tools', []) 返回空列表")
+            print(f"[DEBUG] node 内容: {list(node.keys())}")
+            print(f"[DEBUG] node['Tools'] 值: {node.get('Tools', 'NOT_FOUND')}")
 
     # ---------- 2. 组装 system 提示 ---------- #
     sys_parts = [
@@ -754,7 +962,11 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
     ]
 
     if tool_docs:
-        sys_parts.append("\n".join(tool_docs))
+        tools_section = "\n\n".join(tool_docs)
+        sys_parts.append("可用工具：\n" + tools_section)
+        print(f"[DEBUG] ✓ 工具文档已添加到 system prompt，共 {len(tool_docs)} 个工具")
+    else:
+        print("[DEBUG] ⚠️ 没有工具文档可添加")
 
     if user_sys_extra:
         sys_parts.append(user_sys_extra)
@@ -772,6 +984,18 @@ def _prepare_messages(node: Dict[str, Any]) -> List[Dict[str, str]]:
 
     sys_prompt = "\n\n".join(sys_parts).strip()
     print("\n------ 生成的 system prompt ------\n", sys_prompt, "\n-------------------------------")
+    # ★ 调试：确认工具文档是否包含在 prompt 中
+    has_tools_in_prompt = any("### 工具" in part for part in sys_parts) or "可用工具：" in sys_prompt
+    print(f"[DEBUG] System prompt 是否包含工具文档: {has_tools_in_prompt}")
+    if not has_tools_in_prompt and len(tools) > 0:
+        print("⚠️ 警告：工具列表不为空，但 system prompt 中未找到工具文档！")
+        print(f"[DEBUG] tool_docs 数量: {len(tool_docs)}")
+        print(f"[DEBUG] sys_parts 数量: {len(sys_parts)}")
+    # ★ 调试：确认工具文档是否包含在 prompt 中
+    has_tools_in_prompt = any("### 工具" in part for part in sys_parts)
+    print(f"[DEBUG] System prompt 是否包含工具文档: {has_tools_in_prompt}")
+    if not has_tools_in_prompt and len(tools) > 0:
+        print("⚠️ 警告：工具列表不为空，但 system prompt 中未找到工具文档！")
 
     # ---------- 3. 构造消息列表 ---------- #
     msgs: List[Dict[str, str]] = [{"role": "system", "content": sys_prompt}]

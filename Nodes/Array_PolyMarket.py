@@ -459,8 +459,12 @@ def run_node(node):
 
         def build_record(src: dict):
             """从 option 或 扁平条目构造一条规范化记录"""
+            # 兼容新格式：如果 src 中没有 option_name/name，尝试从 question 生成或使用空字符串
             option_name = _get(src, 'option_name', 'name')
-            condition_id_ext = f"{condition_id}_{_slugify(option_name)}" if condition_id else _slugify(option_name)
+            if not option_name:
+                # 新格式可能没有 option_name，使用空字符串或从 question 生成
+                option_name = ''
+            condition_id_ext = f"{condition_id}_{_slugify(option_name)}" if condition_id else (_slugify(option_name) if option_name else '')
 
             # 先计算日化与年化，避免清洗逻辑导致 APR 被丢弃
             daily_eff = _num(_get(src, 'daily_eff_if_win'), ndigits=NDIGITS_PRICE, lo=0, hi=1)
@@ -483,8 +487,9 @@ def run_node(node):
                 'source_file': source_file,
 
                 # 盘口/价格（0~1）
-                'token': _get(src, 'token'),
-                'opp_token': _get(src, 'opp_token'),
+                # 兼容：token/yesToken → token；opp_token/noToken → opp_token
+                'token': _get(src, 'token', 'yesToken'),
+                'opp_token': _get(src, 'opp_token', 'noToken'),
                 'ask': _num(_get(src, 'ask'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
                 'bid': _num(_get(src, 'bid'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
                 # 钱包仓位字段（兼容 PolyMarket_WalletPositions_BatchSave.py）

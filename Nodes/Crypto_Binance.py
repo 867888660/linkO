@@ -47,18 +47,30 @@ for i in Inputs:
     i['Kind'] = 'String'
 
 FunctionIntroduction = (
-    "组件功能\n"
-    "1) 从 Binance Spot REST /api/v3/ticker/24hr (type=MINI) 批量拉取行情\n"
-    "2) 可选：用 CoinGecko 拉取 FDV/市值/供给等基本面，并合并到输出\n"
-    "\n"
-    "输入兼容两种形式：\n"
-    "A) 纯文本/逗号/换行：BTCUSDT,ETHUSDT\n"
-    "B) JSON：{\n"
-    '   "symbols": ["BTCUSDT","ETHUSDT"],\n'
-    '   "include_fundamentals": true,\n'
-    '   "vs_currency": "usd",\n'
-    '   "fundamentals_provider": "coingecko"\n'
-    "}\n"
+    "组件功能（简述代码整体功能）\n"
+    "这是一个加密货币行情抓取节点：从 Binance Spot REST API 批量拉取交易对行情数据，"
+    "可选集成 CoinGecko 获取 FDV/市值/供给等基本面数据，并合并输出为 JSON 字符串。\n\n"
+    "代码功能摘要（概括核心算法或主要处理步骤）\n"
+    "程序读取输入的 Symbols/Config 字符串（支持纯文本或 JSON 格式），"
+    "解析为交易对列表（symbols），调用 Binance /api/v3/ticker/24hr (type=MINI) 批量获取行情，"
+    "可选调用 CoinGecko API 获取基本面数据（market_cap、fdv、supply 等），"
+    "将结果标准化为统一字段后，最终组装为 JSON 字符串输出。\n\n"
+    "参数\n```yaml\n"
+    "inputs:\n"
+    "  - name: Symbols / Config\n    type: string\n    required: true\n    description: 交易对列表或配置JSON。支持两种格式：A) 纯文本/逗号/换行分隔，例如 \"BTCUSDT,ETHUSDT\" 或 \"BTCUSDT\\nETHUSDT\"；B) JSON对象，例如 {\"symbols\": [\"BTCUSDT\",\"ETHUSDT\"], \"include_fundamentals\": true, \"vs_currency\": \"usd\", \"fundamentals_provider\": \"coingecko\"}\n"
+    "outputs:\n"
+    "  - name: Result\n    type: string\n    description: JSON字符串，包含每个交易对的行情数据（price、vol_24h、market_cap_usd、fdv_usd、supply等）及元数据（ok、ts_utc、latency_ms、count、debug等）\n```\n"
+    "\n运行逻辑（用 - 列表描写详细流程）\n"
+    "- 读取 Input1 作为 Symbols/Config 字符串\n"
+    "- 解析输入：如果是 JSON 格式，提取 symbols 数组和配置参数（include_fundamentals、vs_currency 等）；如果是纯文本，按逗号/空格/换行分隔解析为 symbols 数组\n"
+    "- 调用 Binance /api/v3/ticker/24hr (type=MINI) 批量获取行情数据（每批最多100个交易对）\n"
+    "- 如果配置了 include_fundamentals=true，则：\n"
+    "  - 调用 Binance /api/v3/exchangeInfo 获取交易对的 baseAsset/quoteAsset 信息\n"
+    "  - 调用 CoinGecko API 解析 baseAsset ticker 对应的 CoinGecko ID\n"
+    "  - 调用 CoinGecko /coins/markets 批量获取基本面数据（market_cap、fdv、supply 等）\n"
+    "  - 将基本面数据合并到行情数据中\n"
+    "- 组装输出 JSON：包含 ok、ts_utc、latency_ms、count、data（行情数组）、debug（调试信息）、meta（元数据）等字段\n"
+    "- 将结果序列化为 JSON 字符串写入 Output1（Result）"
 )
 
 # =========================
@@ -420,7 +432,7 @@ def run_node(node):
             Outputs[0]["Context"] = json.dumps(result, ensure_ascii=False)
             return Outputs
 
-        include_fundamentals = bool(config.get("include_fundamentals", False))
+        include_fundamentals = bool(config.get("include_fundamentals", True))
         fundamentals_provider = str(config.get("fundamentals_provider", "coingecko")).lower().strip()
         vs_currency = str(config.get("vs_currency", "usd")).lower().strip()
 

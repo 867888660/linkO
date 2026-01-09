@@ -4,7 +4,6 @@ import os
 import time
 from typing import Optional, List, Dict, Any
 import requests
-import string
 
 # 可选：链上 redeem（需要 web3.py）。若缺失则在运行时给出友好提示。
 try:
@@ -14,7 +13,7 @@ except Exception:
 
 # **节点输入输出定义**
 OutPutNum = 4
-InPutNum = 9
+InPutNum = 6
 NodeKind = 'Normal'
 
 # **Initialize Outputs and Inputs arrays and assign names directly**
@@ -28,9 +27,6 @@ _input_names = [
     'OUTCOME',  # YES/NO
     'TX_HASH_HINT',  # optional: tx_hash_hint（优先从 receipt 解析参数）
     'API_KEY',       # optional: Alchemy API Key（未配置 POLYGON_RPC/RPC_URL 时拼接 RPC）
-    'COLLATERAL_CANDIDATES',  # optional: 额外抵押品候选（逗号分隔地址，如 USDC/USDC.e/WCOL）
-    'PARENT_COLLECTION_ID',   # optional: 强制指定 parentCollectionId（bytes32）
-    'POLYGONSCAN_API_KEY',    # optional: Polygonscan/Etherscan v2 key（替代环境变量）
 ]
 for i, name in enumerate(_input_names):
     Inputs[i]['name'] = name
@@ -65,24 +61,6 @@ Inputs[5]['Isnecessary'] = False
 Inputs[5]['Context'] = ""
 Inputs[5]['Kind'] = 'String_Key'
 
-# collateral candidates 示例（逗号分隔地址：可填 USDC/USDC.e/WCOL 等）
-Inputs[6]['IsLabel'] = True
-Inputs[6]['Isnecessary'] = False
-Inputs[6]['Kind'] = 'String'
-Inputs[6]['Context'] = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
-
-# parentCollectionId 示例（bytes32）
-Inputs[7]['IsLabel'] = True
-Inputs[7]['Isnecessary'] = False
-Inputs[7]['Kind'] = 'String'
-Inputs[7]['Context'] = "0x" + "0" * 64
-
-# polygonscan api key 示例
-Inputs[8]['IsLabel'] = True
-Inputs[8]['Isnecessary'] = False
-Inputs[8]['Kind'] = 'String_Key'
-Inputs[8]['Context'] = ""
-
 # Outputs
 for output in Outputs:
     output['Kind'] = 'String'
@@ -96,7 +74,7 @@ FunctionIntroduction = (
     '这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：'
     '会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n'
     '代码功能摘要（概括核心算法或主要处理步骤）\n'
-    '节点 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME、TX_HASH_HINT、API_KEY、COLLATERAL_CANDIDATES、PARENT_COLLECTION_ID、POLYGONSCAN_API_KEY。运行时读取 RPC/合约地址等环境变量，'
+    '节点 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME、TX_HASH_HINT、API_KEY。运行时读取 RPC/合约地址等环境变量，'
     '调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n'
     '参数\n```yaml\n'
     'inputs:\n'
@@ -106,9 +84,6 @@ FunctionIntroduction = (
     '  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\n'
     '  - name: TX_HASH_HINT\n    type: string\n    required: false\n    description: 上游 transaction 节点输出的 tx_hash_hint；redeem 将优先从该 tx 的 receipt.logs 解析参数，失败再扫链\n'
     '  - name: API_KEY\n    type: string\n    required: false\n    description: Alchemy API Key（当未设置 POLYGON_RPC/RPC_URL 时，用它自动拼出 Polygon RPC）\n'
-    '  - name: COLLATERAL_CANDIDATES\n    type: string\n    required: false\n    description: 额外抵押品候选地址（逗号分隔）。用于补充/覆盖自动探测（例如加入 WCOL / 其他 collateral）\n'
-    '  - name: PARENT_COLLECTION_ID\n    type: string\n    required: false\n    description: 强制指定 parentCollectionId（bytes32，0x... 64 hex）。提供后将优先使用\n'
-    '  - name: POLYGONSCAN_API_KEY\n    type: string\n    required: false\n    description: Polygonscan/Etherscan API Key（v2）。提供后脚本会优先用它（无需设置环境变量）\n'
     'outputs:\n'
     '  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n'
     '  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n'
@@ -850,16 +825,6 @@ def _try_params_from_tx_receipt(
         return None
 
 
-def _is_probably_tx_hash(s: str) -> bool:
-    """宽松校验：0x + 64 hex。用于过滤 'No results'/'None' 等脏输入，避免误解析。"""
-    t = str(s or "").strip()
-    if not t.startswith("0x") or len(t) != 66:
-        return False
-    hx = t[2:]
-    hexd = set(string.hexdigits)
-    return all((c in hexd) for c in hx)
-
-
 def _try_any_positionsplit_from_tx_receipt(
     w3: Any,
     tx_hash_hex: str,
@@ -1064,9 +1029,6 @@ def _burn_redeem_positions(
     debug: List[str],
     tx_hash_hint: str = "",
     api_key: str = "",
-    collateral_candidates_input: str = "",
-    parent_collection_id_input: str = "",
-    polygonscan_api_key_input: str = "",
 ) -> Dict[str, Any]:
     if Web3 is None:
         raise RuntimeError("redeem 需要 web3.py：pip install web3")
@@ -1091,43 +1053,6 @@ def _burn_redeem_positions(
     ctf_addr = os.getenv('CTF_ADDRESS', '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045')
     collateral = os.getenv("COLLATERAL_TOKEN")
     parent_collection_hex = os.getenv("PARENT_COLLECTION_ID")  # 可选：bytes32（0x + 64 hex）
-    # Inputs 覆盖（允许传“环境变量名”）
-    # - PARENT_COLLECTION_ID：强制指定 parentCollectionId（优先级最高）
-    pci_in = str(parent_collection_id_input or "").strip()
-    if pci_in:
-        env_v = os.getenv(pci_in)
-        if isinstance(env_v, str) and env_v.strip():
-            pci_in = env_v.strip()
-        pc_norm = _normalize_hex32(pci_in)
-        if pc_norm and len(pc_norm) == 66:
-            parent_collection_hex = pc_norm
-            _append_debug(debug, f"[input] parentCollectionId(using) => {parent_collection_hex}")
-
-    # - POLYGONSCAN_API_KEY：输入通常是“密钥环境变量名”（String_Key），这里优先用 os.getenv 解析
-    #   兼容：也允许用户直接粘贴 key（env 未命中时回退为原字符串）
-    ps_key_raw = str(polygonscan_api_key_input or "").strip()
-    if ps_key_raw:
-        env_v = os.getenv(ps_key_raw)
-        ps_key_val = env_v.strip() if isinstance(env_v, str) and env_v.strip() else ps_key_raw
-        # 若看起来像 env 名称但没取到值，给出提示（不打印 key 本体）
-        try:
-            looks_like_env_name = ps_key_raw.isupper() and ps_key_raw.replace("_", "").isalnum() and len(ps_key_raw) <= 64
-        except Exception:
-            looks_like_env_name = False
-        if looks_like_env_name and ps_key_val == ps_key_raw and not (isinstance(env_v, str) and env_v.strip()):
-            _append_debug(debug, f"[input] POLYGONSCAN_API_KEY 输入看起来是环境变量名，但未在环境中找到：{ps_key_raw}")
-
-        if ps_key_val and not (os.getenv("ETHERSCAN_API_KEY") or os.getenv("POLYGONSCAN_API_KEY") or os.getenv("POLYSCAN_API_KEY")):
-            os.environ["POLYGONSCAN_API_KEY"] = ps_key_val
-            _append_debug(debug, "[input] POLYGONSCAN_API_KEY 已从输入写入环境变量（仅本进程）")
-
-    # - COLLATERAL_CANDIDATES：额外抵押品候选（逗号分隔）
-    extra_collateral_raw = str(collateral_candidates_input or "").strip()
-    if extra_collateral_raw:
-        env_v = os.getenv(extra_collateral_raw)
-        if isinstance(env_v, str) and env_v.strip():
-            extra_collateral_raw = env_v.strip()
-
     gamma_meta = None  # gamma lookup removed: rely on on-chain collateral probe
     # 即使用户手动设置了 collateral，也尝试从 gamma 拿 parentCollectionId（若用户没配置的话）
     if not parent_collection_hex and token_id_int and int(token_id_int) > 0:
@@ -1211,12 +1136,6 @@ def _burn_redeem_positions(
         _append_debug(debug, f"PoA middleware 测试时出现其他错误（可忽略）：{test_e}")
     acct = w3.eth.account.from_key(private_key)
     wallet = acct.address
-    # 打印钱包与主币余额（MATIC），避免“余额为 0 但不自知”导致误判脚本问题
-    try:
-        bal_native = int(w3.eth.get_balance(wallet))
-        _append_debug(debug, f"wallet={wallet} native_balance(MATIC wei)={bal_native}")
-    except Exception as e:
-        _append_debug(debug, f"wallet balance check failed (ignore): {e}")
 
     abi = [
         {
@@ -1286,10 +1205,6 @@ def _burn_redeem_positions(
         or os.getenv("TX_HASH_HINT")
         or ""
     ).strip()
-    # 过滤脏输入（例如 'No results' / 'None'），避免拼出 0xNo results 触发 parse receipt failed
-    if tx_hint and (not _is_probably_tx_hash(tx_hint)):
-        _append_debug(debug, f"[txhint] ignore invalid tx_hash_hint: {tx_hint!r}")
-        tx_hint = ""
     if tx_hint:
         _append_debug(debug, f"[txhint] using tx hash => {tx_hint}")
         hit = _try_params_from_tx_receipt(w3, tx_hint, ctf_addr, cond, int(index_set), debug)
@@ -1423,35 +1338,12 @@ def _burn_redeem_positions(
     # === MIN PATCH: auto-detect collateral token (USDC.e vs native USDC) ===
     USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"   # bridged USDC.e
     USDC_NATIVE = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # native USDC
-
-    def _parse_addr_list_simple(s: Any) -> List[str]:
-        raw = str(s or "").strip()
-        if not raw:
-            return []
-        parts: List[str] = []
-        for seg in raw.replace("\n", ",").replace(" ", ",").split(","):
-            v = seg.strip()
-            if v:
-                parts.append(v)
-        out2: List[str] = []
-        seen2 = set()
-        for v in parts:
-            vv = v.strip()
-            if vv.lower().startswith("0x") and len(vv) == 42:
-                k = vv.lower()
-                if k not in seen2:
-                    seen2.add(k)
-                    out2.append(vv)
-        return out2
+    PM_COLLATERAL = "0x3A3BD7bb9528E159577F7C2e685CC81A765002E2"  # <- 这笔仓位真实 collateral（你解 PositionSplit 得到的）
 
     # 先把“你当前兜底出来的 collateral”放到候选列表最前面
     collateral_candidates = []
     if collateral:
         collateral_candidates.append(collateral)
-    # 用户输入的额外候选（例如 WCOL / 其他 collateral）
-    for a in _parse_addr_list_simple(extra_collateral_raw):
-        if a.lower() not in [x.lower() for x in collateral_candidates]:
-            collateral_candidates.append(a)
     # 若链上 positionsplit 找到了 collateral，也加入候选（避免某些数据不一致）
     try:
         for h in ps_hits or []:
@@ -1460,7 +1352,7 @@ def _burn_redeem_positions(
                 collateral_candidates.append(c0)
     except Exception:
         pass
-    for c in [USDC_E, USDC_NATIVE]:
+    for c in [USDC_E, USDC_NATIVE, PM_COLLATERAL]:
         if c.lower() not in [x.lower() for x in collateral_candidates]:
             collateral_candidates.append(c)
 
@@ -1851,62 +1743,20 @@ def _burn_redeem_positions(
         if txdiag:
             provided_diag["token_id_tx_diagnosis"] = txdiag
 
-        # 若诊断已经明确匹配出“该 provided_token_id 对应的真实参数”，则自动覆盖并继续 redeem（避免因候选 collateral 不全而误判不可用）
-        try:
-            m0 = None
-            if isinstance(txdiag, dict):
-                pm = txdiag.get("provided_token_matches")
-                if isinstance(pm, list) and pm and isinstance(pm[0], dict):
-                    m0 = pm[0]
-            if m0:
-                coll0 = str(m0.get("collateral") or "").strip()
-                parent0 = _normalize_hex32(m0.get("parentCollectionId"))
-                ix0 = int(m0.get("indexSet") or 0) or int(index_set)
-                mode0 = str(m0.get("mode") or "").strip() or pid_mode
-                if coll0.lower().startswith("0x") and len(coll0) == 42:
-                    _append_debug(
-                        debug,
-                        f"[autofix] use txdiag match to continue: collateral={coll0} parentCollectionId={parent0 or ('0x'+'0'*64)} indexSet={ix0} mode={mode0}",
-                    )
-                    collateral = coll0
-                    if parent0 and len(parent0) == 66:
-                        parent_collection_hex = parent0
-                    index_set = int(ix0)
-                    pid_mode = mode0
-                    # 伪造 best，避免继续走“return skipped”的分支
-                    try:
-                        pb2 = int((provided_diag or {}).get("provided_token_balance_eoa") or 1)
-                    except Exception:
-                        pb2 = 1
-                    best = {
-                        "collateral": collateral,
-                        "mode": pid_mode,
-                        "pid_yes": 0,
-                        "bal_yes": 0,
-                        "pid_no": int(provided_token_id or 0),
-                        "bal_no": int(pb2),
-                        "score": int(pb2),
-                    }
-                else:
-                    m0 = None
-        except Exception:
-            pass
-
-        if not best or best.get("score", 0) == 0:
-            return {
-                "tx_hash": "",
-                "receipt_status": 0,
-                "burned": 0,
-                "ok": False,
-                "pending": False,
-                "skipped": True,
-                "reason": "ZERO_BALANCE_FOR_ALL_COLLATERALS",
-                "collateral_candidates": cand_debug,
-                "escrow_candidates": escrow_candidates,
-                "provided_token_diagnosis": provided_diag,
-                "condition_id": cond,
-                "index_set": int(index_set),
-            }
+        return {
+            "tx_hash": "",
+            "receipt_status": 0,
+            "burned": 0,
+            "ok": False,
+            "pending": False,
+            "skipped": True,
+            "reason": "ZERO_BALANCE_FOR_ALL_COLLATERALS",
+            "collateral_candidates": cand_debug,
+            "escrow_candidates": escrow_candidates,
+            "provided_token_diagnosis": provided_diag,
+            "condition_id": cond,
+            "index_set": int(index_set),
+        }
     # === END PATCH ===
 
     provided_token_id = int(token_id_int) if token_id_int is not None else None
@@ -2049,33 +1899,14 @@ def _burn_redeem_positions(
             'chainId': chain_id,
         })
 
-        # --- gas limit: 尽量正确估算；公共 RPC 偶发会带着 build_transaction 的默认 gas(49641)导致 "exceeds allowance" ---
         try:
-            tx_for_est = dict(tx)
-            # 关键：移除可能存在的默认 gas 上限，让节点能给出真实估算
-            if 'gas' in tx_for_est:
-                tx_for_est.pop('gas', None)
-            est = w3.eth.estimate_gas(tx_for_est)
-            # 给一点 buffer，避免边界波动
-            tx['gas'] = int(max(int(est) * 12 // 10, int(est) + 10_000))
-            _append_debug(debug, f"gas(estimated) => {tx['gas']}")
+            tx['gas'] = w3.eth.estimate_gas(tx)
         except Exception as e:
-            # 兜底：用一个安全 gasLimit（redeemPositions 通常不大，但不同实现/路径可能更高）
-            fallback_gas = int(os.getenv("GAS_LIMIT", "250000") or 250000)
-            fallback_gas = max(80_000, min(fallback_gas, 2_000_000))
-            tx['gas'] = int(fallback_gas)
-            _append_debug(debug, f"estimate_gas failed => {e} ; fallback gas={tx['gas']}")
+            _append_debug(debug, f"estimate_gas failed: {e}")
         
         # 费用策略（base_fee_mult 用于 underpriced 时自动提高费用）
         fee_mult = float(os.getenv('GAS_PRICE_MULTIPLIER', '1.20') or 1.20) * base_fee_mult
         fee_mult = max(1.0, min(fee_mult, 10.0))
-        # 默认给一个 Polygon 上较合理的费用上限，避免公共 RPC 抖动返回离谱 gas_price 导致“余额不足”
-        try:
-            max_gas_gwei = float(os.getenv("MAX_GAS_PRICE_GWEI", "250") or 250)
-        except Exception:
-            max_gas_gwei = 250.0
-        max_gas_gwei = max(1.0, min(max_gas_gwei, 5000.0))
-        max_gas_wei = int(max_gas_gwei * 1e9)
 
         if 'gasPrice' not in tx and 'maxFeePerGas' not in tx:
             env_gas_gwei = os.getenv('GAS_PRICE_GWEI')
@@ -2094,11 +1925,11 @@ def _burn_redeem_positions(
                             max_fee = prio_fee + base_fee * 2
                         except Exception:
                             max_fee = prio_fee * 3
-                    tx['maxPriorityFeePerGas'] = min(int(prio_fee * fee_mult), max_gas_wei)
-                    tx['maxFeePerGas'] = min(int(max_fee * fee_mult), max_gas_wei)
+                    tx['maxPriorityFeePerGas'] = int(prio_fee * fee_mult)
+                    tx['maxFeePerGas'] = int(max_fee * fee_mult)
                     _append_debug(debug, f"fees(EIP1559) mult={base_fee_mult:.2f}x maxFeePerGas={tx['maxFeePerGas']} maxPriorityFeePerGas={tx['maxPriorityFeePerGas']}")
                 elif env_gas_gwei:
-                    tx['gasPrice'] = min(int(float(env_gas_gwei) * 1e9 * fee_mult), max_gas_wei)
+                    tx['gasPrice'] = int(float(env_gas_gwei) * 1e9 * fee_mult)
                     _append_debug(debug, f"fees(legacy) mult={base_fee_mult:.2f}x gasPrice={tx['gasPrice']}")
                 else:
                     try:
@@ -2107,33 +1938,16 @@ def _burn_redeem_positions(
                         if base_fee > 0:
                             prio_fee = int(30 * 1e9)
                             max_fee = prio_fee + base_fee * 2
-                            tx['maxPriorityFeePerGas'] = min(int(prio_fee * fee_mult), max_gas_wei)
-                            tx['maxFeePerGas'] = min(int(max_fee * fee_mult), max_gas_wei)
+                            tx['maxPriorityFeePerGas'] = int(prio_fee * fee_mult)
+                            tx['maxFeePerGas'] = int(max_fee * fee_mult)
                             _append_debug(debug, f"fees(EIP1559-auto) mult={base_fee_mult:.2f}x baseFee={base_fee} maxFeePerGas={tx['maxFeePerGas']} maxPriorityFeePerGas={tx['maxPriorityFeePerGas']}")
                         else:
                             raise RuntimeError("pending block baseFeePerGas unavailable")
                     except Exception:
-                        gp = int(w3.eth.gas_price)
-                        tx['gasPrice'] = min(int(gp * fee_mult), max_gas_wei)
+                        tx['gasPrice'] = int(w3.eth.gas_price * fee_mult)
                         _append_debug(debug, f"fees(legacy-auto) mult={base_fee_mult:.2f}x gasPrice={tx['gasPrice']}")
             except Exception as fee_e:
                 _append_debug(debug, f"fees setup failed, continue without explicit fees: {fee_e}")
-
-        # 最后：在发送前预估一次总费用，提前提示余额是否足够（避免直接抛错）
-        try:
-            bal_native = int(w3.eth.get_balance(wallet))
-            gas_lim = int(tx.get("gas") or 0)
-            if "gasPrice" in tx:
-                price = int(tx["gasPrice"])
-            else:
-                price = int(tx.get("maxFeePerGas") or 0)
-            est_cost = int(gas_lim) * int(price)
-            _append_debug(debug, f"gas_cost_estimate: balance={bal_native} wei, gas={gas_lim}, price={price} wei => est_cost={est_cost} wei")
-            if bal_native > 0 and est_cost > 0 and bal_native < est_cost:
-                raise RuntimeError(f"INSUFFICIENT_NATIVE_GAS: balance={bal_native} < est_cost={est_cost} (consider lower MAX_GAS_PRICE_GWEI/GAS_PRICE_GWEI or top up MATIC)")
-        except Exception as pre_e:
-            # 这里不强制终止：让 send_raw_transaction 的真实错误返回给上层（但至少日志更清楚）
-            _append_debug(debug, f"[precheck] gas funds check: {pre_e}")
 
         signed = acct.sign_transaction(tx)
         raw_tx = _extract_signed_raw_tx(signed)
@@ -2257,10 +2071,6 @@ def run_node(node):
     else:
         api_key = ""
 
-    collateral_candidates_input = str(_get_input(6) or "").strip()
-    parent_collection_id_input = str(_get_input(7) or "").strip()
-    polygonscan_api_key_input = str(_get_input(8) or "").strip()
-
     tx_hash_out = ""
     success_out = False
     result: Dict[str, Any] = {"success": False}
@@ -2287,9 +2097,6 @@ def run_node(node):
             Debugging,
             tx_hash_hint=tx_hash_hint,
             api_key=api_key,
-            collateral_candidates_input=collateral_candidates_input,
-            parent_collection_id_input=parent_collection_id_input,
-            polygonscan_api_key_input=polygonscan_api_key_input,
         )
         tx_hash_out = str(burn_info.get('tx_hash') or "")
 
