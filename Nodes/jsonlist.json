@@ -415,7 +415,7 @@
     },
     {
         "Filename": "PolyMarket_QueryToken.py",
-        "Hash": "a7eac551888bc5c4831646cb75c5b6ef53eed6c51b856eb052bc0fe0c9517b8e",
+        "Hash": "2971ad08b7e08f9a10a94bc8f6847b4a460aac450a57a5dc82175fd354d23863",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能：输入一个 Polymarket 的 clob tokenId，自动从 Polymarket API 查找该 token 所属市场，"
     },

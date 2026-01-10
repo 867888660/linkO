@@ -611,6 +611,9 @@ def run_node(node):
     url = ("https://polymarket.com/event/" + str(slug)) if slug else ""
     condition_id_ext = f"{condition_id}_{_slugify(option_name)}" if condition_id else _slugify(option_name)
 
+    # 判断搜索状态：如果找到 market 或有价格信息，算搜索成功；否则算搜索失败
+    search_status = "搜索成功" if (stub is not None or ask is not None or bid is not None) else "搜索失败"
+
     record = {k: '' for k in FIELD_NAMES}
     record.update({
         'condition_id': str(condition_id),
@@ -658,11 +661,15 @@ def run_node(node):
         'Islast': True,
     })
 
-    # 1) Json_Save：输出命中记录的 JSON（dict 字符串）
+    # 1) Json_Save：输出命中记录的 JSON（dict 字符串），并添加搜索状态
     try:
-        Outputs[0]['Context'] = json.dumps(record, ensure_ascii=False)
+        # 在 record 中添加搜索状态字段
+        record_with_status = dict(record)
+        record_with_status['search_status'] = search_status
+        Outputs[0]['Context'] = json.dumps(record_with_status, ensure_ascii=False)
     except Exception:
-        Outputs[0]['Context'] = str(record)
+        # 如果 JSON 序列化失败，使用字符串格式并添加状态
+        Outputs[0]['Context'] = str(record) + f' | search_status: {search_status}'
 
     # 2) 各字段槽
     for i, field in enumerate(FIELD_NAMES, start=1):
