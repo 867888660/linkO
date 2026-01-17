@@ -69,7 +69,8 @@ Inputs[5]['Kind'] = 'String_Key'
 Inputs[6]['IsLabel'] = True
 Inputs[6]['Isnecessary'] = False
 Inputs[6]['Kind'] = 'String'
-Inputs[6]['Context'] = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+# 默认放入 Polymarket 常见三种 collateral：USDC.e / USDC(native) / WCOL（旧节点里的 PM_COLLATERAL）
+Inputs[6]['Context'] = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174,0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359,0x3A3BD7bb9528E159577F7C2e685CC81A765002E2"
 
 # parentCollectionId 示例（bytes32）
 Inputs[7]['IsLabel'] = True
@@ -1100,8 +1101,11 @@ def _burn_redeem_positions(
             pci_in = env_v.strip()
         pc_norm = _normalize_hex32(pci_in)
         if pc_norm and len(pc_norm) == 66:
-            parent_collection_hex = pc_norm
-            _append_debug(debug, f"[input] parentCollectionId(using) => {parent_collection_hex}")
+            # 重要：UI 默认占位通常是 0x00..00。这个值不应被当作“用户强制指定”，否则会阻断 gamma/txhint 自动补参。
+            # 若用户真的想强制 0x00..00（极少数），建议留空让逻辑自然落到 0；或改用环境变量 PARENT_COLLECTION_ID 显式设置。
+            if pc_norm.lower() != ("0x" + "0" * 64):
+                parent_collection_hex = pc_norm
+                _append_debug(debug, f"[input] parentCollectionId(using) => {parent_collection_hex}")
 
     # - POLYGONSCAN_API_KEY：输入通常是“密钥环境变量名”（String_Key），这里优先用 os.getenv 解析
     #   兼容：也允许用户直接粘贴 key（env 未命中时回退为原字符串）
@@ -1129,10 +1133,19 @@ def _burn_redeem_positions(
             extra_collateral_raw = env_v.strip()
 
     gamma_meta = None  # gamma lookup removed: rely on on-chain collateral probe
-    # 即使用户手动设置了 collateral，也尝试从 gamma 拿 parentCollectionId（若用户没配置的话）
+    # 若用户没有强制 parentCollectionId，尽量用 gamma 补齐（很多市场 parentCollectionId != 0）
     if not parent_collection_hex and token_id_int and int(token_id_int) > 0:
         if gamma_meta is None:
             gamma_meta = _gamma_fetch_market_meta_by_clob_token_id(str(token_id_int), debug)
+        # 顺带用 gamma 的 collateral 做一次种子（尤其是 WCOL/非 USDC 市场）
+        try:
+            if (not collateral) and gamma_meta and isinstance(gamma_meta.get("collateral"), str):
+                col0 = str(gamma_meta.get("collateral") or "").strip()
+                if col0.startswith("0x") and len(col0) == 42:
+                    collateral = col0
+                    _append_debug(debug, f"collateral 将使用 gamma 返回值: {collateral}")
+        except Exception:
+            pass
         if gamma_meta and isinstance(gamma_meta.get("parentCollectionId"), str):
             parent_collection_hex = str(gamma_meta.get("parentCollectionId"))
             _append_debug(debug, f"parentCollectionId 将使用 gamma 返回值: {parent_collection_hex}")
@@ -1423,6 +1436,8 @@ def _burn_redeem_positions(
     # === MIN PATCH: auto-detect collateral token (USDC.e vs native USDC) ===
     USDC_E = "0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174"   # bridged USDC.e
     USDC_NATIVE = "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"  # native USDC
+    # Polymarket 上常见的第三种抵押品（旧节点里硬编码的 PM_COLLATERAL；社区习惯叫 WCOL）
+    WCOL_PM = "0x3A3BD7bb9528E159577F7C2e685CC81A765002E2"
 
     def _parse_addr_list_simple(s: Any) -> List[str]:
         raw = str(s or "").strip()
@@ -1460,9 +1475,10 @@ def _burn_redeem_positions(
                 collateral_candidates.append(c0)
     except Exception:
         pass
-    for c in [USDC_E, USDC_NATIVE]:
+    for c in [USDC_E, USDC_NATIVE, WCOL_PM]:
         if c.lower() not in [x.lower() for x in collateral_candidates]:
             collateral_candidates.append(c)
+    _append_debug(debug, f"[collateral-candidates] {collateral_candidates}")
 
     # 注意：不同 CTF/ConditionalTokens 实现对 positionId 的哈希可能存在“打包方式/顺序”差异。
     # 为了解决“balanceOf(PROVIDED_TOKEN_ID)>0 但用标准公式算出来 pid 余额为 0”的情况，这里做最小化自动探测：
@@ -1533,6 +1549,8 @@ def _burn_redeem_positions(
     best = None
     cand_debug = []
     # 1) 先用 provided_token_id 做“硬匹配”探测 mode/indexSet/collateral
+    matched_collateral: Optional[str] = None
+    matched_index_set: Optional[int] = None
     if provided_token_id is not None and provided_token_id > 0:
         for c in collateral_candidates:
             try:
@@ -1541,13 +1559,35 @@ def _burn_redeem_positions(
                 for m, pid in v_yes.items():
                     if int(pid) == int(provided_token_id):
                         pid_mode = m
-                        _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matches YES under mode={m} collateral={c}")
+                        matched_collateral = c
+                        matched_index_set = 1
+                        # 立即检查这个 positionId 的余额
+                        try:
+                            bal_check = int(_with_retry(ctf.functions.balanceOf(wallet, int(pid)).call, debug=debug, label=f"balanceOf(PROVIDED_TOKEN_ID@matched_YES)"))
+                            _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matches YES under mode={m} collateral={c} => balance={bal_check}")
+                            if bal_check > 0:
+                                _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matched YES positionId has balance={bal_check}, will use this for redeem")
+                        except Exception as e:
+                            _append_debug(debug, f"[pid-mode] balanceOf check failed for matched YES: {e}")
                         break
+                if matched_collateral:
+                    break
                 for m, pid in v_no.items():
                     if int(pid) == int(provided_token_id):
                         pid_mode = m
-                        _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matches NO under mode={m} collateral={c}")
+                        matched_collateral = c
+                        matched_index_set = 2
+                        # 立即检查这个 positionId 的余额
+                        try:
+                            bal_check = int(_with_retry(ctf.functions.balanceOf(wallet, int(pid)).call, debug=debug, label=f"balanceOf(PROVIDED_TOKEN_ID@matched_NO)"))
+                            _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matches NO under mode={m} collateral={c} => balance={bal_check}")
+                            if bal_check > 0:
+                                _append_debug(debug, f"[pid-mode] PROVIDED_TOKEN_ID matched NO positionId has balance={bal_check}, will use this for redeem")
+                        except Exception as e:
+                            _append_debug(debug, f"[pid-mode] balanceOf check failed for matched NO: {e}")
                         break
+                if matched_collateral:
+                    break
             except Exception:
                 continue
 
@@ -1618,6 +1658,15 @@ def _burn_redeem_positions(
                 pb = int(_with_retry(ctf.functions.balanceOf(wallet, int(provided_token_id)).call, debug=debug, label="balanceOf(PROVIDED_TOKEN_ID@EOA)"))
                 provided_diag["provided_token_balance_eoa"] = int(pb)
                 _append_debug(debug, f"[diag] balanceOf(wallet, PROVIDED_TOKEN_ID={provided_token_id}) => {pb}")
+                # 如果 PROVIDED_TOKEN_ID 匹配到了某个 positionId，但余额是 0，给出更明确的提示
+                if matched_collateral and matched_index_set and pb == 0:
+                    matched_pid = _calc_pid_for(matched_collateral, matched_index_set, mode=pid_mode)
+                    _append_debug(
+                        debug,
+                        f"[diag] PROVIDED_TOKEN_ID={provided_token_id} 匹配到了 {('YES' if matched_index_set == 1 else 'NO')} 的 positionId "
+                        f"(collateral={matched_collateral}, mode={pid_mode}), 但余额为 0。"
+                        f"可能原因：1) 已卖出/转走；2) 已 redeem；3) TOKEN_ID 输入错误（不是 CTF positionId）"
+                    )
             except Exception as e:
                 _append_debug(debug, f"[diag] balanceOf(PROVIDED_TOKEN_ID@EOA) failed: {e}")
             # 也查一下 escrow 合约里是否持有该 id（仅当用户的 tokenId 真的是 positionId 时有意义）
@@ -2146,22 +2195,49 @@ def _burn_redeem_positions(
     for attempt in range(1, max_retries + 1):
         try:
             fee_multiplier = 1.0 if attempt == 1 else (2.0 ** (attempt - 1))  # 第1次1.0x，第2次2.0x，第3次4.0x
-            # 重试时重新获取 nonce（如果旧交易被打包，可以用新 nonce 避免冲突）
-            if attempt > 1:
-                try:
-                    new_pending = w3.eth.get_transaction_count(wallet, 'pending')
-                    if new_pending > current_nonce:
-                        current_nonce = new_pending
-                        _append_debug(debug, f"检测到 nonce 已更新：{current_nonce}（旧交易可能已打包）")
-                except Exception:
-                    pass
+            # 每次尝试前都重新获取最新的 pending nonce（避免在构建交易和发送之间，有其他交易被打包导致 nonce 已递增）
+            try:
+                new_pending = w3.eth.get_transaction_count(wallet, 'pending')
+                if new_pending > current_nonce:
+                    _append_debug(debug, f"[nonce] 检测到 nonce 已更新：{current_nonce} -> {new_pending}（可能有其他交易已打包）")
+                    current_nonce = new_pending
+                elif attempt == 1:
+                    # 第一次尝试时，即使 nonce 没变也记录一下，便于调试
+                    _append_debug(debug, f"[nonce] 使用 nonce={current_nonce} (pending={new_pending})")
+            except Exception as nonce_e:
+                _append_debug(debug, f"[nonce] 重新获取 nonce 失败（继续使用旧值 {current_nonce}）：{nonce_e}")
             
             tx_hash = _build_and_send_tx(current_nonce, base_fee_mult=fee_multiplier)
             _append_debug(debug, f"redeemPositions tx sent (attempt {attempt}, nonce={current_nonce}) => {tx_hash.hex()}")
             break
         except Exception as e:
             err_msg = str(e).lower()
-            if 'replacement transaction underpriced' in err_msg or 'underpriced' in err_msg:
+            # 处理 nonce too low 错误：通常是因为在构建和发送之间，有其他交易被打包了
+            if 'nonce too low' in err_msg or 'nonce' in err_msg and ('too low' in err_msg or 'too high' in err_msg):
+                if attempt < max_retries:
+                    # 强制重新获取最新的 nonce
+                    try:
+                        new_pending = w3.eth.get_transaction_count(wallet, 'pending')
+                        if new_pending != current_nonce:
+                            current_nonce = new_pending
+                            _append_debug(debug, f"nonce too low 错误，已更新 nonce：{current_nonce}，将在下次重试时使用")
+                        else:
+                            # 如果 nonce 没变，可能是 RPC 延迟，稍微等待后重试
+                            _append_debug(debug, f"nonce too low 错误，但 nonce 未变化（{current_nonce}），等待 1s 后重试...")
+                            time.sleep(1.0)
+                            # 再次获取 nonce
+                            new_pending = w3.eth.get_transaction_count(wallet, 'pending')
+                            if new_pending != current_nonce:
+                                current_nonce = new_pending
+                                _append_debug(debug, f"等待后 nonce 已更新：{current_nonce}")
+                    except Exception as nonce_e:
+                        _append_debug(debug, f"nonce too low 错误，但重新获取 nonce 失败：{nonce_e}")
+                    time.sleep(0.5)  # 短暂等待
+                    continue
+                else:
+                    _append_debug(debug, f"nonce too low 重试{max_retries}次仍失败（nonce={current_nonce}）。可能原因：1) 有多个脚本/进程并发使用同一地址；2) RPC 延迟导致 nonce 视图不一致。建议：等待几秒后重试，或检查是否有其他交易正在使用此地址。")
+                    raise
+            elif 'replacement transaction underpriced' in err_msg or 'underpriced' in err_msg:
                 if attempt < max_retries:
                     next_mult = fee_multiplier * 2.0
                     _append_debug(debug, f"replacement underpriced (attempt {attempt}/{max_retries}, nonce={current_nonce})，下次将费用提高到 {next_mult:.1f}x 重试...")
@@ -2171,7 +2247,7 @@ def _burn_redeem_positions(
                     _append_debug(debug, f"replacement underpriced 重试{max_retries}次仍失败（nonce={current_nonce}）。可能原因：1) mempool 中有更高费用的 pending 交易占用此 nonce；2) RPC 负载均衡导致看到不同 mempool 视图。建议：等待旧交易上链/取消旧交易，或检查是否有其他脚本并发使用同一地址。")
                     raise
             else:
-                # 非 underpriced 错误直接抛出
+                # 非 nonce/underpriced 错误直接抛出
                 raise
     if tx_hash is None:
         raise RuntimeError("发送交易失败：未能成功发送（未捕获到具体错误）")

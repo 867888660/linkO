@@ -1,0 +1,1817 @@
+{
+  "nodes": [
+    {
+      "Inputs": [
+        {
+          "Context": "F:/linkO/TempFiles/polymarket\\\\PolyMarketDictionary.db",
+          "Id": "Input1",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "polyMarket_Dictionary_used",
+          "Id": "Input2",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Table"
+        }
+      ],
+      "NodeKind": "ArrayTrigger_DataBase",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output1_1767522429030_533",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "question",
+          "selectBox1": "question",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output2_1767522429519_596",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "rule",
+          "selectBox1": "rules",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output3_1767522429880_974",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "yestoken",
+          "selectBox1": "All",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output4_1767522449555_156",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "endDate",
+          "selectBox1": "endDate",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output5_1767522480971_859",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsClear",
+          "selectBox1": "llm_is_clearcut",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output6_1767522506425_275",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsSubject",
+          "selectBox1": "llm_is_Subject",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output7_1767522506876_119",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsConest",
+          "selectBox1": "llm_is_Matching",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output8_1767522533130_464",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Explain_suggest",
+          "selectBox1": "explain_suggest",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output9_1767522782553_47",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Subject",
+          "selectBox1": "Subject",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output10_1767528432469_895",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "notoken",
+          "selectBox1": "All",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output12_1767698721502_658",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Translation",
+          "selectBox1": "Translation",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output12_1767699241268_843",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "KeyWords",
+          "selectBox1": "KeyWords",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output13_1767927673739_717",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "black",
+          "selectBox1": "black",
+          "selectKind": null
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output14_1767941056451_23",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Days_to_end",
+          "selectBox1": "days_to_end",
+          "selectKind": null
+        }
+      ],
+      "ParallelLimit": 50,
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "node15",
+      "label": "DataBase_Array15",
+      "name": "DataBase_Array.py",
+      "x": 838.5182516562463,
+      "y": 719.301751067648,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.010131875996655689,
+          0.15992003998001
+        ],
+        [
+          0.010131875996655689,
+          0.21989005497251374
+        ],
+        [
+          0.9881794780039017,
+          0.15992003998001
+        ],
+        [
+          0.9881794780039017,
+          0.21989005497251374
+        ],
+        [
+          0.9881794780039017,
+          0.2798600699650175
+        ],
+        [
+          0.9881794780039017,
+          0.33983008495752126
+        ],
+        [
+          0.9881794780039017,
+          0.399800099950025
+        ],
+        [
+          0.9881794780039017,
+          0.45977011494252873
+        ],
+        [
+          0.9881794780039017,
+          0.5197401299350325
+        ],
+        [
+          0.9881794780039017,
+          0.5797101449275363
+        ],
+        [
+          0.9881794780039017,
+          0.63968015992004
+        ],
+        [
+          0.9881794780039017,
+          0.6996501749125438
+        ],
+        [
+          0.9881794780039017,
+          0.7596201899050475
+        ],
+        [
+          0.9881794780039017,
+          0.8195902048975513
+        ],
+        [
+          0.9881794780039017,
+          0.879560219890055
+        ],
+        [
+          0.9881794780039017,
+          0.9395302348825587
+        ],
+        [
+          0.01688645999442615,
+          0.024987506246876564
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 392,
+      "width": 592.1904296875,
+      "depth": 0,
+      "IsHovor": false,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false,
+        false
+      ],
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "debug": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "TempColumns": {
+        "polyMarket_Dictionary": [
+          "ask",
+          "condition_id",
+          "question",
+          "Translation",
+          "now_ask_price",
+          "now_bid_price",
+          "Subject",
+          "endDate",
+          "rules",
+          "days_to_end",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "opp_ask_price",
+          "opp_bids_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "LLM_Think",
+          "Research_Debug",
+          "IsRightNow",
+          "KeyWords",
+          "LLM_researh",
+          "IsRuleInweb",
+          "opp_token",
+          "black",
+          "explain_suggest",
+          "yes_token",
+          "no_token"
+        ],
+        "polyMarket_Dictionary_used": [
+          "ask",
+          "condition_id",
+          "question",
+          "Translation",
+          "now_ask_price",
+          "now_bid_price",
+          "Subject",
+          "endDate",
+          "rules",
+          "days_to_end",
+          "UseRss",
+          "url",
+          "option_name",
+          "condition_id_ext",
+          "token",
+          "bid",
+          "l1_spread_c",
+          "band_c_used",
+          "depth_ask_1c_usd",
+          "depth_bid_1c_usd",
+          "depth_1c_usd",
+          "depth_ask_1c_qty",
+          "depth_bid_1c_qty",
+          "vwap_ask_1c",
+          "vwap_bid_1c",
+          "n_orders_ask_1c",
+          "n_orders_bid_1c",
+          "top_concentration_ask_1c",
+          "top_concentration_bid_1c",
+          "roi_if_win",
+          "daily_eff_if_win",
+          "apr_eff_if_win",
+          "query_time_beijing",
+          "ingested_at",
+          "News",
+          "llm_is_clearcut",
+          "llm_prediction_p",
+          "llm_explain",
+          "suggested_qty",
+          "source_file",
+          "Score",
+          "resolutionSource",
+          "opp_ask_price",
+          "opp_bids_price",
+          "apr_eff_if_win_num",
+          "llm_is_Subject",
+          "llm_is_Matching",
+          "LLM_Think",
+          "Research_Debug",
+          "IsRightNow",
+          "KeyWords",
+          "LLM_researh",
+          "IsRuleInweb",
+          "opp_token",
+          "black",
+          "explain_suggest",
+          "yes_token",
+          "no_token",
+          "now_utc",
+          "end_utc",
+          "days_to_end_calc"
+        ]
+      }
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\n|  |  | Will the Bank of Israel decrease the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会降低利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \"No change\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:05Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月决议 |  |  |  |  |  | 5038020142704340474116809967280546225990366221057734550343807134227201080474 | 47910140204065264702437470089145913876589236113285586515601836479040869568145 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |",
+          "Id": "Input1",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Token"
+        }
+      ],
+      "NodeKind": "Normal",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "{\"condition_id\": \"\", \"question\": \"\", \"endDate\": \"\", \"days_to_end\": \"\", \"rules\": \"\", \"resolutionSource\": \"\", \"url\": \"\", \"option_name\": \"Unknown\", \"condition_id_ext\": \"unknown\", \"ingested_at\": \"2026-01-11T06:12:12+00:00\", \"source_file\": \"Polymarket_API\", \"token\": \"| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\\n|  |  | Will the Bank of Israel decrease the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会降低利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \\\"No change\\\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:05Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月决议 |  |  |  |  |  | 5038020142704340474116809967280546225990366221057734550343807134227201080474 | 47910140204065264702437470089145913876589236113285586515601836479040869568145 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |\", \"ask\": \"\", \"bid\": \"\", \"l1_spread_c\": \"\", \"band_c_used\": \"0.0\", \"depth_ask_1c_usd\": \"0.0\", \"depth_bid_1c_usd\": \"0.0\", \"depth_1c_usd\": \"0.0\", \"depth_ask_1c_qty\": \"0.0\", \"depth_bid_1c_qty\": \"0.0\", \"vwap_ask_1c\": \"0.0\", \"vwap_bid_1c\": \"0.0\", \"n_orders_ask_1c\": \"0\", \"n_orders_bid_1c\": \"0\", \"top_concentration_ask_1c\": \"0.0\", \"top_concentration_bid_1c\": \"0.0\", \"roi_if_win\": \"\", \"daily_eff_if_win\": \"\", \"apr_eff_if_win\": \"\", \"query_time_beijing\": \"2026-01-11 14:12:12\", \"opp_token\": \"\", \"currentPrice\": \"\", \"currentValue\": \"\", \"size\": \"\", \"Islast\": true, \"search_status\": \"搜索失败\"}",
+          "Description": "",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Json_Save"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output2",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "condition_id"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output3",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "question"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output4",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "endDate"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output5",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "days_to_end"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output6",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "rules"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output7",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "resolutionSource"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output8",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "url"
+        },
+        {
+          "Boolean": false,
+          "Context": "Unknown",
+          "Description": "",
+          "Id": "Output9",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "option_name"
+        },
+        {
+          "Boolean": false,
+          "Context": "unknown",
+          "Description": "",
+          "Id": "Output10",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "condition_id_ext"
+        },
+        {
+          "Boolean": false,
+          "Context": "2026-01-11T06:12:12+00:00",
+          "Description": "",
+          "Id": "Output11",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "ingested_at"
+        },
+        {
+          "Boolean": false,
+          "Context": "Polymarket_API",
+          "Description": "",
+          "Id": "Output12",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "source_file"
+        },
+        {
+          "Boolean": false,
+          "Context": "| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\n|  |  | Will the Bank of Israel decrease the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会降低利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \"No change\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:05Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月决议 |  |  |  |  |  | 5038020142704340474116809967280546225990366221057734550343807134227201080474 | 47910140204065264702437470089145913876589236113285586515601836479040869568145 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |",
+          "Description": "",
+          "Id": "Output13",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output14",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "ask"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output15",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "bid"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output16",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "l1_spread_c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output17",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "band_c_used"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output18",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_ask_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output19",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_bid_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output20",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output21",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_ask_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output22",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_bid_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output23",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "vwap_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output24",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "vwap_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0",
+          "Description": "",
+          "Id": "Output25",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "n_orders_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0",
+          "Description": "",
+          "Id": "Output26",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "n_orders_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output27",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "top_concentration_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output28",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "top_concentration_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output29",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "roi_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output30",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "daily_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output31",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "apr_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "2026-01-11 14:12:12",
+          "Description": "",
+          "Id": "Output32",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "query_time_beijing"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output33",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "opp_token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output34",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "currentPrice"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output35",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "currentValue"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output36",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "size"
+        },
+        {
+          "Boolean": true,
+          "Context": "",
+          "Description": "",
+          "Id": "Output37",
+          "Kind": "Boolean",
+          "Link": 0,
+          "Num": null,
+          "name": "Islast"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "node19",
+      "label": "yestoken",
+      "name": "PolyMarket_QueryToken.py",
+      "prompt": "",
+      "x": 1340.4967653616382,
+      "y": 1045.0960975988,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.018733363620564013,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.0917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.11677614430194974
+        ],
+        [
+          0.978144409109342,
+          0.1417996037952247
+        ],
+        [
+          0.978144409109342,
+          0.16682306328849963
+        ],
+        [
+          0.978144409109342,
+          0.19184652278177458
+        ],
+        [
+          0.978144409109342,
+          0.21686998227504953
+        ],
+        [
+          0.978144409109342,
+          0.24189344176832447
+        ],
+        [
+          0.978144409109342,
+          0.2669169012615994
+        ],
+        [
+          0.978144409109342,
+          0.29194036075487434
+        ],
+        [
+          0.978144409109342,
+          0.3169638202481493
+        ],
+        [
+          0.978144409109342,
+          0.34198727974142423
+        ],
+        [
+          0.978144409109342,
+          0.3670107392346992
+        ],
+        [
+          0.978144409109342,
+          0.3920341987279741
+        ],
+        [
+          0.978144409109342,
+          0.4170576582212491
+        ],
+        [
+          0.978144409109342,
+          0.442081117714524
+        ],
+        [
+          0.978144409109342,
+          0.46710457720779897
+        ],
+        [
+          0.978144409109342,
+          0.4921280367010739
+        ],
+        [
+          0.978144409109342,
+          0.5171514961943489
+        ],
+        [
+          0.978144409109342,
+          0.5421749556876237
+        ],
+        [
+          0.978144409109342,
+          0.5671984151808988
+        ],
+        [
+          0.978144409109342,
+          0.5922218746741736
+        ],
+        [
+          0.978144409109342,
+          0.6172453341674486
+        ],
+        [
+          0.978144409109342,
+          0.6422687936607235
+        ],
+        [
+          0.978144409109342,
+          0.6672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.6923157126472734
+        ],
+        [
+          0.978144409109342,
+          0.7173391721405484
+        ],
+        [
+          0.978144409109342,
+          0.7423626316338233
+        ],
+        [
+          0.978144409109342,
+          0.7673860911270983
+        ],
+        [
+          0.978144409109342,
+          0.7924095506203732
+        ],
+        [
+          0.978144409109342,
+          0.8174330101136482
+        ],
+        [
+          0.978144409109342,
+          0.8424564696069231
+        ],
+        [
+          0.978144409109342,
+          0.8674799291001981
+        ],
+        [
+          0.978144409109342,
+          0.892503388593473
+        ],
+        [
+          0.978144409109342,
+          0.917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.9425503075800229
+        ],
+        [
+          0.978144409109342,
+          0.9675737670732979
+        ],
+        [
+          0.031222272700940024,
+          0.010426441455531227
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 1036,
+      "width": 320.2841796875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": true,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\n|  |  | Will the Bank of Israel decrease the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会降低利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \"No change\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:05Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月决议 |  |  |  |  |  | 5038020142704340474116809967280546225990366221057734550343807134227201080474 | 47910140204065264702437470089145913876589236113285586515601836479040869568145 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |",
+          "Id": "Input1",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Token"
+        }
+      ],
+      "NodeKind": "Normal",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "{\"condition_id\": \"\", \"question\": \"\", \"endDate\": \"\", \"days_to_end\": \"\", \"rules\": \"\", \"resolutionSource\": \"\", \"url\": \"\", \"option_name\": \"Unknown\", \"condition_id_ext\": \"unknown\", \"ingested_at\": \"2026-01-11T06:12:14+00:00\", \"source_file\": \"Polymarket_API\", \"token\": \"| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\\n|  |  | Will the Bank of Israel increase the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会提高以色列央行利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \\\"No change\\\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:09Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月份决议 |  |  |  |  |  | 11918066450909858172939478328050609270407311823454835781945308451321096132678 | 16720702782453609428680446728829302492937581969161103539692860805985246246957 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |\", \"ask\": \"\", \"bid\": \"\", \"l1_spread_c\": \"\", \"band_c_used\": \"0.0\", \"depth_ask_1c_usd\": \"0.0\", \"depth_bid_1c_usd\": \"0.0\", \"depth_1c_usd\": \"0.0\", \"depth_ask_1c_qty\": \"0.0\", \"depth_bid_1c_qty\": \"0.0\", \"vwap_ask_1c\": \"0.0\", \"vwap_bid_1c\": \"0.0\", \"n_orders_ask_1c\": \"0\", \"n_orders_bid_1c\": \"0\", \"top_concentration_ask_1c\": \"0.0\", \"top_concentration_bid_1c\": \"0.0\", \"roi_if_win\": \"\", \"daily_eff_if_win\": \"\", \"apr_eff_if_win\": \"\", \"query_time_beijing\": \"2026-01-11 14:12:14\", \"opp_token\": \"\", \"currentPrice\": \"\", \"currentValue\": \"\", \"size\": \"\", \"Islast\": true, \"search_status\": \"搜索失败\"}",
+          "Description": "",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Json_Save"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output2",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "condition_id"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output3",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "question"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output4",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "endDate"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output5",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "days_to_end"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output6",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "rules"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output7",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "resolutionSource"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output8",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "url"
+        },
+        {
+          "Boolean": false,
+          "Context": "Unknown",
+          "Description": "",
+          "Id": "Output9",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "option_name"
+        },
+        {
+          "Boolean": false,
+          "Context": "unknown",
+          "Description": "",
+          "Id": "Output10",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "condition_id_ext"
+        },
+        {
+          "Boolean": false,
+          "Context": "2026-01-11T06:12:15+00:00",
+          "Description": "",
+          "Id": "Output11",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "ingested_at"
+        },
+        {
+          "Boolean": false,
+          "Context": "Polymarket_API",
+          "Description": "",
+          "Id": "Output12",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "source_file"
+        },
+        {
+          "Boolean": false,
+          "Context": "| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\n|  |  | Will the Bank of Israel make no change to the Bank of Israel Interest Rate after the February decision? | 以色列银行在二月份决议后是否将维持利率不变？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \"No change\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:07Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列银行, 利率, 二月决议, 维持不变 |  |  |  |  |  | 58406488609811683329025377428064690245686070910299726926720353087017973863856 | 3663518531498376218685681476549785549832112101144057147921350816290890489192 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |",
+          "Description": "",
+          "Id": "Output13",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output14",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "ask"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output15",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "bid"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output16",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "l1_spread_c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output17",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "band_c_used"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output18",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_ask_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output19",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_bid_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output20",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output21",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_ask_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output22",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "depth_bid_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output23",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "vwap_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output24",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "vwap_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0",
+          "Description": "",
+          "Id": "Output25",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "n_orders_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0",
+          "Description": "",
+          "Id": "Output26",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "n_orders_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output27",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "top_concentration_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "0.0",
+          "Description": "",
+          "Id": "Output28",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "top_concentration_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output29",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "roi_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output30",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "daily_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output31",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "apr_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "2026-01-11 14:12:16",
+          "Description": "",
+          "Id": "Output32",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "query_time_beijing"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output33",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "opp_token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output34",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "currentPrice"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output35",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "currentValue"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output36",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "size"
+        },
+        {
+          "Boolean": true,
+          "Context": "",
+          "Description": "",
+          "Id": "Output37",
+          "Kind": "Boolean",
+          "Link": 0,
+          "Num": null,
+          "name": "Islast"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "node20",
+      "label": "notoken",
+      "name": "PolyMarket_QueryToken.py",
+      "prompt": "",
+      "x": 1720.3312826530298,
+      "y": 1124.3584915679662,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.018733363620564013,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.0917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.11677614430194974
+        ],
+        [
+          0.978144409109342,
+          0.1417996037952247
+        ],
+        [
+          0.978144409109342,
+          0.16682306328849963
+        ],
+        [
+          0.978144409109342,
+          0.19184652278177458
+        ],
+        [
+          0.978144409109342,
+          0.21686998227504953
+        ],
+        [
+          0.978144409109342,
+          0.24189344176832447
+        ],
+        [
+          0.978144409109342,
+          0.2669169012615994
+        ],
+        [
+          0.978144409109342,
+          0.29194036075487434
+        ],
+        [
+          0.978144409109342,
+          0.3169638202481493
+        ],
+        [
+          0.978144409109342,
+          0.34198727974142423
+        ],
+        [
+          0.978144409109342,
+          0.3670107392346992
+        ],
+        [
+          0.978144409109342,
+          0.3920341987279741
+        ],
+        [
+          0.978144409109342,
+          0.4170576582212491
+        ],
+        [
+          0.978144409109342,
+          0.442081117714524
+        ],
+        [
+          0.978144409109342,
+          0.46710457720779897
+        ],
+        [
+          0.978144409109342,
+          0.4921280367010739
+        ],
+        [
+          0.978144409109342,
+          0.5171514961943489
+        ],
+        [
+          0.978144409109342,
+          0.5421749556876237
+        ],
+        [
+          0.978144409109342,
+          0.5671984151808988
+        ],
+        [
+          0.978144409109342,
+          0.5922218746741736
+        ],
+        [
+          0.978144409109342,
+          0.6172453341674486
+        ],
+        [
+          0.978144409109342,
+          0.6422687936607235
+        ],
+        [
+          0.978144409109342,
+          0.6672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.6923157126472734
+        ],
+        [
+          0.978144409109342,
+          0.7173391721405484
+        ],
+        [
+          0.978144409109342,
+          0.7423626316338233
+        ],
+        [
+          0.978144409109342,
+          0.7673860911270983
+        ],
+        [
+          0.978144409109342,
+          0.7924095506203732
+        ],
+        [
+          0.978144409109342,
+          0.8174330101136482
+        ],
+        [
+          0.978144409109342,
+          0.8424564696069231
+        ],
+        [
+          0.978144409109342,
+          0.8674799291001981
+        ],
+        [
+          0.978144409109342,
+          0.892503388593473
+        ],
+        [
+          0.978144409109342,
+          0.917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.9425503075800229
+        ],
+        [
+          0.978144409109342,
+          0.9675737670732979
+        ],
+        [
+          0.031222272700940024,
+          0.010426441455531227
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 1036,
+      "width": 320.2841796875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": true,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "id": "Contextadd.py_1768104449461",
+      "name": "Contextadd.py",
+      "label": "Contextadd3",
+      "x": 2270.4309719608323,
+      "y": 1036.4376560786159,
+      "TriggerLink": 0,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "IsBlock": true,
+      "IsRunning": false,
+      "isFinish": true,
+      "IsError": false,
+      "RecursionBehavior": "STOP",
+      "OriginalTextSelector": "Json",
+      "ErrorContext": "",
+      "Kind": "LLm",
+      "prompt": "",
+      "ExportPrompt": "",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n",
+      "ReTryNum": 0,
+      "ParallelLimit": 1,
+      "anchorPoints": [
+        [
+          0.03,
+          0.5893186003683242
+        ],
+        [
+          0.03,
+          0.8103130755064457
+        ],
+        [
+          0.965,
+          0.5893186003683242
+        ],
+        [
+          0.05,
+          0.09208103130755065
+        ]
+      ],
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "TempOutPuts": [],
+      "Top_p": 0.9,
+      "temperature": 0.7,
+      "frequency_penalty": 0,
+      "presence_penalty": 0,
+      "max_tokens": 4096,
+      "InputIsAdd": "",
+      "Inputs": [
+        {
+          "Context": "{\"condition_id\": \"\", \"question\": \"\", \"endDate\": \"\", \"days_to_end\": \"\", \"rules\": \"\", \"resolutionSource\": \"\", \"url\": \"\", \"option_name\": \"Unknown\", \"condition_id_ext\": \"unknown\", \"ingested_at\": \"2026-01-11T06:12:14+00:00\", \"source_file\": \"Polymarket_API\", \"token\": \"| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\\n|  |  | Will the Bank of Israel increase the Bank of Israel Interest Rate after the February decision? | 以色列央行在2月份决议后是否会提高以色列央行利率？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \\\"No change\\\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:09Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列央行, 利率, 2月份决议 |  |  |  |  |  | 11918066450909858172939478328050609270407311823454835781945308451321096132678 | 16720702782453609428680446728829302492937581969161103539692860805985246246957 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |\", \"ask\": \"\", \"bid\": \"\", \"l1_spread_c\": \"\", \"band_c_used\": \"0.0\", \"depth_ask_1c_usd\": \"0.0\", \"depth_bid_1c_usd\": \"0.0\", \"depth_1c_usd\": \"0.0\", \"depth_ask_1c_qty\": \"0.0\", \"depth_bid_1c_qty\": \"0.0\", \"vwap_ask_1c\": \"0.0\", \"vwap_bid_1c\": \"0.0\", \"n_orders_ask_1c\": \"0\", \"n_orders_bid_1c\": \"0\", \"top_concentration_ask_1c\": \"0.0\", \"top_concentration_bid_1c\": \"0.0\", \"roi_if_win\": \"\", \"daily_eff_if_win\": \"\", \"apr_eff_if_win\": \"\", \"query_time_beijing\": \"2026-01-11 14:12:14\", \"opp_token\": \"\", \"currentPrice\": \"\", \"currentValue\": \"\", \"size\": \"\", \"Islast\": true, \"search_status\": \"搜索失败\"}",
+          "Id": "Input1_1768104452755",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        },
+        {
+          "Context": "{\"condition_id\": \"\", \"question\": \"\", \"endDate\": \"\", \"days_to_end\": \"\", \"rules\": \"\", \"resolutionSource\": \"\", \"url\": \"\", \"option_name\": \"Unknown\", \"condition_id_ext\": \"unknown\", \"ingested_at\": \"2026-01-11T06:12:16+00:00\", \"source_file\": \"Polymarket_API\", \"token\": \"| ask | condition_id | question | Translation | now_ask_price | now_bid_price | Subject | endDate | rules | days_to_end | UseRss | url | option_name | condition_id_ext | token | bid | l1_spread_c | band_c_used | depth_ask_1c_usd | depth_bid_1c_usd | depth_1c_usd | depth_ask_1c_qty | depth_bid_1c_qty | vwap_ask_1c | vwap_bid_1c | n_orders_ask_1c | n_orders_bid_1c | top_concentration_ask_1c | top_concentration_bid_1c | roi_if_win | daily_eff_if_win | apr_eff_if_win | query_time_beijing | ingested_at | News | llm_is_clearcut | llm_prediction_p | llm_explain | suggested_qty | source_file | Score | resolutionSource | opp_ask_price | opp_bids_price | apr_eff_if_win_num | llm_is_Subject | llm_is_Matching | LLM_Think | Research_Debug | IsRightNow | KeyWords | LLM_researh | IsRuleInweb | opp_token | black | explain_suggest | yes_token | no_token | now_utc | end_utc | days_to_end_calc |\\n|  |  | Will the Bank of Israel make no change to the Bank of Israel Interest Rate after the February decision? | 以色列银行在二月份决议后是否将维持利率不变？ |  |  | Economy | 2026-02-24T04:59:59Z | This market will resolve according to the change in the Bank of Israel Interest Rate resulting from the Bank of Israel’s February monetary policy decision, relative to the level it was prior to this decision.\\nThe resolution source for this market is information released by the Bank of Israel after its February 23, 2026 monetary policy decision, as listed on the official Bank of Israel interest rate decision schedule: https://www.boi.org.il/en/economic-roles/monetary-policy/interest-rate-announcement-dates-2025-2026/#\\nThis market may resolve as soon as the Bank of Israel's announcement of their February 23, 2026 decision with relevant data is issued. If no decision on the Bank of Israel Interest Rate is issued by the end date of the next scheduled meeting, this market will resolve to the \\\"No change\\\" bracket. |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | 2026-01-09T13:52:07Z |  |  | True |  |  |  |  |  |  |  |  |  | False | False |  |  |  | 以色列银行, 利率, 二月决议, 维持不变 |  |  |  |  |  | 58406488609811683329025377428064690245686070910299726926720353087017973863856 | 3663518531498376218685681476549785549832112101144057147921350816290890489192 | 2026-01-11 04:01:17 | 2026-02-24 04:59:59 | 44.04076388897374 |\", \"ask\": \"\", \"bid\": \"\", \"l1_spread_c\": \"\", \"band_c_used\": \"0.0\", \"depth_ask_1c_usd\": \"0.0\", \"depth_bid_1c_usd\": \"0.0\", \"depth_1c_usd\": \"0.0\", \"depth_ask_1c_qty\": \"0.0\", \"depth_bid_1c_qty\": \"0.0\", \"vwap_ask_1c\": \"0.0\", \"vwap_bid_1c\": \"0.0\", \"n_orders_ask_1c\": \"0\", \"n_orders_bid_1c\": \"0\", \"top_concentration_ask_1c\": \"0.0\", \"top_concentration_bid_1c\": \"0.0\", \"roi_if_win\": \"\", \"daily_eff_if_win\": \"\", \"apr_eff_if_win\": \"\", \"query_time_beijing\": \"2026-01-11 14:12:16\", \"opp_token\": \"\", \"currentPrice\": \"\", \"currentValue\": \"\", \"size\": \"\", \"Islast\": true, \"search_status\": \"搜索失败\"}",
+          "Id": "Input2_1768104452915",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input2"
+        }
+      ],
+      "IsLoadSuccess": true,
+      "Lable": [
+        {
+          "Id": "Label1",
+          "Kind": "None"
+        }
+      ],
+      "NodeKind": "LLm",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OutPut1"
+        }
+      ],
+      "OutputsIsAdd": "",
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "lineWidth": 100,
+          "stroke": "#ff0000"
+        }
+      },
+      "draggable": false,
+      "height": 56,
+      "width": 200,
+      "depth": 0,
+      "firstRun": false,
+      "inputStatus": [
+        true,
+        true
+      ],
+      "messages": [
+        {
+          "role": "system",
+          "content": "\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"answer\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    }
+  ]
+}

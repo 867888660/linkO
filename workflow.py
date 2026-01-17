@@ -39,6 +39,14 @@ class WorkflowEngine:
         self.lock = threading.Lock()
         # 历史文件写入锁（避免并发读改写导致记录丢失/文件损坏）
         self._history_lock = threading.Lock()
+        # 性能开关：默认关闭大量 print（需要排查时再打开）
+        self.DEBUG_PRINT = False
+        # History：缓冲 + 批量落盘（最小改动：仍然写同一个 json 文件，只减少 IO 次数）
+        self.HISTORY_BUFFER_SIZE = 20
+        self.HISTORY_FLUSH_INTERVAL = 0.5  # seconds
+        self._history_buffer = {}          # { workflow_id: { "file_path": str, "pending": [...], "last_flush": ts } }
+        # 事件日志节流（避免高频 with self.lock 抢锁）
+        self._event_throttle_last_ts = {}  # { workflow_id: last_ts }
         self.workflows = {}  # 存储所有工作流的状态
         self.stop_events = {}  # 用于停止工作流的事件
         self._cleanup_timers = {}  # 延迟清理定时器
@@ -158,9 +166,59 @@ class WorkflowEngine:
         except Exception:
             pass
 
+    def _flush_history_items_to_file(self, file_path: Path, items: list):
+        """把 items 批量合并写入到指定 History 文件（内部使用 _history_lock 串行化）。"""
+        if not items:
+            return
+        try:
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception:
+            pass
+        with self._history_lock:
+            if file_path.exists():
+                try:
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        json_data = json.load(f)
+                except (json.JSONDecodeError, Exception):
+                    json_data = []
+            else:
+                json_data = []
+            if not json_data or not isinstance(json_data[-1], list):
+                json_data.append([])
+            json_data[-1].extend(items)
+            with open(file_path, 'w', encoding='utf-8') as f:
+                json.dump(json_data, f, ensure_ascii=False, indent=2)
+
+    def _flush_history_buffer_for_workflow(self, workflow_id: str):
+        """把某个 workflow 的 History 缓冲落盘（用于结束/清理前兜底 flush）。"""
+        try:
+            entry = self._history_buffer.get(workflow_id)
+            if not entry:
+                return
+            pending = entry.get("pending") or []
+            fp_str = entry.get("file_path")
+            if not pending or not fp_str:
+                return
+            items = pending[:]
+            entry["pending"] = []
+            entry["last_flush"] = time.time()
+            self._flush_history_items_to_file(Path(fp_str), items)
+        except Exception:
+            pass
+
     def _log_event(self, workflow_id, message: str):
         """记录可供前端查看的事件日志（最多100条）"""
         try:
+            # 最小节流：100ms 内的“非关键日志”直接跳过，避免 self.lock 变成热点
+            try:
+                now_ts = time.time()
+                last_ts = self._event_throttle_last_ts.get(workflow_id, 0.0)
+                is_critical = any(k in message for k in ("❌", "⚠️", "✅", "🆕", "[TRACE", "[RING", "[CHILD", "[HISTORY"))
+                if (not is_critical) and (now_ts - last_ts) < 0.1:
+                    return
+                self._event_throttle_last_ts[workflow_id] = now_ts
+            except Exception:
+                pass
             with self.lock:
                 wf = self.workflows.get(workflow_id)
                 if not wf:
@@ -185,15 +243,18 @@ class WorkflowEngine:
     def _add_history(self, workflow_id, node_data):
         """添加历史记录（与前端addHistory逻辑对齐）"""
         try:
-            # 打印调试信息
-            print(f"📝 [HISTORY] 添加历史记录 - 工作流: {workflow_id}")
-            name = node_data if isinstance(node_data, str) else node_data.get('label', node_data.get('id', 'Unknown'))
-            print(f"📝 [HISTORY] 节点数据: {name}")
+            debug = getattr(self, "DEBUG_PRINT", False)
+            # 打印调试信息（可开关）
+            if debug:
+                print(f"📝 [HISTORY] 添加历史记录 - 工作流: {workflow_id}")
+                name = node_data if isinstance(node_data, str) else node_data.get('label', node_data.get('id', 'Unknown'))
+                print(f"📝 [HISTORY] 节点数据: {name}")
             
             if node_data == 'Start':
                 # 开始新对话
                 filtered_data = {'message': 'New conversation started'}
-                print(f"📝 [HISTORY] 开始新对话")
+                if debug:
+                    print(f"📝 [HISTORY] 开始新对话")
             elif not isinstance(node_data, dict):
                 # 兼容字符串或其它非常规类型
                 filtered_data = {'message': str(node_data)}
@@ -238,7 +299,8 @@ class WorkflowEngine:
                         **selected_field
                     })
                 
-                print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
+                if debug:
+                    print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
             
             # 过滤不需要的 array 子工作流历史
             if "__array_" in str(workflow_id):
@@ -249,7 +311,8 @@ class WorkflowEngine:
                             p.unlink()
                         except Exception:
                             pass
-                    print(f"⏭️ [HISTORY] 跳过并清理子数组工作流历史: {workflow_id}")
+                    if debug:
+                        print(f"⏭️ [HISTORY] 跳过并清理子数组工作流历史: {workflow_id}")
                 except Exception:
                     pass
                 return
@@ -270,35 +333,52 @@ class WorkflowEngine:
             history_dir = history_root / project_dir
             history_dir.mkdir(parents=True, exist_ok=True)
             file_path = history_dir / f'{workflow_id}.json'
+            # ✅ 最小修改：改为缓冲 + 批量落盘，减少“读-改-写整文件”的频率与锁竞争
+            now_ts = time.time()
+            fp_str = str(file_path)
+            entry = self._history_buffer.get(workflow_id)
+            if (not entry) or entry.get("file_path") != fp_str:
+                # 若 path 变化，先 flush 旧缓冲
+                try:
+                    if entry and entry.get("pending") and entry.get("file_path"):
+                        self._flush_history_items_to_file(Path(entry["file_path"]), entry.get("pending") or [])
+                except Exception:
+                    pass
+                entry = {"file_path": fp_str, "pending": [], "last_flush": now_ts}
+                self._history_buffer[workflow_id] = entry
 
-            with self._history_lock:
-                # 读取现有数据
-                if file_path.exists():
-                    try:
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            json_data = json.load(f)
-                    except (json.JSONDecodeError, Exception) as e:
-                        print(f"⚠️ [HISTORY] 读取历史文件失败: {e}")
-                        json_data = []
-                else:
-                    json_data = []
-                
-                # 添加到历史记录
-                if not json_data or not isinstance(json_data[-1], list):
-                    json_data.append([])
-                
-                json_data[-1].append(filtered_data)
-                
-                # 保存文件
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(json_data, f, ensure_ascii=False, indent=2)
-            
-            print(f"✅ [HISTORY] 历史记录已保存到: {file_path}")
+            entry["pending"].append(filtered_data)
+
+            should_flush = False
+            try:
+                buf_n = int(getattr(self, "HISTORY_BUFFER_SIZE", 20) or 20)
+                if len(entry["pending"]) >= buf_n:
+                    should_flush = True
+            except Exception:
+                pass
+            if not should_flush:
+                try:
+                    last_flush = float(entry.get("last_flush", 0.0) or 0.0)
+                    interval = float(getattr(self, "HISTORY_FLUSH_INTERVAL", 0.5) or 0.5)
+                    if (now_ts - last_flush) >= interval:
+                        should_flush = True
+                except Exception:
+                    pass
+
+            if should_flush:
+                items = entry["pending"][:]
+                entry["pending"] = []
+                entry["last_flush"] = now_ts
+                self._flush_history_items_to_file(file_path, items)
+                if debug:
+                    print(f"✅ [HISTORY] 批量落盘 {len(items)} 条 -> {file_path}")
             
         except Exception as e:
-            print(f"❌ [HISTORY] 添加历史记录失败: {e}")
-            import traceback
-            print(f"❌ [HISTORY] 错误详情: {traceback.format_exc()}")
+            debug = locals().get("debug", getattr(self, "DEBUG_PRINT", False))
+            if debug:
+                print(f"❌ [HISTORY] 添加历史记录失败: {e}")
+                import traceback
+                print(f"❌ [HISTORY] 错误详情: {traceback.format_exc()}")
     
     def _save_simple_history(self, graph_data):
         """
@@ -510,6 +590,10 @@ class WorkflowEngine:
     def _schedule_workflow_cleanup(self, workflow_id: str, delay: float = 5.0):
         """延迟清理工作流，给前端留出同步时间"""
         if delay <= 0:
+            try:
+                self._flush_history_buffer_for_workflow(workflow_id)
+            except Exception:
+                pass
             self.cleanup_workflow(workflow_id)
             return
 
@@ -523,6 +607,10 @@ class WorkflowEngine:
 
         def _cleanup():
             try:
+                try:
+                    self._flush_history_buffer_for_workflow(workflow_id)
+                except Exception:
+                    pass
                 self.cleanup_workflow(workflow_id)
             except Exception as e:
                 print(f"[CLEANUP] 延迟清理 {workflow_id} 失败: {e}")
@@ -713,10 +801,11 @@ class WorkflowEngine:
     def _execute_node(self, node):
         """执行单个节点（完全从app.py迁移的逻辑）"""
         node_name = node.get("name")
-        print(f"🔧 [EXECUTE] 开始执行节点: {node.get('label', node.get('id'))} ({node_name})")
-        print(f"🔧 [EXECUTE] 节点类型: {node.get('NodeKind')}")
-        print(f"🔧 [EXECUTE] 输入数量: {len(node.get('Inputs', []))}")
-        print(f"🔧 [EXECUTE] 输出数量: {len(node.get('Outputs', []))}")
+        if getattr(self, "DEBUG_PRINT", False):
+            print(f"🔧 [EXECUTE] 开始执行节点: {node.get('label', node.get('id'))} ({node_name})")
+            print(f"🔧 [EXECUTE] 节点类型: {node.get('NodeKind')}")
+            print(f"🔧 [EXECUTE] 输入数量: {len(node.get('Inputs', []))}")
+            print(f"🔧 [EXECUTE] 输出数量: {len(node.get('Outputs', []))}")
         
         # ---------- 1. 先解析 @TempFiles、@Memory 等标签 ----------
         TAGS = ["TempFiles", "NoteBook", "Memory", "WorkFlow", "Nodes"]
@@ -1357,7 +1446,7 @@ class WorkflowEngine:
                             if _n.get("id"):
                                 array_node_ids.add(_n.get("id"))
 
-                if has_array_trigger and not has_passivity_trigger and isinstance(local_array_trigger_array, list) and local_array_trigger_array:
+                if has_array_trigger and not has_passivity_trigger and isinstance(local_array_trigger_array, (list, deque)) and local_array_trigger_array:
                     before = len(local_array_trigger_array)
                     # 仅保留“由当前图的 ArrayTrigger 生成”的有效项：nodeId 命中且 outputData 非空
                     filtered = []
@@ -1370,12 +1459,19 @@ class WorkflowEngine:
                     # 如果过滤后为空，但原队列非空 → 说明是旧队列/占位项，必须清空并强制预热
                     if len(filtered) == 0 and before > 0:
                         self._log_event(workflow_id, f"🧹 [ARRAY:SANITIZE] drop stale array_queue (before={before}) → force preheat ArrayTrigger")
-                        local_array_trigger_array = []
+                        if hasattr(local_array_trigger_array, "clear"):
+                            local_array_trigger_array.clear()
+                        else:
+                            local_array_trigger_array = []
                         workflow_state["pending_array_count"] = 0
                         self._refresh_parent_array_queue(workflow_id, 0)
                     elif len(filtered) != before:
                         self._log_event(workflow_id, f"🧹 [ARRAY:SANITIZE] shrink array_queue {before} -> {len(filtered)}")
-                        local_array_trigger_array = filtered
+                        if hasattr(local_array_trigger_array, "clear"):
+                            local_array_trigger_array.clear()
+                            local_array_trigger_array.extend(filtered)
+                        else:
+                            local_array_trigger_array = filtered
                         workflow_state["pending_array_count"] = len(local_array_trigger_array)
                         self._refresh_parent_array_queue(workflow_id, len(local_array_trigger_array))
             except Exception:
@@ -1393,7 +1489,8 @@ class WorkflowEngine:
             # 主执行循环 - 模拟前端的 setInterval 逻辑
             current_time = time.strftime('%H:%M:%S')
             loop_msg = f"📋 [LOOP] Pq={len(local_passivity_array)} Aq={len(local_array_trigger_array)} status={workflow_state['status']} time={current_time}"
-            print(loop_msg)
+            if getattr(self, "DEBUG_PRINT", False):
+                print(loop_msg)
             self._log_event(workflow_id, loop_msg)
             while workflow_state["status"] == WorkflowStatus.RUNNING:
                 did_work = False
@@ -1414,22 +1511,27 @@ class WorkflowEngine:
                 if local_array_trigger_array:
                     before_len = len(local_array_trigger_array)
                     msg = f"🔴 [ARRAY] size={before_len}"
-                    print(msg)
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(msg)
                     self._log_event(workflow_id, msg)
-                    print(f"[ARRAY-DEBUG] 处理前 ArrayTrigger 队列长度: {before_len}")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(f"[ARRAY-DEBUG] 处理前 ArrayTrigger 队列长度: {before_len}")
                     try:
                         preview = list(islice(local_array_trigger_array, 0, 3))
-                        print(f"[ARRAY-DEBUG] 队列内容预览: {[item.get('nodeId', 'unknown') for item in preview]}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-DEBUG] 队列内容预览: {[item.get('nodeId', 'unknown') for item in preview]}")
                     except Exception:
                         pass
                     self._process_next_array_trigger(workflow_id, data_temp, local_array_trigger_array, workflow_state)
                     after_len = len(local_array_trigger_array)
-                    print(f"[ARRAY-DEBUG] 处理后 ArrayTrigger 队列长度: {after_len} (处理了 {before_len - after_len} 个)")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(f"[ARRAY-DEBUG] 处理后 ArrayTrigger 队列长度: {after_len} (处理了 {before_len - after_len} 个)")
                     
                     # 立即更新状态，确保前端能及时看到队列变化
                     self._update_workflow_state(workflow_id, None, local_array_trigger_array=local_array_trigger_array)
-                    print(f"🔴 [ARRAY-DEBUG] 状态已更新，当前数组队列长度: {len(local_array_trigger_array)}")
-                    print(f"🔴 [ARRAY-DEBUG] 更新时间: {time.strftime('%H:%M:%S')}")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(f"🔴 [ARRAY-DEBUG] 状态已更新，当前数组队列长度: {len(local_array_trigger_array)}")
+                        print(f"🔴 [ARRAY-DEBUG] 更新时间: {time.strftime('%H:%M:%S')}")
                     
                     did_work = True
                     had_non_empty_since_last_preheat = True
@@ -1437,7 +1539,8 @@ class WorkflowEngine:
                 # 2. 再处理 Passivity（它可能继续向 Array 队列投喂数据）
                 elif local_passivity_array:
                     msg = f"🔵 [PASSIVITY] size={len(local_passivity_array)}"
-                    print(msg)
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(msg)
                     self._log_event(workflow_id, msg)
                     # 取出数据但先不从队列中移除，保持队列长度不变
                     passivity_data = local_passivity_array[0]
@@ -1497,7 +1600,8 @@ class WorkflowEngine:
                 # 3. 如果没有passivity数据但有passivityTrigger节点，且尚未预热过，则预热一次
                 elif (not local_passivity_array) and has_passivity_trigger and (not did_preheat_passivity):
                     msg = f"🟡 [TRIGGER] 运行被动触发节点 (预热)"
-                    print(msg)
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(msg)
                     self._log_event(workflow_id, msg)
                     self._run_passivity_trigger_nodes(workflow_id, data_temp, local_passivity_array)
                     did_preheat_passivity = True
@@ -1507,7 +1611,7 @@ class WorkflowEngine:
                 elif not local_passivity_array and not local_array_trigger_array:
                     if self._has_active_children(workflow_id):
                         self._log_event(workflow_id, "🟢 [CHILD] 等待子工作流完成...")
-                        time.sleep(0.3)
+                        time.sleep(0.05)
                         continue
                     if has_passivity_trigger:
                         # 队列皆空且存在被动触发器 → 周期性再次拉取（轮询），节流 1s
@@ -1543,12 +1647,12 @@ class WorkflowEngine:
                     workflow_state["status"] = WorkflowStatus.STOPPED
                     break
                 
-                # 添加延迟，确保前端能看到每一步队列变化
-                time.sleep(0.3)
-                
-                # 仅在有实际工作发生时更新last_update，避免空转刷新
+                # ✅ 仅空转等待才慢睡；有活就轻微让出时间片
                 if did_work:
+                    time.sleep(0.001)  # 或 0
                     workflow_state["last_update"] = time.time()
+                else:
+                    time.sleep(0.3)
         
         except Exception as e:
             # 保留关键错误日志
@@ -1734,11 +1838,13 @@ class WorkflowEngine:
 
         filtered_outputs = [x for x in grouped_outputs if x is not None]
         try:
-            print(f"🎯🎯🎯 [PASSIVITY-LOAD] 原始输出结构: {type(output_list)} → 归一化后组数={len(filtered_outputs)}")
+            if getattr(self, "DEBUG_PRINT", False):
+                print(f"🎯🎯🎯 [PASSIVITY-LOAD] 原始输出结构: {type(output_list)} → 归一化后组数={len(filtered_outputs)}")
         except Exception:
             pass
         if not filtered_outputs:
-            print(f"🎯🎯🎯 [PASSIVITY-LOAD] 没有有效输出，跳过入队")
+            if getattr(self, "DEBUG_PRINT", False):
+                print(f"🎯🎯🎯 [PASSIVITY-LOAD] 没有有效输出，跳过入队")
             return
 
         node_id = trigger_node["id"]
@@ -1761,19 +1867,23 @@ class WorkflowEngine:
                 for i in range(len(passivity_trigger_array) - 1, -1, -1):
                     if passivity_trigger_array[i].get("nodeId") == node_id:
                         passivity_trigger_array[i] = item
-                        print("🌀 [RING:OVERWRITE] Passivity 覆盖上一条记录 (相同指纹)")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print("🌀 [RING:OVERWRITE] Passivity 覆盖上一条记录 (相同指纹)")
                         replaced = True
                         break
                 if not replaced:
                     passivity_trigger_array.append(item)
-                    print("✅ [RING:PUSH] Passivity 覆盖失败，退化为新增记录到环")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print("✅ [RING:PUSH] Passivity 覆盖失败，退化为新增记录到环")
             else:
                 passivity_trigger_array.append(item)
                 self._last_ring_fp[key] = fp
-                print(f"✅ [RING:PUSH] Passivity 入队消息组 {idx+1}/{len(filtered_outputs)}")
+                if getattr(self, "DEBUG_PRINT", False):
+                    print(f"✅ [RING:PUSH] Passivity 入队消息组 {idx+1}/{len(filtered_outputs)}")
             enqueued += 1
 
-        print(f"🎯🎯🎯 [PASSIVITY-LOAD] 共入队 {enqueued} 组")
+        if getattr(self, "DEBUG_PRINT", False):
+            print(f"🎯🎯🎯 [PASSIVITY-LOAD] 共入队 {enqueued} 组")
         self._update_workflow_state(workflow_id, data_temp, local_passivity_array=passivity_trigger_array)
     
     def _load_array_trigger_array(self, workflow_id, passivity_data, array_trigger_array):
@@ -1786,7 +1896,8 @@ class WorkflowEngine:
         
         if has_array_trigger:
             # 后端处理 ArrayTrigger（前端会在 LoadInPassivityTriggerArray 中调用 loadArrayTriggerArray）
-            print(f"[ARRAY-DEBUG] 后端处理 ArrayTrigger，数据节点数: {len(data_temp.get('nodes', []))}")
+            if getattr(self, "DEBUG_PRINT", False):
+                print(f"[ARRAY-DEBUG] 后端处理 ArrayTrigger，数据节点数: {len(data_temp.get('nodes', []))}")
             self._run_array_trigger_nodes_in_passivity_trigger_array(workflow_id, data_temp, array_trigger_array)
         else:
             # 修复：不应该直接添加 data_temp，而是添加包含 nodeId 和 outputData 的对象
@@ -2033,7 +2144,8 @@ class WorkflowEngine:
                     # 自动包一层，使其成为单元素数组：[Outputs_row]
                     if original_outputs and all(_looks_like_output_slot(x) for x in original_outputs):
                         original_outputs = [original_outputs]
-                        print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
                     # 归一化后再输出一遍统计信息
                     try:
                         self._log_event(workflow_id, f"🔴 [ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
@@ -2089,29 +2201,48 @@ class WorkflowEngine:
                                 start_idx = min(last_index, len(array_trigger_array) - 1)
                                 for j in range(start_idx, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
-                                        # deque 不支持索引赋值，但我们可以通过重建来实现覆盖
-                                        # 为了性能，我们采用标记策略：添加新项，在出队时去重
-                                        # 或者，我们直接添加新项，让后续处理时自然覆盖（因为指纹相同）
-                                        # 简化方案：直接添加新项，更新索引指向最新项
-                                        array_trigger_array.append(item)
-                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        # ✅ 真正覆盖：命中时原位替换（队列长度不变）
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
+                                        queue_index[node_id] = j
                                         found = True
-                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（指纹相同，后续会去重）")
+                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点最后一条记录（相同指纹）")
                                         break
                             if not found:
                                 # 索引失效或未找到，从末尾重新查找
                                 for j in range(len(array_trigger_array)-1, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
-                                        array_trigger_array.append(item)
-                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        # ✅ 真正覆盖：命中时原位替换（队列长度不变）
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
+                                        queue_index[node_id] = j
                                         found = True
-                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（重新查找）")
+                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点记录（重新查找命中）")
                                         break
                             if not found:
-                                # 完全未找到，添加新项
-                                array_trigger_array.append(item)
-                                queue_index[node_id] = len(array_trigger_array) - 1
-                                self._log_event(workflow_id, "✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环")
+                                # 完全未找到：指纹相同视为“覆盖不涨”
+                                # 兼容 deque：用 list 临时覆盖后再写回（保持队列长度不变）
+                                try:
+                                    j = int(last_index) if last_index is not None else (len(array_trigger_array) - 1)
+                                except Exception:
+                                    j = len(array_trigger_array) - 1
+                                if len(array_trigger_array) > 0:
+                                    j = max(0, min(j, len(array_trigger_array) - 1))
+                                    tmp = list(array_trigger_array)
+                                    tmp[j] = item                 # ✅原地覆盖，不涨长度
+                                    array_trigger_array.clear()
+                                    array_trigger_array.extend(tmp)
+                                    queue_index[node_id] = j      # ✅索引指向被覆盖的位置
+                                    self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 未命中旧项，按索引兜底覆盖（相同指纹）")
+                                else:
+                                    # 空队列时仍需入队一个元素（否则无处可覆盖）
+                                    array_trigger_array.append(item)
+                                    queue_index[node_id] = 0
+                                    self._log_event(workflow_id, "✅ [RING:PUSH] ArrayTrigger 队列为空，新增记录到环")
                         else:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp
@@ -2385,16 +2516,20 @@ class WorkflowEngine:
                     try:
                         raw = result.get("output")
                         raw_len = len(raw) if isinstance(raw, list) else 1
-                        print(f"[ARRAY-TRACE] node={node.get('label', node.get('id'))} raw_type={type(raw)} raw_len={raw_len}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-TRACE] node={node.get('label', node.get('id'))} raw_type={type(raw)} raw_len={raw_len}")
                         if isinstance(raw, list):
                             for i, g in enumerate(raw):
                                 if isinstance(g, list):
-                                    print(f"   └─ raw[{i}] is list, size={len(g)}")
+                                    if getattr(self, "DEBUG_PRINT", False):
+                                        print(f"   └─ raw[{i}] is list, size={len(g)}")
                                 elif isinstance(g, dict):
                                     keys = list(g.keys())
-                                    print(f"   └─ raw[{i}] is dict, keys={keys}")
+                                    if getattr(self, "DEBUG_PRINT", False):
+                                        print(f"   └─ raw[{i}] is dict, keys={keys}")
                                 else:
-                                    print(f"   └─ raw[{i}] type={type(g)} value_preview={str(g)[:80]}")
+                                    if getattr(self, "DEBUG_PRINT", False):
+                                        print(f"   └─ raw[{i}] type={type(g)} value_preview={str(g)[:80]}")
                     except Exception:
                         pass
                     # === 形状归一化（最小修） ===
@@ -2412,22 +2547,27 @@ class WorkflowEngine:
                     # 自动包一层，使其成为单元素数组：[Outputs_row]
                     if original_outputs and all(_looks_like_output_slot(x) for x in original_outputs):
                         original_outputs = [original_outputs]
-                        print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
                     # 归一化后再输出一遍统计信息
                     try:
-                        print(f"[ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
                         for gi, g in enumerate(original_outputs):
                             if isinstance(g, list):
                                 ids = []
                                 for it in g:
                                     if isinstance(it, dict):
                                         ids.append(it.get('Id') or it.get('name'))
-                                print(f"   └─ group[{gi}] size={len(g)} ids={ids}")
+                                if getattr(self, "DEBUG_PRINT", False):
+                                    print(f"   └─ group[{gi}] size={len(g)} ids={ids}")
                             else:
-                                print(f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
+                                if getattr(self, "DEBUG_PRINT", False):
+                                    print(f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
                     except Exception:
                         pass
-                    print(f"[ARRAY-DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(f"[ARRAY-DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
                     # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
                     try:
@@ -2461,35 +2601,62 @@ class WorkflowEngine:
                                 start_idx = min(last_index, len(array_trigger_array) - 1)
                                 for j in range(start_idx, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
-                                        array_trigger_array.append(item)
-                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        # ✅ 真正覆盖：命中时原位替换（队列长度不变）
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
+                                        queue_index[node_id] = j
                                         found = True
-                                        print(f"🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（指纹相同） fp={fp} group_idx={idx}")
+                                        if getattr(self, "DEBUG_PRINT", False):
+                                            print(f"🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点记录（相同指纹） fp={fp} group_idx={idx}")
                                         break
                             if not found:
                                 # 索引失效，从末尾重新查找
                                 for j in range(len(array_trigger_array)-1, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
-                                        array_trigger_array.append(item)
-                                        queue_index[node_id] = len(array_trigger_array) - 1
+                                        # ✅ 真正覆盖：命中时原位替换（队列长度不变）
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
+                                        queue_index[node_id] = j
                                         found = True
-                                        print(f"🌀 [RING:OVERWRITE] ArrayTrigger 添加新项（重新查找） fp={fp} group_idx={idx}")
+                                        if getattr(self, "DEBUG_PRINT", False):
+                                            print(f"🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点记录（重新查找命中） fp={fp} group_idx={idx}")
                                         break
                             if not found:
-                                array_trigger_array.append(item)
-                                queue_index[node_id] = len(array_trigger_array) - 1
-                                print(f"✅ [RING:PUSH] ArrayTrigger 覆盖失败，退化为新增记录到环 fp={fp} group_idx={idx}")
+                                # 指纹相同视为“覆盖不涨”；未命中旧项时按 last_index 兜底覆盖
+                                try:
+                                    j = int(last_index) if last_index is not None else (len(array_trigger_array) - 1)
+                                except Exception:
+                                    j = len(array_trigger_array) - 1
+                                if len(array_trigger_array) > 0:
+                                    j = max(0, min(j, len(array_trigger_array) - 1))
+                                    tmp = list(array_trigger_array)
+                                    tmp[j] = item                 # ✅原地覆盖，不涨长度（兼容 deque）
+                                    array_trigger_array.clear()
+                                    array_trigger_array.extend(tmp)
+                                    queue_index[node_id] = j      # ✅索引指向被覆盖的位置
+                                else:
+                                    array_trigger_array.append(item)
+                                    queue_index[node_id] = 0
+                                if getattr(self, "DEBUG_PRINT", False):
+                                    print(f"🌀 [RING:OVERWRITE] ArrayTrigger 未命中旧项，兜底覆盖 fp={fp} group_idx={idx}")
                         else:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp
                             queue_index[node_id] = len(array_trigger_array) - 1
-                            print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp} group_idx={idx}")
+                            if getattr(self, "DEBUG_PRINT", False):
+                                print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp} group_idx={idx}")
                         
                         enqueued_count += 1
                     
-                    print(f"[ARRAY-DEBUG] ArrayTrigger 总共入队 {enqueued_count} 个数组组")
+                    if getattr(self, "DEBUG_PRINT", False):
+                        print(f"[ARRAY-DEBUG] ArrayTrigger 总共入队 {enqueued_count} 个数组组")
                     if enqueued_count == 0:
-                        print("[ARRAY-DEBUG] ArrayTrigger 所有输出元素均为空，跳过入队")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print("[ARRAY-DEBUG] ArrayTrigger 所有输出元素均为空，跳过入队")
                     # 最小改动：入队完成后立即刷新队列长度到全局状态
                     try:
                         self._update_workflow_state(workflow_id, None, local_array_trigger_array=array_trigger_array)
@@ -2515,11 +2682,13 @@ class WorkflowEngine:
         if array_trigger_array:
             # 取出第一个数据，用于获取 ParallelLimit
             array_data = array_trigger_array[0]
-            print(f"[ARRAY-DEBUG] 开始处理 ArrayTrigger 数据: nodeId={array_data.get('nodeId')}")
-            print(f"[ARRAY-DEBUG] 当前队列总长度: {len(array_trigger_array)}")
-            print(f"[ARRAY-DEBUG] 处理的数据类型: {type(array_data.get('outputData'))}")
+            if getattr(self, "DEBUG_PRINT", False):
+                print(f"[ARRAY-DEBUG] 开始处理 ArrayTrigger 数据: nodeId={array_data.get('nodeId')}")
+                print(f"[ARRAY-DEBUG] 当前队列总长度: {len(array_trigger_array)}")
+                print(f"[ARRAY-DEBUG] 处理的数据类型: {type(array_data.get('outputData'))}")
             if isinstance(array_data.get('outputData'), list):
-                print(f"[ARRAY-DEBUG] 输出数据长度: {len(array_data.get('outputData', []))}")
+                if getattr(self, "DEBUG_PRINT", False):
+                    print(f"[ARRAY-DEBUG] 输出数据长度: {len(array_data.get('outputData', []))}")
             self._log_event(workflow_id, f"   └─ headKeys={(list(array_data.keys()) if isinstance(array_data, dict) else type(array_data))}")
             
             # 检查 array_data 是否为 None；当 outputData 为空但带有 graph_data（占位项，用于无 ArrayTrigger 的场景）时，不丢弃
@@ -2564,10 +2733,19 @@ class WorkflowEngine:
                     return
 
                 batch_size = min(available_slots, len(array_trigger_array))
-                # deque 不支持切片，这里用 islice 拉取 batch
-                batch_data = list(islice(array_trigger_array, 0, batch_size))
+                # 关键：先“占位出队”(pending--) ，再启动子任务(active++)，
+                # 最后只刷新一次队列长度，避免出现 pending 旧值 + active 新值 的假增长。
+                reserved_items = []
+                for _ in range(batch_size):
+                    if not array_trigger_array:
+                        break
+                    try:
+                        reserved_items.append(array_trigger_array.popleft())
+                    except Exception:
+                        reserved_items.append(array_trigger_array.pop(0))
+
                 launched = 0
-                for idx, batch_item in enumerate(batch_data):
+                for batch_item in reserved_items:
                     try:
                         child_graph = self._prepare_child_graph(workflow_id, data_temp, batch_item)
                         if child_graph is None:
@@ -2575,24 +2753,16 @@ class WorkflowEngine:
                         self._start_child_workflow(workflow_id, child_graph, batch_item)
                         launched += 1
                     except Exception as e:
-                        print(f"[ARRAY-DEBUG] 子工作流启动失败: {e}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-DEBUG] 子工作流启动失败: {e}")
                         self._log_event(workflow_id, f"❌ [CHILD] 子工作流启动失败: {e}")
-                # 性能优化：批量出队时清理索引
-                queue_index = self._array_queue_last_index.get(workflow_id, {})
-                for _ in range(batch_size):
-                    if array_trigger_array:
-                        try:
-                            popped_item = array_trigger_array.popleft()
-                            # 清理索引
-                            if isinstance(popped_item, dict):
-                                popped_node_id = popped_item.get("nodeId")
-                                if popped_node_id and popped_node_id in queue_index:
-                                    if queue_index[popped_node_id] == 0:
-                                        queue_index.pop(popped_node_id, None)
-                                    elif queue_index[popped_node_id] > 0:
-                                        queue_index[popped_node_id] -= 1
-                        except Exception:
-                            array_trigger_array.pop(0)
+
+                # 最小修：批量 pop 之后，旧的 last_index 全部失效，直接丢弃索引缓存，避免误判
+                try:
+                    self._array_queue_last_index.pop(workflow_id, None)
+                except Exception:
+                    pass
+
                 workflow_state["pending_array_count"] = len(array_trigger_array)
                 self._refresh_parent_array_queue(workflow_id, len(array_trigger_array))
                 if launched:
@@ -2618,29 +2788,35 @@ class WorkflowEngine:
                     array_node = next((node for node in nodes if node["id"] == array_data["nodeId"]), None)
                     
                     if array_node:
-                        print(f"[ARRAY-DEBUG] 找到 ArrayTrigger 节点: {array_node.get('label', array_node.get('id'))}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-DEBUG] 找到 ArrayTrigger 节点: {array_node.get('label', array_node.get('id'))}")
                         self._log_event(workflow_id, f"   └─ hit ArrayTrigger node: {array_node.get('label', array_node.get('id'))}")
                         try:
-                            print(f"[ARRAY-DEBUG] outputData 类型: {type(array_data.get('outputData'))}")
-                            print(f"[ARRAY-DEBUG] outputData 内容: {array_data.get('outputData')}")
+                            if getattr(self, "DEBUG_PRINT", False):
+                                print(f"[ARRAY-DEBUG] outputData 类型: {type(array_data.get('outputData'))}")
+                                print(f"[ARRAY-DEBUG] outputData 内容: {array_data.get('outputData')}")
                             self._log_event(workflow_id, f"🔴 [DEBUG] array_data keys: {list(array_data.keys())}")
                             self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger outputData type: {type(array_data.get('outputData'))}")
                             self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger outputData: {array_data.get('outputData')}")
                             # 处理节点连接
                             processed_data_temp = self._process_node_connections(copy.deepcopy(effective_graph), array_node, array_data["outputData"], workflow_id)
-                            print(f"[ARRAY-DEBUG] 处理节点连接完成，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
+                            if getattr(self, "DEBUG_PRINT", False):
+                                print(f"[ARRAY-DEBUG] 处理节点连接完成，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
                             self._log_event(workflow_id, f"🔴 [DEBUG] 开始处理普通节点，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
                             # 处理节点
                             self._process_normal_nodes(processed_data_temp, workflow_state)
-                            print(f"[ARRAY-DEBUG] 普通节点处理完成")
+                            if getattr(self, "DEBUG_PRINT", False):
+                                print(f"[ARRAY-DEBUG] 普通节点处理完成")
                             self._log_event(workflow_id, f"🔴 [DEBUG] 普通节点处理完成")
                         except Exception as e:
-                            print(f"[ARRAY-DEBUG] 处理错误: {e}")
+                            if getattr(self, "DEBUG_PRINT", False):
+                                print(f"[ARRAY-DEBUG] 处理错误: {e}")
                             self._log_event(workflow_id, f"❌ [ERROR] _process_next_array_trigger 内部错误: {e}")
                             import traceback
                             self._log_event(workflow_id, f"🔍 [TRACEBACK] {traceback.format_exc()}")
                     else:
-                        print(f"[ARRAY-DEBUG] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
+                        if getattr(self, "DEBUG_PRINT", False):
+                            print(f"[ARRAY-DEBUG] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
                         self._log_event(workflow_id, f"❌ [ERROR] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
                 
                 # 处理完成后，才从队列中移除并更新队列长度
@@ -2660,7 +2836,8 @@ class WorkflowEngine:
                                 queue_index[popped_node_id] = queue_index[popped_node_id] - 1
                 except Exception:
                     array_trigger_array.pop(0)
-                print(f"[ARRAY-DEBUG] 移除一个 ArrayTrigger 数据，剩余长度: {len(array_trigger_array)}")
+                if getattr(self, "DEBUG_PRINT", False):
+                    print(f"[ARRAY-DEBUG] 移除一个 ArrayTrigger 数据，剩余长度: {len(array_trigger_array)}")
             
             # 设置本轮固定指纹（避免同一轮内指纹随状态变化）
             import hashlib
@@ -2746,11 +2923,10 @@ class WorkflowEngine:
             if summary:
                 summary["active"] += 1
                 summary["total"] += 1
-            parent_pending = 0
-            parent_state = self.workflows.get(parent_id)
-            if parent_state:
-                parent_pending = parent_state.get("pending_array_count", 0)
-            self._refresh_parent_array_queue(parent_id, parent_pending)
+            # 注意：这里不要刷新父队列长度。
+            # 父队列的 pending_array_count 通常会在调用方“出队/占位”之后才更新；
+            # 若在这里用旧 pending 叠加 active，会造成前端看到队列数瞬间 +1 的假增长。
+            # 由调用方在“pending 已减少 + active 已增加”后统一刷新，保证总数稳定。
         self._log_event(parent_id, f"🆕 [CHILD] 启动子工作流: {child_id}")
         self._add_history(child_id, 'Start')
         thread = threading.Thread(target=self._execute_child_workflow_thread, args=(child_id,))
@@ -2846,7 +3022,8 @@ class WorkflowEngine:
                 else:
                     self._log_event(parent_workflow_id, f"❌ [BATCH] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
         except Exception as e:
-            print(f"[ARRAY-DEBUG] 批次处理错误: {e}")
+            if getattr(self, "DEBUG_PRINT", False):
+                print(f"[ARRAY-DEBUG] 批次处理错误: {e}")
             self._log_event(parent_workflow_id, f"❌ [BATCH] 批次处理错误: {e}")
             import traceback
             self._log_event(parent_workflow_id, f"🔍 [BATCH-TRACEBACK] {traceback.format_exc()}")

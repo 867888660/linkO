@@ -1,0 +1,20 @@
+{
+  "type": "wallet_positions_summary",
+  "root_addr": "0x39BC135381Acb7a87De2C20f4862A25f5Accf230",
+  "generated_at": 1768300995,
+  "total_positions": 39,
+  "total_markets": 39,
+  "total_cur_value": 401.22169999999994,
+  "value": [
+    {
+      "user": "0x39bc135381acb7a87de2c20f4862a25f5accf230",
+      "value": 401.2256
+    }
+  ],
+  "proxies": [
+    "0x39bc135381acb7a87de2c20f4862a25f5accf230"
+  ],
+  "batch_files": [
+    "polymarket_json_20260113_184315_wallet_batch001_of_001.json"
+  ]
+}
