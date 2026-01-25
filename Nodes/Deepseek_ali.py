@@ -67,7 +67,7 @@ def run_node(node):
     print('Test 1测试', node,'/n测试/n',messages)
     # Initialize the OpenAI client with DeepSeek API
     api_key = get_llm_api_key()
-    client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1", timeout=120.0)  # 添加120秒超时
     if node['max_tokens'] >8192:
         node['max_tokens'] = 8192
 

@@ -1,0 +1,272 @@
+[
+  [
+    {
+      "message": "New conversation started"
+    },
+    {
+      "NodeKind": "passivityTrigger",
+      "label": "passivityTrigger_PolyDiction0",
+      "Outputs": [
+        {
+          "name": "Save_Path",
+          "Kind": "String",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_141439.json"
+        },
+        {
+          "name": "DeBug",
+          "Kind": "String",
+          "Context": "config: limit=200, offset=[8001,8001], offset_end=12000, bounded_mode=True, closed=False, retry=1, category_filter=All\nsave_path=C:/polymarket/linkO/TempFiles/polymarket/output/json\nmarkets_fetched=200\nrecords_extracted=195\nskipped_reasons: {'no_id': 0, 'no_question': 0, 'no_rules': 0, 'no_endDate': 5}\nfinal_records=195\ntarget_file=C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_141439.json\nfile_size=185723 bytes"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "limit",
+          "Kind": "Num",
+          "Num": 200
+        },
+        {
+          "name": "offset_start",
+          "Kind": "Num",
+          "Num": 8001
+        },
+        {
+          "name": "closed",
+          "Kind": "Boolean",
+          "Boolean": false
+        },
+        {
+          "name": "retry",
+          "Kind": "Num",
+          "Num": 1
+        },
+        {
+          "name": "save_path",
+          "Kind": "String_FilePath",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json"
+        },
+        {
+          "name": "offset_end",
+          "Kind": "Num",
+          "Num": 12000
+        },
+        {
+          "name": "category_filter",
+          "Kind": "String",
+          "Context": "All"
+        }
+      ]
+    },
+    {
+      "NodeKind": "passivityTrigger",
+      "label": "passivityTrigger_PolyDiction0",
+      "Outputs": [
+        {
+          "name": "Save_Path",
+          "Kind": "String",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_141710.json"
+        },
+        {
+          "name": "DeBug",
+          "Kind": "String",
+          "Context": "config: limit=200, offset=[8201,8201], offset_end=12000, bounded_mode=True, closed=False, retry=1, category_filter=All\nsave_path=C:/polymarket/linkO/TempFiles/polymarket/output/json\nmarkets_fetched=200\nrecords_extracted=200\nskipped_reasons: {'no_id': 0, 'no_question': 0, 'no_rules': 0, 'no_endDate': 0}\nfinal_records=200\ntarget_file=C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_141710.json\nfile_size=184013 bytes"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "limit",
+          "Kind": "Num",
+          "Num": 200
+        },
+        {
+          "name": "offset_start",
+          "Kind": "Num",
+          "Num": 8001
+        },
+        {
+          "name": "closed",
+          "Kind": "Boolean",
+          "Boolean": false
+        },
+        {
+          "name": "retry",
+          "Kind": "Num",
+          "Num": 1
+        },
+        {
+          "name": "save_path",
+          "Kind": "String_FilePath",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json"
+        },
+        {
+          "name": "offset_end",
+          "Kind": "Num",
+          "Num": 12000
+        },
+        {
+          "name": "category_filter",
+          "Kind": "String",
+          "Context": "All"
+        }
+      ]
+    },
+    {
+      "NodeKind": "passivityTrigger",
+      "label": "passivityTrigger_PolyDiction0",
+      "Outputs": [
+        {
+          "name": "Save_Path",
+          "Kind": "String",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_142236.json"
+        },
+        {
+          "name": "DeBug",
+          "Kind": "String",
+          "Context": "config: limit=200, offset=[8401,8401], offset_end=12000, bounded_mode=True, closed=False, retry=1, category_filter=All\nsave_path=C:/polymarket/linkO/TempFiles/polymarket/output/json\nmarkets_fetched=200\nrecords_extracted=200\nskipped_reasons: {'no_id': 0, 'no_question': 0, 'no_rules': 0, 'no_endDate': 0}\nfinal_records=200\ntarget_file=C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_142236.json\nfile_size=239031 bytes"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "limit",
+          "Kind": "Num",
+          "Num": 200
+        },
+        {
+          "name": "offset_start",
+          "Kind": "Num",
+          "Num": 8001
+        },
+        {
+          "name": "closed",
+          "Kind": "Boolean",
+          "Boolean": false
+        },
+        {
+          "name": "retry",
+          "Kind": "Num",
+          "Num": 1
+        },
+        {
+          "name": "save_path",
+          "Kind": "String_FilePath",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json"
+        },
+        {
+          "name": "offset_end",
+          "Kind": "Num",
+          "Num": 12000
+        },
+        {
+          "name": "category_filter",
+          "Kind": "String",
+          "Context": "All"
+        }
+      ]
+    },
+    {
+      "NodeKind": "passivityTrigger",
+      "label": "passivityTrigger_PolyDiction0",
+      "Outputs": [
+        {
+          "name": "Save_Path",
+          "Kind": "String",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_142959.json"
+        },
+        {
+          "name": "DeBug",
+          "Kind": "String",
+          "Context": "config: limit=200, offset=[8601,8601], offset_end=12000, bounded_mode=True, closed=False, retry=1, category_filter=All\nsave_path=C:/polymarket/linkO/TempFiles/polymarket/output/json\nmarkets_fetched=200\nrecords_extracted=200\nskipped_reasons: {'no_id': 0, 'no_question': 0, 'no_rules': 0, 'no_endDate': 0}\nfinal_records=200\ntarget_file=C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_142959.json\nfile_size=238182 bytes"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "limit",
+          "Kind": "Num",
+          "Num": 200
+        },
+        {
+          "name": "offset_start",
+          "Kind": "Num",
+          "Num": 8001
+        },
+        {
+          "name": "closed",
+          "Kind": "Boolean",
+          "Boolean": false
+        },
+        {
+          "name": "retry",
+          "Kind": "Num",
+          "Num": 1
+        },
+        {
+          "name": "save_path",
+          "Kind": "String_FilePath",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json"
+        },
+        {
+          "name": "offset_end",
+          "Kind": "Num",
+          "Num": 12000
+        },
+        {
+          "name": "category_filter",
+          "Kind": "String",
+          "Context": "All"
+        }
+      ]
+    },
+    {
+      "NodeKind": "passivityTrigger",
+      "label": "passivityTrigger_PolyDiction0",
+      "Outputs": [
+        {
+          "name": "Save_Path",
+          "Kind": "String",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_143905.json"
+        },
+        {
+          "name": "DeBug",
+          "Kind": "String",
+          "Context": "config: limit=200, offset=[8801,8801], offset_end=12000, bounded_mode=True, closed=False, retry=1, category_filter=All\nsave_path=C:/polymarket/linkO/TempFiles/polymarket/output/json\nmarkets_fetched=200\nrecords_extracted=199\nskipped_reasons: {'no_id': 0, 'no_question': 0, 'no_rules': 0, 'no_endDate': 1}\nfinal_records=199\ntarget_file=C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_143905.json\nfile_size=236673 bytes"
+        }
+      ],
+      "Inputs": [
+        {
+          "name": "limit",
+          "Kind": "Num",
+          "Num": 200
+        },
+        {
+          "name": "offset_start",
+          "Kind": "Num",
+          "Num": 8001
+        },
+        {
+          "name": "closed",
+          "Kind": "Boolean",
+          "Boolean": false
+        },
+        {
+          "name": "retry",
+          "Kind": "Num",
+          "Num": 1
+        },
+        {
+          "name": "save_path",
+          "Kind": "String_FilePath",
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json"
+        },
+        {
+          "name": "offset_end",
+          "Kind": "Num",
+          "Num": 12000
+        },
+        {
+          "name": "category_filter",
+          "Kind": "String",
+          "Context": "All"
+        }
+      ]
+    }
+  ]
+]

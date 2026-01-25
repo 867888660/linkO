@@ -36,14 +36,8 @@
         "NodeFunction": "**组件功能：**  \n该代码实现了一个节点插入器的功能，能够向一个工作流JSON文件中插入新的节点，并确保节点ID和标签的唯一性。插入的过程包括检查重复的节点ID和标签，确保每个节点的唯一性，最终将更新后的数据保存回文件。\n\n**代码功能摘要：**  \n1. 该代码首先验证输入的文件路径和JSON字符串的有效性。\n2. 它读取并解析目标工作流文件，解析输入的节点JSON。\n3. 新的节点会被添加到工作流的`nodes`数组中，接着对所有节点进行去重处理（包括`id`和`label`）。\n4. 去重完成后，更新的工作流会保存回文件。\n5. 最后，生成操作结果和调试信息作为输出。\n\n**参数：**  \n```yaml\ninputs:\n  - name: File_Path\n    type: string\n    required: true\n    description: 目标工作流JSON文件的路径\n    frozen: true\n  - name: Json\n    type: string\n    required: true\n    description: 要插入的节点的JSON字符串\n    frozen: true\noutputs:\n  - name: Result\n    type: string\n    description: 操作结果信息\n  - name: Debug\n    type: string\n    description: 详细的调试信息输出\n```\n\n**运行逻辑：**  \n- 读取输入：  \n  - 验证文件路径和JSON字符串的有效性。\n  - 如果文件路径无效或JSON字符串为空，抛出相应错误。\n  \n- 数据处理：  \n  - 读取目标工作流文件，检查文件中是否包含`nodes`数组。\n  - 解析输入的节点JSON，支持代码块格式的解析。\n  - 将新的节点数据添加到现有的`nodes`数组。\n\n- 节点去重处理：  \n  - 遍历所有节点，确保每个节点的`id`和`label`在全局范围内唯一。\n  - 如有重复，依次在末尾加上`*`，直到节点不再重复。\n  - 记录所有重命名的操作并输出调试信息。\n\n- 文件保存：  \n  - 将更新后的工作流数据写回到原文件中，采用UTF-8编码并格式化为缩进的JSON格式。\n\n- 生成输出：  \n  - 返回操作结果信息，成功时显示“OK: 现有节点总数 X”，失败时显示相应的错误信息。\n  - 输出完整的调试信息记录，帮助用户了解处理过程。"
     },
     {
-        "Filename": "AliOcr.py",
-        "Hash": "3cb9cb41faf4b25ca973bc4d97533b5fb8c6f2f936662eed248d7c1e87df7aa6",
-        "NodeKind": "Normal",
-        "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个使用阿里云OCR API进行手写体识别的程序，能够读取图片文件并识别其中的手写文字内容。\\n\\n代码功能摘要（概括核心算法或主要处理步骤）\\n程序首先验证输入文件的存在性和格式有效性，然后使用阿里云OCR API客户端读取图片二进制数据，配置手写体识别参数（包括自动旋转、段落识别等），发送识别请求并处理返回结果，最终输出识别到的文字内容或相应的错误信息。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: File_Path\\n    type: file\\n    required: true\\n    description: 需要进行OCR识别的图片文件路径\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 识别结果文本或错误信息\\n```\\n\\n运行逻辑（用 - 列表描写详细流程）\\n- 接收输入的图片文件路径参数\\n- 验证文件是否存在，如不存在则返回文件未找到错误\\n- 检查文件扩展名是否为支持的图片格式（.png、.jpg、.jpeg、.bmp、.gif、.tiff、.webp），如不支持则返回格式错误信息\\n- 导入阿里云OCR相关模块和客户端类\\n- 使用硬编码的访问密钥创建OCR客户端配置，设置服务端点为杭州区域\\n- 以二进制模式读取图片文件内容\\n- 创建手写体识别请求对象，配置参数：关闭字符信息输出、开启图片自动旋转、关闭表格输出、关闭页面排序、开启段落识别\\n- 设置运行时选项并发送OCR识别请求\\n- 处理API响应结果：如果成功则提取识别的文字数据，如果失败则构造包含错误代码和消息的错误信息\\n- 使用logging记录完整的OCR响应信息用于调试\\n- 捕获并处理可能出现的异常，记录错误日志\\n- 将最终结果（识别文字或错误信息）赋值给输出参数并返回"
-    },
-    {
         "Filename": "ali_deepseek_research.py",
-        "Hash": "98391eb1cda579b6d1b8405e8aa1b814df8ec5f8e16145c89d558e875d144a7f",
+        "Hash": "35fba8a787063c1490d262e0fdcfaf22ff30a68f38554073ec198755d1f8b037",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },
@@ -61,7 +55,7 @@
     },
     {
         "Filename": "Array_PolyMarket.py",
-        "Hash": "d6566ef1495e4c991b471c785a44d8b01d2e80fec2abe1ce54a210189e96443e",
+        "Hash": "84857295ce52494c6fb1ae18a91eba29acce7d8fffbd3d0c238f9b4bc47a2214",
         "NodeKind": "ArrayTrigger",
         "NodeFunction": "组件功能：这是一个数组触发器节点，用于根据指定的数字范围生成包含输出节点序列的数组。\n\n代码功能摘要：接收起始和结束数字作为输入，通过循环遍历指定范围内的每个数字，为每个数字创建一个输出节点的深拷贝并存储到数组中，最终返回包含所有数字序列的数组。\n\n参数：\\n```yaml\\ninputs:\\n  - name: Input1\\n    type: integer\\n    required: true\\n    description: 数字范围的起始值\\n  - name: Input2\\n    type: integer\\n    required: true\\n    description: 数字范围的结束值（包含）\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 生成的数组序列，包含指定范围内所有数字对应的输出节点\\n```\n\n运行逻辑：\\n- 从输入节点获取起始数字Start_Num和结束数字End_Num\\n- 初始化空数组Array用于存储结果\\n- 使用for循环遍历从Start_Num到End_Num+1的范围（包含结束值）\\n- 在每次循环中，将当前数字i赋值给输出节点的Num属性\\n- 对当前输出节点进行深拷贝并添加到Array数组中\\n- 循环结束后返回包含所有数字序列的Array数组\\n- 每个数组元素都是一个完整的输出节点对象，包含对应的数字值"
     },
@@ -139,7 +133,7 @@
     },
     {
         "Filename": "createTxt.py",
-        "Hash": "33a3c556ed94f6dee3f7b76a97d66faf303d4c7dfa09840103602f3b2c2e777f",
+        "Hash": "675b2092a1245de90ef4b385619a8c30f83361d01058642ee605f1e80b5bbd50",
         "NodeKind": "Normal",
         "NodeFunction": "这是一个创建和保存TXT文本文件的组件。\\n\\n代码功能摘要：该组件接收文件路径、文件名和内容三个输入参数，将内容以UTF-8编码格式保存为.txt文件，并返回保存状态和完整文件路径。\\n\\n参数：\\n```yaml\\ninputs:\\n  - name: File_Path\\n    type: string\\n    required: true\\n    description: 文件保存的目录路径\\n  - name: File_Name\\n    type: string\\n    required: false\\n    description: 要创建的文件名称（不含扩展名）\\n  - name: Content\\n    type: string\\n    required: false\\n    description: 要写入文件的文本内容\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 文件保存操作的结果状态信息\\n  - name: File_Path\\n    type: string\\n    description: 完整的文件保存路径\\n```\\n\\n运行逻辑：\\n- 从输入节点获取文件保存路径、文件名称和文件内容\\n- 对文件名进行预处理，移除其中的换行符\\n- 将文件路径和文件名拼接，形成完整路径\\n- 自动为文件添加.txt扩展名\\n- 使用UTF-8编码方式将内容写入到指定文件\\n- 输出文件保存成功的状态信息到Result\\n- 输出完整的文件保存路径到File_Path"
     },
@@ -151,7 +145,7 @@
     },
     {
         "Filename": "DataBase.py",
-        "Hash": "323caffdab2d3d2cd772128bc8905a2d1841270c91258283ddcdaf1d418ff764",
+        "Hash": "7e47ef4861cd9b43b950c53f0f07d75e57b6633018cd1812dab335f564d986ff",
         "NodeKind": "DataBase",
         "NodeFunction": "组件功能：这是一个Excel数据库操作组件，可以对Excel文件进行查询、修改、删除、新增和JSON数据导入等操作。\\n\\n代码功能摘要：通过读取Excel文件，支持多条件查询（精确/模糊匹配、And/Or逻辑）、数据修改、行删除、新增记录和JSON批量导入等数据库操作，同时保持原有Excel格式和列宽设置。\\n\\n参数：\\n```yaml\\ninputs:\\n  - name: FilePath\\n    type: file\\n    required: true\\n    description: 需要操作的Excel文件路径\\noutputs:\\n  - name: Result\\n    type: string\\n    description: 操作结果和执行摘要信息\\n```\\n\\n运行逻辑：\\n- 读取指定路径的Excel文件，加载所有工作表数据并保存原始列宽信息\\n- 初始化缓存结构和辅助变量，用于提升多条件查询性能\\n- 遍历输出节点配置，解析操作参数（工作表名、查询条件、操作类型等）\\n- 根据配置的查询条件生成布尔掩码，支持精确匹配和模糊匹配\\n- 实现多条件逻辑组合（And/Or），并使用缓存优化重复查询\\n- 根据操作类型执行相应功能：查询返回匹配数据、修改更新指定列值、删除移除符合条件的行、新增添加新记录、JSON导入批量插入数据\\n- 处理占位符替换，支持动态参数引用\\n- 将修改后的数据写回Excel文件，恢复原有列宽格式\\n- 生成操作摘要和调试日志，返回执行结果"
     },
@@ -163,7 +157,7 @@
     },
     {
         "Filename": "DeepSeek.py",
-        "Hash": "5ded570a5c65459744fdf07478cc1bd486fb263701f1eda59650465861eab23f",
+        "Hash": "bcce5fc14c725c27ebec28db0748e4d66a608f8ff58a5e0e199a44c3db9e66f9",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于 DeepSeek API 的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。该组件集成了图像转 Base64 编码、JSON 解析、多种输出格式处理等功能。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n核心功能包括：图像文件转 Base64 编码处理、构建包含系统提示词和用户输入的消息体、调用 DeepSeek Chat API 进行推理、支持 JSON 格式输出解析和多种数据类型转换、记录 token 使用情况统计。\n\n参数\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测文件路径类型的输入并转换为 Base64 编码\\n- 根据 OriginalTextSelector 设置构建系统提示词\\n- 构建包含系统消息和用户消息的对话数组\\n- 将 Base64 编码的图像添加到消息体中\\n- 使用 DeepSeek API 密钥初始化 OpenAI 客户端\\n- 调用 chat.completions.create 方法进行推理，传入模型参数\\n- 获取 API 响应内容\\n- 如果输出格式为 JSON，则解析并提取结构化数据\\n- 根据输出节点的数据类型进行相应转换和赋值\\n- 记录 prompt_tokens、completion_tokens 和 total_tokens 使用情况\\n- 返回处理后的输出数组"
     },
@@ -175,7 +169,7 @@
     },
     {
         "Filename": "Deepseek_ali.py",
-        "Hash": "88f9ade4f01196ac5c4a3f41dc80ddba043e6b9bd1e5cc15b65fb389a19005cd",
+        "Hash": "c53c61621febc80d084206838d9cfef929f761870d0d6b108678ed829fd8ab7c",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },
@@ -289,7 +283,7 @@
     },
     {
         "Filename": "IfNode.py",
-        "Hash": "191a9c0994ad4a0e90c1ffe83c21a301e0a7042f612c8b2d17f469172ee6b7e7",
+        "Hash": "bae93937c4a7522047770ab13c24e26c4e0da24f5c044d7c6f9478d392969304",
         "NodeKind": "IfNode",
         "NodeFunction": "组件功能：这是一个条件判断节点，用于根据配置的多个判断条件对输入参数进行逻辑判断，并输出布尔值结果。\\n\\n代码功能摘要：该节点支持对String、Number、Boolean三种类型的输入参数进行多条件判断，通过配置判断主体、条件操作符和目标值，实现复杂的业务规则判断。支持And/Or两种逻辑组合方式，可以灵活处理多个条件的组合判断。\\n\\n参数：\\n```yaml\\ninputs: []\\noutputs:\\n  - name: OutPut1\\n    type: boolean\\n    description: 条件判断的最终结果，true表示条件满足，false表示条件不满足\\n```\\n\\n运行逻辑：\\n- 清空并重新初始化输出数组，将所有输出的Boolean值设为False\\n- 遍历每个输出节点，提取其配置的判断条件参数：IfLogicSubjectArray（判断主体数组）、IfLogicConditionArray（判断条件数组）、IfLogicContentArray（判断内容数组）、IfLogicKind（逻辑组合方式）\\n- 对每组判断条件进行并行处理，根据最小数组长度确定实际处理的条件数量\\n- 对于每个判断条件，根据Subject名称在输入数组中查找对应的输入参数\\n- 根据输入参数的类型执行相应的判断逻辑：String类型支持include/exclude/empty/not empty判断；Number类型支持>/</==/!=/>=/<= 数值比较；Boolean类型支持true/false判断\\n- 收集所有单个条件的判断结果到multi_results数组中\\n- 根据IfLogicKind的值进行最终结果计算：'And'模式下所有条件都为true时结果才为true；'Or'模式下任一条件为true时结果就为true\\n- 将最终判断结果赋值给输出的Boolean字段，并设置输出类型为Boolean\\n- 返回处理完成的输出数组"
     },
@@ -397,13 +391,13 @@
     },
     {
         "Filename": "passivityTrigger_PolyDiction.py",
-        "Hash": "0115d1d53dfc5e54f2c9f12ed2e28093cb198e0a9a93f08dbb645c93ffb87406",
+        "Hash": "a3a56f13ae40350936e81fc092870078618a3733aa757bfae8ba2971b1d817c7",
         "NodeKind": "passivityTrigger",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个Polymarket市场数据抓取节点：输入分页参数、保存路径和类别过滤条件，调用Polymarket Gamma API（/markets）逐页抓取市场列表，提取核心字段（question、rules、endDate、category等），每页处理完成后单独保存为JSON文件，输出保存路径和调试信息。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序读取输入的分页参数（limit、offset_start、offset_end）、closed标志、重试次数、保存路径和类别过滤条件，调用Polymarket Gamma API的/markets接口获取市场列表数据，对于缺失字段的市场，通过详情页接口补充完整信息，解析并标准化endDate字段（优先使用CLOB接口的end_date_iso，其次解析rules文本中的时间，最后使用Gamma的endDate），将处理后的数据保存为JSON文件，通过node._state.next_offset记忆续跑位置实现分页处理，每次调用仅处理一页数据。\n\n参数\n```yaml\ninputs:\n  - name: limit\n    type: number\n    required: true\n    description: 每页抓取数量，例如 100\n  - name: offset_start\n    type: number\n    required: true\n    description: 起始偏移量，例如 0\n  - name: closed\n    type: boolean\n    required: true\n    description: 是否包含已关闭的市场，false表示仅开放市场\n  - name: retry\n    type: number\n    required: true\n    description: 请求失败时的重试次数，例如 1\n  - name: save_path\n    type: string\n    required: true\n    description: JSON文件保存路径，例如 \"./output\"\n  - name: offset_end\n    type: number\n    required: true\n    description: 结束偏移量，-1为无上限模式（遇尾页暂停），>0为边界模式（递增至该值后停止）\n  - name: category_filter\n    type: string\n    required: true\n    description: 类别过滤，\"All\"表示全部类别，或指定tag_id/tag slug/tag label\noutputs:\n  - name: Save_Path\n    type: string\n    description: 保存的JSON文件完整路径\n  - name: DeBug\n    type: string\n    description: 调试信息，包含配置参数、抓取数量、处理状态等\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 读取Input1作为limit（每页数量）\n- 读取Input2作为offset_start（起始偏移量）\n- 读取Input3作为closed（是否包含已关闭市场）\n- 读取Input4作为retry（重试次数）\n- 读取Input5作为save_path（保存路径），若不存在则创建目录\n- 读取Input6作为offset_end（结束偏移量）\n- 读取Input7作为category_filter（类别过滤），解析为tag_id（支持\"All\"、数字ID、tag slug/label）\n- 从node._state.next_offset获取当前偏移量（首次使用offset_start）\n- 调用Polymarket Gamma API /markets接口获取市场列表（带tag_id过滤）\n- 从列表页提取基础信息（question、rules、endDate、category等）\n- 对于缺失字段的市场，调用详情页接口补充完整信息\n- 解析endDate：优先使用CLOB接口的end_date_iso，其次解析rules文本中的美东时间，最后使用Gamma的endDate，若为midnight UTC则按规则修正为ET时间点\n- 计算days_to_end（距离结束日期的天数）\n- 添加元信息（query_time_beijing、offset、url）\n- 将处理后的数据保存为JSON文件（每页一个文件）\n- 更新node._state.next_offset为下一页偏移量\n- 输出Save_Path（文件路径）和DeBug（调试信息）"
     },
     {
         "Filename": "passivityTrigger_PolyMarket.py",
-        "Hash": "ba6b28f8e9215ffd534388e8de230dafd00080b3e1f990fa3da2f9d5c07b1c01",
+        "Hash": "340878b68d6478795917709e5e8949d4023e406f68e723a766e74fdc47a8f39b",
         "NodeKind": "passivityTrigger",
         "NodeFunction": "组件功能：Agent A（爬虫+初筛，passivityTrigger 模式）。功能概览：1) 逐页抓取 /markets（withTokens/withClobTokenIds/withOutcomes），提取 clob tokenId；2) 批量调用 /prices 获取 YES ask；3) 为每个 token 计算盘口 L1（best bid/ask）、自适应 1¢ 带宽内深度、订单聚集度、带内 VWAP，并计算期限指标（days_to_end、daily_eff_if_win、apr_eff_if_win）；4) 先按价格区间 [min_yes, max_yes] 筛选，再按 l1_spread_c（L1 价差上限，单位美分）与 min_depth_1c_usd（1¢ 带宽内买卖深度较小值的美元下限）二次过滤；5) 每页处理完即单独落盘 JSON，包含规则/来源/URL 与各选项细节；6) 支持 offset_end：-1 为无上限模式（按 limit 递进，遇尾页暂停），>0 为边界模式（从 offset_start 递增至 offset_end 后停止，不回绕）；7) 每次仅处理一页并返回（Save_Path, DeBug），内部以 node._state.next_offset 记忆续跑位置。"
     },
@@ -415,7 +409,7 @@
     },
     {
         "Filename": "PolyMarket_QueryToken.py",
-        "Hash": "2971ad08b7e08f9a10a94bc8f6847b4a460aac450a57a5dc82175fd354d23863",
+        "Hash": "0bf0f69a11ae08ddf0853af208d53110820ddb7e94c4ef0f11adbbe8cadb5b00",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能：输入一个 Polymarket 的 clob tokenId，自动从 Polymarket API 查找该 token 所属市场，"
     },
@@ -427,7 +421,7 @@
     },
     {
         "Filename": "polymarket_redeem.py",
-        "Hash": "2981eae44a2a3038dcce7edeed02ea7d9df7173ebe2229358ec61b802fc29a0e",
+        "Hash": "329035afb9e5ea3aafa6d4ec24721c3fd1f9f3a26441654349120afcd28a8146",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个精简的 redeem 节点，用于在 Polymarket 市场已上报 payouts 后，走链上 CTF 合约 redeemPositions 进行领取：会“烧掉可领取的 winning outcome token 并换回抵押品”。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点 Inputs：PRIVATE_KEY、CONDITION_ID、TOKEN_ID、OUTCOME、TX_HASH_HINT、API_KEY、COLLATERAL_CANDIDATES、PARENT_COLLECTION_ID、POLYGONSCAN_API_KEY。运行时读取 RPC/合约地址等环境变量，调用 CTF redeemPositions 后用 balanceOf 前后对比计算 burned，burned>0 视为确实销毁成功。\n\n参数\n```yaml\ninputs:\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x... 或环境变量名）\n  - name: CONDITION_ID\n    type: string\n    required: true\n    description: CTF conditionId（bytes32，0x... 64 hex）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: CTF position token id（uint256，通常与 clobTokenIds 对应）\n  - name: OUTCOME\n    type: string\n    required: true\n    description: YES/NO（或 1/2，对应二元 indexSet bitmask）\n  - name: TX_HASH_HINT\n    type: string\n    required: false\n    description: 上游 transaction 节点输出的 tx_hash_hint；redeem 将优先从该 tx 的 receipt.logs 解析参数，失败再扫链\n  - name: API_KEY\n    type: string\n    required: false\n    description: Alchemy API Key（当未设置 POLYGON_RPC/RPC_URL 时，用它自动拼出 Polygon RPC）\n  - name: COLLATERAL_CANDIDATES\n    type: string\n    required: false\n    description: 额外抵押品候选地址（逗号分隔）。用于补充/覆盖自动探测（例如加入 WCOL / 其他 collateral）\n  - name: PARENT_COLLECTION_ID\n    type: string\n    required: false\n    description: 强制指定 parentCollectionId（bytes32，0x... 64 hex）。提供后将优先使用\n  - name: POLYGONSCAN_API_KEY\n    type: string\n    required: false\n    description: Polygonscan/Etherscan API Key（v2）。提供后脚本会优先用它（无需设置环境变量）\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 判定完成（tx 成功且 burned>0）时为 true，否则 false\n  - name: TxHash\n    type: string\n    description: 交易哈希（失败为空字符串）\n```\n\n环境变量（不新增 Inputs）\n"
     },
@@ -451,13 +445,13 @@
     },
     {
         "Filename": "polymarket_transaction.py",
-        "Hash": "fa649c1b6d83c0cda38d7ef8c21fb7ffec646563736a3a22305dc07f37a9660a",
+        "Hash": "4e60650fc7a0f92c77d8e596b45ce1dda4206413f525b6d20d9192e37f5b9243",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基础的节点模板程序，用于在 Polymarket CLOB 上执行限价下单、撤单操作，并支持在市场已上报 payouts 后走链上 CTF redeemPositions 进行 redeem（burn winning token 换回抵押品）。节点读取 Mode、PRICE、SIZE_SHARES、TIME_IN_FORCE_MODE、PRIVATE_KEY、TOKEN_ID、HOST、CHAIN_ID 等输入，输出 Result（JSON 字符串）与 DeBugging（调试信息文本）。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n参数\n```yaml\ninputs:\n  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n  - name: PRIVATE_KEY\n    type: string\n    required: true\n    description: 钱包私钥（0x...）\n  - name: TOKEN_ID\n    type: string\n    required: true\n    description: 市场 outcome token id\n  - name: HOST\n    type: string\n    required: false\n    description: API 主机地址\n  - name: CHAIN_ID\n    type: string\n    required: false\n    description: 链 ID，默认 137\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串\n  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n  - name: tx_hash_hint\n    type: string\n    description: 相关链上交易哈希“提示”。注意：下单成功不一定立刻有链上 tx_hash，可能为空；若只有 1 个哈希则直接输出 0x...；若有多个则输出 JSON 列表字符串。\n```\n\n运行逻辑（用 - 列表描写详细流程）\n- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n"
     },
     {
         "Filename": "PolyMarket_WalletPositions_BatchSave.py",
-        "Hash": "aef53effdedda3285aec0880fa60c5f2b34021ccce3b1308966dbc3a1b9e85b2",
+        "Hash": "7716eba1d9e5b1bb1eeb97d02f620a641dbfb4bc1e79e587afe82ef0866fef66",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个 Polymarket 钱包仓位查询与批量保存节点，用于查询指定钱包地址在 Polymarket 上的所有仓位信息，包括 positions、value、conditionId/indexSet 等，并将结果按批次保存为多个 JSON 文件。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n节点通过 data-api 获取 positions 和 value，通过 gamma-api 查询 conditionId/indexSet 映射，支持自动扫描 proxyWallet 并二次查询，最终将数据按批次（每批默认 50 条）拆分成多个 JSON 文件保存。\n\n参数\n```yaml\ninputs:\n  - name: Address\n    type: string\n    required: true\n    description: 钱包地址（0x...）\n  - name: SavePath\n    type: string\n    required: true\n    description: JSON 文件保存目录路径\noutputs:\n  - name: Result\n    type: string\n    description: 返回结果 JSON 字符串（包含统计信息）\n  - name: SavePath\n    type: string\n    description: 实际保存的目录路径\n  - name: TOTAL CUR_VALUE\n    type: string\n    description: 总当前价值（浮点数字符串）\n```\n\n运行逻辑\n- 从输入节点获取钱包地址和保存路径\n- 调用 data-api /positions 获取仓位列表\n- 调用 data-api /value 获取总资产价值\n- 对每个 tokenId 调用 gamma-api 查询 conditionId/indexSet\n- 自动收集并查询 proxyWallet（如果存在）\n- 将数据按批次（每批 50 条）拆分成多个 JSON 文件保存\n- 返回统计信息和保存路径\n"
     },
@@ -493,7 +487,7 @@
     },
     {
         "Filename": "Qw72B.py",
-        "Hash": "d65db62d9cfa17bd4e1e2c855e697788df0219cc8e1421171a9182a6432d768b",
+        "Hash": "60d391bfc1586a9bda5f7be134ab01b0b8d23d761e4cd4a42fa5497a9d3537bf",
         "NodeKind": "LLm",
         "NodeFunction": "组件功能（简述代码整体功能）\\n这是一个基于阿里云通义千问模型的大语言模型节点，支持文本和图像输入，能够根据系统提示词和用户输入生成智能回复。\n\n代码功能摘要（概括核心算法或主要处理步骤）\\n该节点通过OpenAI兼容接口调用通义千问模型，支持图像转Base64编码处理，具备JSON格式输出解析功能，并提供完整的token使用统计信息。\n\n参数\\n```yaml\\ninputs:\\n  - name: 可动态创建输入节点\\n    type: string\\n    required: false\\n    description: 支持文本和图像文件输入，图像会自动转换为Base64格式\\noutputs:\\n  - name: OutPut1\\n    type: string\\n    description: 模型生成的回复内容，支持原始文本或JSON格式输出\\n```\n\n运行逻辑\\n- 清空并重新初始化输出数组\\n- 遍历输入节点，检测图像文件并转换为Base64编码\\n- 根据OriginalTextSelector设置构建系统提示词\\n- 组装消息数组，包含系统提示、用户输入和图像内容\\n- 调用阿里云通义千问API，传入温度、最大token数、top_p等参数\\n- 获取模型响应并提取内容\\n- 如果选择JSON模式，使用内置JSON解析器处理响应\\n- 清理和格式化JSON内容，去除代码块标记和控制字符\\n- 根据输出节点类型分配解析后的数据\\n- 记录prompt_tokens、completion_tokens和total_tokens使用情况\\n- 返回包含生成内容和统计信息的输出数组"
     },
@@ -523,7 +517,7 @@
     },
     {
         "Filename": "Rag.py",
-        "Hash": "d55a304569b823cd32b0bd2f6fb2c2bbbe867c804ffa5483e05cfa306ecbf593",
+        "Hash": "8c8b75a67318069c7b954e5cc7946a9ae4386472a854ab2fc554e8a6d9c0875c",
         "NodeKind": "Normal",
         "NodeFunction": "组件功能（简述代码整体功能）\n这是一个基于语义向量的文本搜索组件，通过阿里云DashScope的text-embedding-v3模型对JSONL格式的文本数据进行语义相似度搜索和排序。支持多个查询词，使用**分隔。\n\n代码功能摘要（概括核心算法或主要处理步骤）\n核心算法采用向量余弦相似度计算，先读取JSONL文件并根据项目名称进行预筛选，然后使用DashScope API将查询文本和候选文本转换为向量，计算相似度并按分数降序排列，最终返回符合阈值要求的前N个结果。支持多个查询词，分别计算并输出结果。\n\n参数\n```yaml\ninputs:\n  - name: Json_Path\n    type: file\n    required: true\n    description: 包含待搜索文本数据的JSONL格式文件路径\n  - name: Select_item\n    type: string\n    required: true\n    description: 用于预筛选的项目名称，支持逗号分隔多个关键词，当为\"All\"时跳过筛选\n  - name: query\n    type: string\n    required: true\n    description: 用户输入的搜索查询文本，支持**分隔多个查询词\n  - name: Rank\n    type: integer\n    required: true\n    description: 返回搜索结果的最大数量\n  - name: Min_Score\n    type: number\n    required: true\n    description: 相似度分数的最小阈值，低于此值的结果将被过滤\noutputs:\n  - name: Result\n    type: string\n    description: 包含调试信息和格式化搜索结果的完整文本输出\n```\n\n运行逻辑\n- 读取并验证输入参数，检查JSONL文件是否存在\n- 逐行解析JSONL文件内容，将每行转换为JSON对象\n- 根据Select_item参数对数据进行预筛选，保留ID中包含指定关键词的条目，若Select_item为\"All\"不做筛选\n- 提取所有候选文本内容，准备进行向量化处理\n- 调用DashScope的text-embedding-v3模型，将查询文本和候选文本批量转换为向量\n- 计算查询向量与每个候选向量的余弦相似度分数\n- 按相似度分数降序排列所有结果，取前Rank个候选项\n- 应用Min_Score阈值过滤，只保留相似度大于等于阈值的结果\n- 格式化输出结果，包含序号、ID、相似度分数和文本片段预览\n- 如果没有符合条件的结果，返回相应的提示信息\n- 将调试信息和搜索结果合并，生成最终的输出文本"
     },

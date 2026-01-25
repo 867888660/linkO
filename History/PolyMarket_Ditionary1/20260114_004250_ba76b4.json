@@ -1,0 +1,2147 @@
+{
+  "nodes": [
+    {
+      "Inputs": [
+        {
+          "Context": "127.0.0.1:40028",
+          "Id": "Input1",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 200,
+          "name": "limit"
+        },
+        {
+          "Context": "1",
+          "Id": "Input2",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 0,
+          "name": "offset_start"
+        },
+        {
+          "Boolean": false,
+          "Context": null,
+          "Id": "Input3",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "Boolean",
+          "Link": 0,
+          "Num": null,
+          "name": "closed"
+        },
+        {
+          "Context": null,
+          "Id": "Input4",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 1,
+          "name": "retry"
+        },
+        {
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json",
+          "Id": "Input5",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "save_path"
+        },
+        {
+          "Context": null,
+          "Id": "Input6",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "Num",
+          "Link": 0,
+          "Num": 4000,
+          "name": "offset_end"
+        },
+        {
+          "Context": "All",
+          "Id": "Input7",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "category_filter"
+        }
+      ],
+      "NodeKind": "passivityTrigger",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "Saved 200 rows",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "Save_Path"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "Debug info",
+          "Id": "Output2",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "DeBug"
+        }
+      ],
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "anchorPoints": [
+        [
+          0.012028261716494027,
+          0.27813993915688834
+        ],
+        [
+          0.012028261716494027,
+          0.38244241634072146
+        ],
+        [
+          0.012028261716494027,
+          0.4867448935245546
+        ],
+        [
+          0.012028261716494027,
+          0.5910473707083876
+        ],
+        [
+          0.012028261716494027,
+          0.6953498478922208
+        ],
+        [
+          0.012028261716494027,
+          0.7996523250760539
+        ],
+        [
+          0.012028261716494027,
+          0.903954802259887
+        ],
+        [
+          0.9859670279974236,
+          0.27813993915688834
+        ],
+        [
+          0.9859670279974236,
+          0.38244241634072146
+        ],
+        [
+          0.02004710286082338,
+          0.0434593654932638
+        ]
+      ],
+      "id": "passivityTrigger_PolyDiction.py_1767509820321",
+      "label": "passivityTrigger_PolyDiction0",
+      "name": "passivityTrigger_PolyDiction.py",
+      "x": 480.844286686642,
+      "y": 165.5636375523835,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 196,
+      "width": 498.8251953125,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsHovor": false,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "_state": {
+        "next_offset": 1600
+      },
+      "debug": "",
+      "ErrorContext": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/output/json\\polymarket_json_20260114_004222.json",
+          "Id": "Input1",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 1,
+          "Num": null,
+          "name": "Js_FilePath"
+        }
+      ],
+      "NodeKind": "ArrayTrigger",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Json_Save"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output2",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "condition_id"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output3",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "question"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output4",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "endDate"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output5",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "days_to_end"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output6",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "rules"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output7",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "resolutionSource"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output8",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "url"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output9",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "option_name"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output10",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "condition_id_ext"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output11",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "ingested_at"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output12",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "source_file"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output13",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output14",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "ask"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output15",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "bid"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output16",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "l1_spread_c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output17",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "band_c_used"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output18",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "depth_ask_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output19",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "depth_bid_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output20",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "depth_1c_usd"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output21",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "depth_ask_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output22",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "depth_bid_1c_qty"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output23",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "vwap_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output24",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "vwap_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output25",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "n_orders_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output26",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "n_orders_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output27",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "top_concentration_ask_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output28",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "top_concentration_bid_1c"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output29",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "roi_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output30",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "daily_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output31",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "apr_eff_if_win"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output32",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "query_time_beijing"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output33",
+          "Kind": "String",
+          "Link": 1,
+          "Num": 0,
+          "name": "opp_token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output34",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "currentPrice"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output35",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "currentValue"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output36",
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "size"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "",
+          "Id": "Output37",
+          "Kind": "Boolean",
+          "Link": 0,
+          "Num": 0,
+          "name": "Islast"
+        }
+      ],
+      "ParallelLimit": 200,
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "Array_PolyMarket.py_1767512127584",
+      "label": "Array_PolyMarket1",
+      "name": "Array_PolyMarket.py",
+      "x": 1065.2999796982972,
+      "y": 165.43726954797557,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.018733363620564013,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.06672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.0917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.11677614430194974
+        ],
+        [
+          0.978144409109342,
+          0.1417996037952247
+        ],
+        [
+          0.978144409109342,
+          0.16682306328849963
+        ],
+        [
+          0.978144409109342,
+          0.19184652278177458
+        ],
+        [
+          0.978144409109342,
+          0.21686998227504953
+        ],
+        [
+          0.978144409109342,
+          0.24189344176832447
+        ],
+        [
+          0.978144409109342,
+          0.2669169012615994
+        ],
+        [
+          0.978144409109342,
+          0.29194036075487434
+        ],
+        [
+          0.978144409109342,
+          0.3169638202481493
+        ],
+        [
+          0.978144409109342,
+          0.34198727974142423
+        ],
+        [
+          0.978144409109342,
+          0.3670107392346992
+        ],
+        [
+          0.978144409109342,
+          0.3920341987279741
+        ],
+        [
+          0.978144409109342,
+          0.4170576582212491
+        ],
+        [
+          0.978144409109342,
+          0.442081117714524
+        ],
+        [
+          0.978144409109342,
+          0.46710457720779897
+        ],
+        [
+          0.978144409109342,
+          0.4921280367010739
+        ],
+        [
+          0.978144409109342,
+          0.5171514961943489
+        ],
+        [
+          0.978144409109342,
+          0.5421749556876237
+        ],
+        [
+          0.978144409109342,
+          0.5671984151808988
+        ],
+        [
+          0.978144409109342,
+          0.5922218746741736
+        ],
+        [
+          0.978144409109342,
+          0.6172453341674486
+        ],
+        [
+          0.978144409109342,
+          0.6422687936607235
+        ],
+        [
+          0.978144409109342,
+          0.6672922531539985
+        ],
+        [
+          0.978144409109342,
+          0.6923157126472734
+        ],
+        [
+          0.978144409109342,
+          0.7173391721405484
+        ],
+        [
+          0.978144409109342,
+          0.7423626316338233
+        ],
+        [
+          0.978144409109342,
+          0.7673860911270983
+        ],
+        [
+          0.978144409109342,
+          0.7924095506203732
+        ],
+        [
+          0.978144409109342,
+          0.8174330101136482
+        ],
+        [
+          0.978144409109342,
+          0.8424564696069231
+        ],
+        [
+          0.978144409109342,
+          0.8674799291001981
+        ],
+        [
+          0.978144409109342,
+          0.892503388593473
+        ],
+        [
+          0.978144409109342,
+          0.917526848086748
+        ],
+        [
+          0.978144409109342,
+          0.9425503075800229
+        ],
+        [
+          0.978144409109342,
+          0.9675737670732979
+        ],
+        [
+          0.031222272700940024,
+          0.010426441455531227
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 1036,
+      "width": 320.2841796875,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": true,
+      "firstRun": true,
+      "inputStatus": [
+        true
+      ],
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": "",
+      "ErrorContext": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "C:/polymarket/linkO/TempFiles/polymarket/PolyMarketDictionary.db",
+          "Id": "Input11",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "113737646348535718907061828221986410092483746453406800040218324716485703195792",
+          "Id": "Input2_1767512973156",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "token"
+        }
+      ],
+      "NodeKind": "DataBase",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "polyMarket_Dictionary 查询 0 行\n---- DEBUG DETAILS ----\n== Sheet [polyMarket_Dictionary] 条件数: 2\n⚠️ is_exact 列表长度与 subjects 不一致，自动截断/补齐\nsubjects types: [<class 'str'>, <class 'str'>]\ncontents types: [<class 'str'>, <class 'str'>]\nis_exact list:  [True, True]\ncombo_key: ('polyMarket_Dictionary', (('yes_token', '113737646348535718907061828221986410092483746453406800040218324716485703195792'), ('no_token', '113737646348535718907061828221986410092483746453406800040218324716485703195792')), 'Or', (True, True))\n最终匹配行数: 0 / 0",
+          "Id": "Output11",
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Result"
+        },
+        {
+          "Boolean": false,
+          "Context": "No results",
+          "DataBaseContentArray": [
+            "{{token}}",
+            "{{token}}"
+          ],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "Or",
+          "DataBaseSubjectArray": [
+            "yes_token",
+            "no_token"
+          ],
+          "Id": "Output3_1767512991557_257",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsExist",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox2": "no_token",
+          "selectBox3": "{{token}}",
+          "selectBox4": "All",
+          "selectBox5": "查询",
+          "selectKind": "Num",
+          "selectNum2": "no_token",
+          "selectNum3": "All"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "DataBase.py_1767512960632",
+      "label": "DataBase2",
+      "name": "DataBase.py",
+      "x": 1399.3972602739725,
+      "y": 164.92362490957075,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.010518728781494981,
+          0.5893186003683242
+        ],
+        [
+          0.010518728781494981,
+          0.8103130755064457
+        ],
+        [
+          0.9877281497549225,
+          0.5893186003683242
+        ],
+        [
+          0.9877281497549225,
+          0.8103130755064457
+        ],
+        [
+          0.01753121463582497,
+          0.09208103130755065
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 56,
+      "width": 570.4111328125,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": true,
+      "firstRun": false,
+      "inputStatus": [
+        true,
+        true
+      ],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "No results",
+          "Id": "Input1_1767513130021",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "IfNode",
+      "Outputs": [
+        {
+          "Boolean": true,
+          "Context": "",
+          "Description": "",
+          "Id": "Output1",
+          "IfLogicConditionArray": [
+            "include",
+            "include",
+            "include"
+          ],
+          "IfLogicContentArray": [
+            "No results",
+            "Sheet not found",
+            "列 'token' 不存在"
+          ],
+          "IfLogicKind": "Or",
+          "IfLogicSubjectArray": [
+            "Input1",
+            "Input1",
+            "Input1"
+          ],
+          "Kind": "Boolean",
+          "Link": 1,
+          "Num": null,
+          "TriggerKind": "STOP",
+          "name": "Sheet not found"
+        }
+      ],
+      "ReTryNum": 0,
+      "RecursionBehavior": "STOP",
+      "id": "IfNode.py_1767513126255",
+      "label": "IfNode3",
+      "name": "IfNode.py",
+      "x": 1995.7243150684926,
+      "y": 162.91880078192605,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.023595738634181563,
+          0.7591933570581257
+        ],
+        [
+          0.9724716382601215,
+          0.7591933570581257
+        ],
+        [
+          0.039326231056969266,
+          0.11862396204033215
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 254.283203125,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [
+        true
+      ],
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    },
+    {
+      "Inputs": [
+        {
+          "Context": "@TempFiles\\\\polymarket\\\\PolyMarketDictionary.db",
+          "Id": "Input11",
+          "IsLabel": true,
+          "Isnecessary": true,
+          "Kind": "String_FilePath",
+          "Link": 0,
+          "Num": null,
+          "name": "FilePath"
+        },
+        {
+          "Context": "113737646348535718907061828221986410092483746453406800040218324716485703195792",
+          "Id": "Input2_1767512973156",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "token"
+        },
+        {
+          "Context": "Will Club Brugge advance to the round of 16?",
+          "Id": "Input3_1767513156451",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "question"
+        },
+        {
+          "Context": "This market will resolve to \"Yes\" if the listed team advances to the Round of 16 of the 2025–26 UEFA Champions League. Otherwise, this market will resolve to \"No\".\nIf at any point it becomes impossible for the listed club to advance to the Round of 16 (e.g. they are mathematically eliminated from finishing in the top 24 of the league phase), the associated market will resolve to \"No\".\nIf the 2025–26 UEFA Champions League league phase is canceled or not completed by December 31, 2026, this market will resolve to \"No\".\nThe primary resolution source will be official information from UEFA. A consensus of credible reporting may also be used.",
+          "Id": "Input4_1767513156789",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "rules"
+        },
+        {
+          "Context": "2026-01-01T04:59:59Z",
+          "Id": "Input5_1767513157227",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "enddate"
+        },
+        {
+          "Context": "埃尔切能否赢得2025–26赛季西甲联赛？",
+          "Id": "Input6_1767513530875",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Translation"
+        },
+        {
+          "Context": "Sports",
+          "Id": "Input7_1767513775430",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Subject"
+        },
+        {
+          "Context": "False",
+          "Id": "Input8_1767514014463",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsContest"
+        },
+        {
+          "Context": "False",
+          "Id": "Input9_1767514020851",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsSubjective"
+        },
+        {
+          "Context": "True",
+          "Id": "Input10_1767514021244",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsClear"
+        },
+        {
+          "Context": "埃尔切, 西甲联赛, 2025–26赛季",
+          "Id": "Input12_1767514022130",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "KeyWords"
+        },
+        {
+          "Context": "11193375474258832771813596207477586549246265566944112982116889684473847607987",
+          "Id": "Input12_1767528201318",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "notoken"
+        },
+        {
+          "Context": "2026-01-13T16:42:49Z",
+          "Id": "Input13_1767929246366",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "time"
+        }
+      ],
+      "NodeKind": "DataBase",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Id": "Output11",
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Result"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output2_1767512978124_480",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "token",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "yes_token",
+          "selectBox5": "新增",
+          "selectBox6": "{{token}}",
+          "selectKind": "Num",
+          "selectNum3": "yes_token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [
+            "{{token}}"
+          ],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [
+            "token"
+          ],
+          "Id": "Output3_1767512991557_257",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "question",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox2": "token",
+          "selectBox3": "{{token}}",
+          "selectBox4": "question",
+          "selectBox5": "新增",
+          "selectBox6": "{{question}}",
+          "selectKind": "Num",
+          "selectNum2": "token",
+          "selectNum3": "question"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output4_1767513313804_111",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "rules",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "rules",
+          "selectBox5": "新增",
+          "selectBox6": "{{rules}}",
+          "selectKind": "Num",
+          "selectNum3": "rules"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output5_1767513314143_496",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "enddate",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "endDate",
+          "selectBox5": "新增",
+          "selectBox6": "{{enddate}}",
+          "selectKind": "Num",
+          "selectNum3": "endDate"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output6_1767513535593_533",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Translation",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "Translation",
+          "selectBox5": "新增",
+          "selectBox6": "{{Translation}}",
+          "selectKind": "Num",
+          "selectNum3": "Translation"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output7_1767513780437_805",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "Subject",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "Subject",
+          "selectBox5": "新增",
+          "selectBox6": "{{Subject}}",
+          "selectKind": "Num",
+          "selectNum3": "Subject"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output8_1767514288716_658",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsContest",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "llm_is_Matching",
+          "selectBox5": "新增",
+          "selectBox6": "{{IsContest}}",
+          "selectKind": "Num",
+          "selectNum3": "llm_is_Matching"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output9_1767514289067_429",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsSubjective",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "llm_is_Subject",
+          "selectBox5": "新增",
+          "selectBox6": "{{IsSubjective}}",
+          "selectKind": "Num",
+          "selectNum3": "llm_is_Subject"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output10_1767514289444_554",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "IsClear",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "llm_is_clearcut",
+          "selectBox5": "新增",
+          "selectBox6": "{{IsClear}}",
+          "selectKind": "Num",
+          "selectNum3": "llm_is_clearcut"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output11_1767514289842_762",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "KeyWords",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "KeyWords",
+          "selectBox5": "新增",
+          "selectBox6": "{{KeyWords}}",
+          "selectKind": "Num",
+          "selectNum3": "KeyWords"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output12_1767528188079_905",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "notoken",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "no_token",
+          "selectBox5": "新增",
+          "selectBox6": "{{notoken}}",
+          "selectKind": "Num",
+          "selectNum3": "no_token"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "DataBaseContentArray": [],
+          "DataBaseIsExactArray": [],
+          "DataBaseLogicKind": "And",
+          "DataBaseSubjectArray": [],
+          "Id": "Output13_1767929256040_610",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 0,
+          "Num": 0,
+          "name": "time",
+          "selectBox1": "polyMarket_Dictionary",
+          "selectBox4": "query_time_beijing",
+          "selectBox5": "新增",
+          "selectBox6": "{{time}}",
+          "selectKind": "Num",
+          "selectNum3": "query_time_beijing"
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "DataBase.py1767513146609",
+      "label": "DataBase.py4",
+      "name": "DataBase.py",
+      "x": 2767.436657671848,
+      "y": 171.1180173881596,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.010518728781494981,
+          0.17025804735301941
+        ],
+        [
+          0.010518728781494981,
+          0.23410481511040168
+        ],
+        [
+          0.010518728781494981,
+          0.29795158286778395
+        ],
+        [
+          0.010518728781494981,
+          0.36179835062516624
+        ],
+        [
+          0.010518728781494981,
+          0.42564511838254854
+        ],
+        [
+          0.010518728781494981,
+          0.4894918861399308
+        ],
+        [
+          0.010518728781494981,
+          0.5533386538973131
+        ],
+        [
+          0.010518728781494981,
+          0.6171854216546954
+        ],
+        [
+          0.010518728781494981,
+          0.6810321894120777
+        ],
+        [
+          0.010518728781494981,
+          0.7448789571694598
+        ],
+        [
+          0.010518728781494981,
+          0.8087257249268421
+        ],
+        [
+          0.010518728781494981,
+          0.8725724926842244
+        ],
+        [
+          0.010518728781494981,
+          0.9364192604416067
+        ],
+        [
+          0.9877281497549225,
+          0.17025804735301941
+        ],
+        [
+          0.9877281497549225,
+          0.23410481511040168
+        ],
+        [
+          0.9877281497549225,
+          0.29795158286778395
+        ],
+        [
+          0.9877281497549225,
+          0.36179835062516624
+        ],
+        [
+          0.9877281497549225,
+          0.42564511838254854
+        ],
+        [
+          0.9877281497549225,
+          0.4894918861399308
+        ],
+        [
+          0.9877281497549225,
+          0.5533386538973131
+        ],
+        [
+          0.9877281497549225,
+          0.6171854216546954
+        ],
+        [
+          0.9877281497549225,
+          0.6810321894120777
+        ],
+        [
+          0.9877281497549225,
+          0.7448789571694598
+        ],
+        [
+          0.9877281497549225,
+          0.8087257249268421
+        ],
+        [
+          0.9877281497549225,
+          0.8725724926842244
+        ],
+        [
+          0.9877281497549225,
+          0.9364192604416067
+        ],
+        [
+          0.01753121463582497,
+          0.026602819898909284
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 364,
+      "width": 570.4111328125,
+      "depth": 0,
+      "TriggerLink": 1,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": true,
+      "inputStatus": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        true,
+        true
+      ],
+      "RecursionBehavior": "Run"
+    },
+    {
+      "ExportPrompt": "这是问题：\nWill Club Brugge advance to the round of 16?\n这是规则：\nThis market will resolve to \"Yes\" if the listed team advances to the Round of 16 of the 2025–26 UEFA Champions League. Otherwise, this market will resolve to \"No\".\nIf at any point it becomes impossible for the listed club to advance to the Round of 16 (e.g. they are mathematically eliminated from finishing in the top 24 of the league phase), the associated market will resolve to \"No\".\nIf the 2025–26 UEFA Champions League league phase is canceled or not completed by December 31, 2026, this market will resolve to \"No\".\nThe primary resolution source will be official information from UEFA. A consensus of credible reporting may also be used.",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"解释IsContest,IsSubjective,IsClear判定的原因\" (you need output type:String)\n\"Output2\": \"是否为短期赛果事件（True为体育(NBANFC)/电竞短赛果，False为其他）\" (you need output type:String)\n\"Output3\": \"是否为个人主观不可验证事件（True为主观性强，False为可公共验证）\" (you need output type:String)\n\"Output4\": \"对象/口径/时间是否明确可验证（True为清晰明确，False为模糊）\" (you need output type:String)\n\"Output5_1766236913552_982\": \"主题分类（Sports|Politics|Economy|Finance|Crypto|Tech|Earnings|Geopolitics|Culture|World|Other）\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "Will Club Brugge advance to the round of 16?",
+          "Id": "Input1_1765287529313",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "question"
+        },
+        {
+          "Context": "This market will resolve to \"Yes\" if the listed team advances to the Round of 16 of the 2025–26 UEFA Champions League. Otherwise, this market will resolve to \"No\".\nIf at any point it becomes impossible for the listed club to advance to the Round of 16 (e.g. they are mathematically eliminated from finishing in the top 24 of the league phase), the associated market will resolve to \"No\".\nIf the 2025–26 UEFA Champions League league phase is canceled or not completed by December 31, 2026, this market will resolve to \"No\".\nThe primary resolution source will be official information from UEFA. A consensus of credible reporting may also be used.",
+          "Id": "Input2_1765287537588",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "rule"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "Json",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "解释IsContest,IsSubjective,IsClear判定的原因",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "Explain"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "是否为短期赛果事件（True为体育(NBANFC)/电竞短赛果，False为其他）",
+          "Id": "Output2",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsContest"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "是否为个人主观不可验证事件（True为主观性强，False为可公共验证）",
+          "Id": "Output3",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsSubjective"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "对象/口径/时间是否明确可验证（True为清晰明确，False为模糊）",
+          "Id": "Output4",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "IsClear"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "主题分类（Sports|Politics|Economy|Finance|Crypto|Tech|Earnings|Geopolitics|Culture|World|Other）",
+          "Id": "Output5_1766236913552_982",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Subject"
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "你是一名信息初筛员。\n输入：question, name。   \n输出：IsContest、IsSubjective、IsClear。 \n【IsContest】\n\nTrue 当且仅当事件是“短期赛果”：\n- 由一次或少数几场比赛/对局/淘汰赛直接产生结果；\n- 结果由官方记分板/赛事结果/裁判裁决/一次性决定；\n- 典型：单场球赛胜负、BO5 系列赛胜负、总决赛冠军、淘汰赛晋级,奥斯卡，格莱美等。 \n\n否则为 False，包括：\n- 依赖长期累积：年度票房/全年市场份额/全年积分榜/全年营收排名；\n- 政治经济商业：选举、立法/修法、利率/通胀、财报、并购、监管公告、高管变动等。\n\n若无法确定，偏向 IsContest=false。\n\n———————— \n【IsSubjective】\n\nTrue 当：\n- 结果主要是内心情感/心理状态/纯粹的个人行为，且无公开可验证记录；\n  例：是否仍然爱某人、是否原谅、是否后悔、未公开的辞职意向，是否发文（看账号）、是否怀孕（医疗/公开声明）、是否辞职/就任（公告/备案）；\n- 或 rule 的判定标准是纯主观评价（更幸福、更满意、更成功），且无量化标准。\n\nFalse 当：\n- 结果是否发生可客观验证：\n  例：由机构流程决定：选举计票、法院判决、监管/交易所公告、财报、官宣转会等。\n\n边界情况：若存在客观可检查结果，则优先 IsSubjective=false。\n\n————————\n【IsClear】\n\nTrue 当同时满足：\n- 对象明确：目标人/组织/作品/资产唯一、可辨认；\n- 时间明确：有清晰截止日期或时间区间，或在 rule 中明确；\n- 判定标准明确：结果条件可操作、可验证（达成协议/是否第 1 名/是否超过某数值等）。  \n  若使用模糊词（更好、更成功等），必须在 rule 中给出量化或明确解释。\n\n下列任一情况 → IsClear=false：\n- 对象不唯一或无法定位（含模糊“他/她/他们”等且无法消歧）；\n- 时间缺失或互相冲突，且 rule 未澄清；\n- 判定标准仅有主观形容词且无量化/规则；\n- rule 与 question/name 严重矛盾，导致无法确定要判定什么。\n【Subject】主题分类（新增）\n\n从下列枚举中选 一个且仅一个（不得输出多个）：\n\nSports：任何体育/电竞/赛事胜负、晋级、冠军、赛季排名（即使是长期赛季也仍归 Sports）\n\nPolitics：选举、政府/官员任命与罢免、立法/行政令、党派政治、总统/首相等政治事件\n\nEconomy：宏观经济指标与政策（CPI/PPI、GDP、失业率、降息加息本身、经济衰退与否）\n\nFinance：传统金融市场与公司资本市场事件（股价区间、市值排名、IPO、并购、债券/利率曲线、ETF 等）\n\nCrypto：加密资产价格/链上事件/项目空投/代币发行/交易所上币/协议升级\n\nTech：科技产品发布、AI/软件/硬件进展、互联网平台事件（不以财报为核心）\n\nEarnings：财报/业绩披露相关（营收、利润、EPS、指引、季度/年度财报发布结果）\n\nGeopolitics：国家间冲突、战争、制裁、外交危机、军事行动与国际安全\n\nCulture：娱乐、名人、影视音乐、社交媒体挑战/发文次数（若更像“文化事件”而非政治/金融）\n\nWorld：自然灾害、公共卫生、社会事件等无法归入以上但属于全球新闻事实\n\nOther：以上都不匹配或信息不足",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "node16",
+      "label": "初筛员",
+      "max_tokens": 8192,
+      "name": "Deepseek_ali.py",
+      "presence_penalty": 0,
+      "prompt": "这是问题：\n{{question}}\n这是规则：\n{{rule}}",
+      "temperature": 0.2,
+      "x": 2257.648917555808,
+      "y": 164.01007870856822,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": true,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.02677999346191566,
+          0.3526170798898072
+        ],
+        [
+          0.02677999346191566,
+          0.48484848484848486
+        ],
+        [
+          0.9687566742944317,
+          0.3526170798898072
+        ],
+        [
+          0.9687566742944317,
+          0.48484848484848486
+        ],
+        [
+          0.9687566742944317,
+          0.6170798898071626
+        ],
+        [
+          0.9687566742944317,
+          0.7493112947658402
+        ],
+        [
+          0.9687566742944317,
+          0.8815426997245179
+        ],
+        [
+          0.044633322436526096,
+          0.05509641873278237
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 140,
+      "width": 224.0478515625,
+      "depth": 0,
+      "TriggerLink": 1,
+      "IsLoadSuccess": true,
+      "IsStartNode": true,
+      "firstRun": true,
+      "inputStatus": [
+        true,
+        true
+      ],
+      "RecursionBehavior": "Run",
+      "ErrorContext": "节点运行失败: 无法获取组件 'Deepseek_ali' 的 API 密钥",
+      "messages": [
+        {
+          "role": "system",
+          "content": "你是一名信息初筛员。\n输入：question, name。   \n输出：IsContest、IsSubjective、IsClear。 \n【IsContest】\n\nTrue 当且仅当事件是“短期赛果”：\n- 由一次或少数几场比赛/对局/淘汰赛直接产生结果；\n- 结果由官方记分板/赛事结果/裁判裁决/一次性决定；\n- 典型：单场球赛胜负、BO5 系列赛胜负、总决赛冠军、淘汰赛晋级,奥斯卡，格莱美等。 \n\n否则为 False，包括：\n- 依赖长期累积：年度票房/全年市场份额/全年积分榜/全年营收排名；\n- 政治经济商业：选举、立法/修法、利率/通胀、财报、并购、监管公告、高管变动等。\n\n若无法确定，偏向 IsContest=false。\n\n———————— \n【IsSubjective】\n\nTrue 当：\n- 结果主要是内心情感/心理状态/纯粹的个人行为，且无公开可验证记录；\n  例：是否仍然爱某人、是否原谅、是否后悔、未公开的辞职意向，是否发文（看账号）、是否怀孕（医疗/公开声明）、是否辞职/就任（公告/备案）；\n- 或 rule 的判定标准是纯主观评价（更幸福、更满意、更成功），且无量化标准。\n\nFalse 当：\n- 结果是否发生可客观验证：\n  例：由机构流程决定：选举计票、法院判决、监管/交易所公告、财报、官宣转会等。\n\n边界情况：若存在客观可检查结果，则优先 IsSubjective=false。\n\n————————\n【IsClear】\n\nTrue 当同时满足：\n- 对象明确：目标人/组织/作品/资产唯一、可辨认；\n- 时间明确：有清晰截止日期或时间区间，或在 rule 中明确；\n- 判定标准明确：结果条件可操作、可验证（达成协议/是否第 1 名/是否超过某数值等）。  \n  若使用模糊词（更好、更成功等），必须在 rule 中给出量化或明确解释。\n\n下列任一情况 → IsClear=false：\n- 对象不唯一或无法定位（含模糊“他/她/他们”等且无法消歧）；\n- 时间缺失或互相冲突，且 rule 未澄清；\n- 判定标准仅有主观形容词且无量化/规则；\n- rule 与 question/name 严重矛盾，导致无法确定要判定什么。\n【Subject】主题分类（新增）\n\n从下列枚举中选 一个且仅一个（不得输出多个）：\n\nSports：任何体育/电竞/赛事胜负、晋级、冠军、赛季排名（即使是长期赛季也仍归 Sports）\n\nPolitics：选举、政府/官员任命与罢免、立法/行政令、党派政治、总统/首相等政治事件\n\nEconomy：宏观经济指标与政策（CPI/PPI、GDP、失业率、降息加息本身、经济衰退与否）\n\nFinance：传统金融市场与公司资本市场事件（股价区间、市值排名、IPO、并购、债券/利率曲线、ETF 等）\n\nCrypto：加密资产价格/链上事件/项目空投/代币发行/交易所上币/协议升级\n\nTech：科技产品发布、AI/软件/硬件进展、互联网平台事件（不以财报为核心）\n\nEarnings：财报/业绩披露相关（营收、利润、EPS、指引、季度/年度财报发布结果）\n\nGeopolitics：国家间冲突、战争、制裁、外交危机、军事行动与国际安全\n\nCulture：娱乐、名人、影视音乐、社交媒体挑战/发文次数（若更像“文化事件”而非政治/金融）\n\nWorld：自然灾害、公共卫生、社会事件等无法归入以上但属于全球新闻事实\n\nOther：以上都不匹配或信息不足\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"解释IsContest,IsSubjective,IsClear判定的原因\" (you need output type:String)\n\"Output2\": \"是否为短期赛果事件（True为体育(NBANFC)/电竞短赛果，False为其他）\" (you need output type:String)\n\"Output3\": \"是否为个人主观不可验证事件（True为主观性强，False为可公共验证）\" (you need output type:String)\n\"Output4\": \"对象/口径/时间是否明确可验证（True为清晰明确，False为模糊）\" (you need output type:String)\n\"Output5_1766236913552_982\": \"主题分类（Sports|Politics|Economy|Finance|Crypto|Tech|Earnings|Geopolitics|Culture|World|Other）\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": "这是问题：\nWill Club Brugge advance to the round of 16?\n这是规则：\nThis market will resolve to \"Yes\" if the listed team advances to the Round of 16 of the 2025–26 UEFA Champions League. Otherwise, this market will resolve to \"No\".\nIf at any point it becomes impossible for the listed club to advance to the Round of 16 (e.g. they are mathematically eliminated from finishing in the top 24 of the league phase), the associated market will resolve to \"No\".\nIf the 2025–26 UEFA Champions League league phase is canceled or not completed by December 31, 2026, this market will resolve to \"No\".\nThe primary resolution source will be official information from UEFA. A consensus of credible reporting may also be used."
+        },
+        {
+          "role": "system",
+          "content": "你是一名信息初筛员。\n输入：question, name。   \n输出：IsContest、IsSubjective、IsClear。 \n【IsContest】\n\nTrue 当且仅当事件是“短期赛果”：\n- 由一次或少数几场比赛/对局/淘汰赛直接产生结果；\n- 结果由官方记分板/赛事结果/裁判裁决/一次性决定；\n- 典型：单场球赛胜负、BO5 系列赛胜负、总决赛冠军、淘汰赛晋级,奥斯卡，格莱美等。 \n\n否则为 False，包括：\n- 依赖长期累积：年度票房/全年市场份额/全年积分榜/全年营收排名；\n- 政治经济商业：选举、立法/修法、利率/通胀、财报、并购、监管公告、高管变动等。\n\n若无法确定，偏向 IsContest=false。\n\n———————— \n【IsSubjective】\n\nTrue 当：\n- 结果主要是内心情感/心理状态/纯粹的个人行为，且无公开可验证记录；\n  例：是否仍然爱某人、是否原谅、是否后悔、未公开的辞职意向，是否发文（看账号）、是否怀孕（医疗/公开声明）、是否辞职/就任（公告/备案）；\n- 或 rule 的判定标准是纯主观评价（更幸福、更满意、更成功），且无量化标准。\n\nFalse 当：\n- 结果是否发生可客观验证：\n  例：由机构流程决定：选举计票、法院判决、监管/交易所公告、财报、官宣转会等。\n\n边界情况：若存在客观可检查结果，则优先 IsSubjective=false。\n\n————————\n【IsClear】\n\nTrue 当同时满足：\n- 对象明确：目标人/组织/作品/资产唯一、可辨认；\n- 时间明确：有清晰截止日期或时间区间，或在 rule 中明确；\n- 判定标准明确：结果条件可操作、可验证（达成协议/是否第 1 名/是否超过某数值等）。  \n  若使用模糊词（更好、更成功等），必须在 rule 中给出量化或明确解释。\n\n下列任一情况 → IsClear=false：\n- 对象不唯一或无法定位（含模糊“他/她/他们”等且无法消歧）；\n- 时间缺失或互相冲突，且 rule 未澄清；\n- 判定标准仅有主观形容词且无量化/规则；\n- rule 与 question/name 严重矛盾，导致无法确定要判定什么。\n【Subject】主题分类（新增）\n\n从下列枚举中选 一个且仅一个（不得输出多个）：\n\nSports：任何体育/电竞/赛事胜负、晋级、冠军、赛季排名（即使是长期赛季也仍归 Sports）\n\nPolitics：选举、政府/官员任命与罢免、立法/行政令、党派政治、总统/首相等政治事件\n\nEconomy：宏观经济指标与政策（CPI/PPI、GDP、失业率、降息加息本身、经济衰退与否）\n\nFinance：传统金融市场与公司资本市场事件（股价区间、市值排名、IPO、并购、债券/利率曲线、ETF 等）\n\nCrypto：加密资产价格/链上事件/项目空投/代币发行/交易所上币/协议升级\n\nTech：科技产品发布、AI/软件/硬件进展、互联网平台事件（不以财报为核心）\n\nEarnings：财报/业绩披露相关（营收、利润、EPS、指引、季度/年度财报发布结果）\n\nGeopolitics：国家间冲突、战争、制裁、外交危机、军事行动与国际安全\n\nCulture：娱乐、名人、影视音乐、社交媒体挑战/发文次数（若更像“文化事件”而非政治/金融）\n\nWorld：自然灾害、公共卫生、社会事件等无法归入以上但属于全球新闻事实\n\nOther：以上都不匹配或信息不足\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"解释IsContest,IsSubjective,IsClear判定的原因\" (you need output type:String)\n\"Output2\": \"是否为短期赛果事件（True为体育(NBANFC)/电竞短赛果，False为其他）\" (you need output type:String)\n\"Output3\": \"是否为个人主观不可验证事件（True为主观性强，False为可公共验证）\" (you need output type:String)\n\"Output4\": \"对象/口径/时间是否明确可验证（True为清晰明确，False为模糊）\" (you need output type:String)\n\"Output5_1766236913552_982\": \"主题分类（Sports|Politics|Economy|Finance|Crypto|Tech|Earnings|Geopolitics|Culture|World|Other）\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": "这是问题：\nWill Club Brugge advance to the round of 16?\n这是规则：\nThis market will resolve to \"Yes\" if the listed team advances to the Round of 16 of the 2025–26 UEFA Champions League. Otherwise, this market will resolve to \"No\".\nIf at any point it becomes impossible for the listed club to advance to the Round of 16 (e.g. they are mathematically eliminated from finishing in the top 24 of the league phase), the associated market will resolve to \"No\".\nIf the 2025–26 UEFA Champions League league phase is canceled or not completed by December 31, 2026, this market will resolve to \"No\".\nThe primary resolution source will be official information from UEFA. A consensus of credible reporting may also be used."
+        }
+      ]
+    },
+    {
+      "ExportPrompt": "Will Club Brugge advance to the round of 16?",
+      "ExprotAfterPrompt": "Please ensure the output is in JSON format\n{\n\"Output1\": \"（直接输出翻译文本）\" (you need output type:String)\n\"Output2_1766241275401_437\": \"（关键词）\" (you need output type:String)\n}\n",
+      "Inputs": [
+        {
+          "Context": "Will Club Brugge advance to the round of 16?",
+          "Id": "Input1_1766237589781",
+          "IsLabel": false,
+          "Isnecessary": false,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "Input1"
+        }
+      ],
+      "NodeKind": "LLm",
+      "OriginalTextArray": [
+        {
+          "Boolean": false,
+          "Context": null,
+          "Description": "answer",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OriginalText"
+        }
+      ],
+      "OriginalTextSelector": "Json",
+      "Outputs": [
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "（直接输出翻译文本）",
+          "Id": "Output1",
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "文本"
+        },
+        {
+          "Boolean": false,
+          "Context": "",
+          "Description": "（关键词）",
+          "Id": "Output2_1766241275401_437",
+          "IsLabel": false,
+          "Isnecessary": true,
+          "Kind": "String",
+          "Link": 1,
+          "Num": null,
+          "name": "关键词"
+        }
+      ],
+      "ReTryNum": 0,
+      "SystemPrompt": "你是一名翻译，帮我翻译成中文，不要输出其他的无关内容",
+      "Top_p": 0.9,
+      "frequency_penalty": 0,
+      "id": "node18",
+      "label": "翻译",
+      "max_tokens": 4096,
+      "name": "QwQ7B.py",
+      "presence_penalty": 0,
+      "prompt": "{{Input1}}",
+      "temperature": 0.7,
+      "x": 2259.454597155788,
+      "y": 354.1506340590847,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": true,
+      "isFinish": false,
+      "anchorPoints": [
+        [
+          0.03,
+          0.5893186003683242
+        ],
+        [
+          0.965,
+          0.5893186003683242
+        ],
+        [
+          0.965,
+          0.8103130755064457
+        ],
+        [
+          0.05,
+          0.09208103130755065
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 56,
+      "width": 200,
+      "depth": 0,
+      "TriggerLink": 1,
+      "IsLoadSuccess": true,
+      "IsStartNode": true,
+      "firstRun": true,
+      "inputStatus": [
+        true
+      ],
+      "RecursionBehavior": "Run",
+      "ErrorContext": "节点运行失败: 无法获取组件 'QwQ7B' 的 API 密钥",
+      "messages": [
+        {
+          "role": "system",
+          "content": "你是一名翻译，帮我翻译成中文，不要输出其他的无关内容\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"（直接输出翻译文本）\" (you need output type:String)\n\"Output2_1766241275401_437\": \"（关键词）\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": "Will Club Brugge advance to the round of 16?"
+        },
+        {
+          "role": "system",
+          "content": "你是一名翻译，帮我翻译成中文，不要输出其他的无关内容\nPlease ensure the output is in JSON format\n{\n\"Output1\": \"（直接输出翻译文本）\" (you need output type:String)\n\"Output2_1766241275401_437\": \"（关键词）\" (you need output type:String)\n}\n"
+        },
+        {
+          "role": "user",
+          "content": "Will Club Brugge advance to the round of 16?"
+        }
+      ]
+    },
+    {
+      "Inputs": [],
+      "NodeKind": "Normal",
+      "Outputs": [
+        {
+          "Context": "2026-01-13T16:42:49Z",
+          "Id": "Output11",
+          "Kind": "String",
+          "Link": 0,
+          "Num": null,
+          "name": "OutPut1",
+          "Boolean": false
+        }
+      ],
+      "ReTryNum": 0,
+      "id": "QueryTime.py_1767929217905",
+      "label": "QueryTime7",
+      "name": "QueryTime.py",
+      "prompt": "",
+      "x": 1399.588906004653,
+      "y": 283.7054440039618,
+      "IsBlock": true,
+      "IsRunning": false,
+      "IsError": false,
+      "isFinish": true,
+      "anchorPoints": [
+        [
+          0.965,
+          0.7591933570581257
+        ],
+        [
+          0.05,
+          0.11862396204033215
+        ]
+      ],
+      "type": "fileNode",
+      "style": {
+        "hover": {
+          "fill": "lightgreen"
+        },
+        "active": {
+          "stroke": "#ff0000",
+          "lineWidth": 100
+        }
+      },
+      "draggable": false,
+      "height": 28,
+      "width": 200,
+      "depth": 0,
+      "TriggerLink": 0,
+      "IsLoadSuccess": true,
+      "IsHovor": false,
+      "IsStartNode": false,
+      "firstRun": false,
+      "inputStatus": [],
+      "RecursionBehavior": "STOP",
+      "ErrorContext": "",
+      "ExportPrompt": "",
+      "messages": [
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        },
+        {
+          "role": "system",
+          "content": "\n"
+        },
+        {
+          "role": "user",
+          "content": ""
+        }
+      ],
+      "debug": ""
+    }
+  ]
+}
