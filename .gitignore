@@ -12,6 +12,10 @@ build/
 TempFiles/
 WorkFlow/
 WorkTeam/
+History/
+
+# Temp scripts
+check_record.py
 
 # Environment
 .env
