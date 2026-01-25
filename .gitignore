@@ -14,13 +14,6 @@ WorkFlow/
 WorkTeam/
 History/
 
-# Temp scripts
-check_record.py
-
-# Auto-generated node index
-Nodes/jsonlist.json
-Nodes/jsonlist.jsonl
-
 # Environment
 .env
 .venv/
