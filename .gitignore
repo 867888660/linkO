@@ -14,6 +14,10 @@ WorkFlow/
 WorkTeam/
 History/
 
+# Auto-generated files
+Nodes/jsonlist.json
+Nodes/jsonlist.jsonl
+
 # Environment
 .env
 .venv/
