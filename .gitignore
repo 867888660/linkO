@@ -18,6 +18,9 @@ History/
 Nodes/jsonlist.json
 Nodes/jsonlist.jsonl
 
+# Test scripts
+test_crypto_flow.py
+
 # Environment
 .env
 .venv/
