@@ -1,6 +1,6 @@
 from flask import Flask, jsonify, render_template,request
 import pandas as pd
-from contextlib import redirect_stdout
+from contextlib import redirect_stdout, contextmanager
 import io
 import os
 import asyncio
@@ -26,9 +26,186 @@ import time
 from pathlib import Path
 from threading import Lock
 import uuid
+import threading
 from datetime import datetime
 
 from typing import Any, Dict, List, Optional
+
+# =========================
+# App Print Switch (ALL HERE)
+# =========================
+# 说明：只影响本文件(app.py)内的 print(...) 调用；不会全局篡改 builtins.print。
+# 如需开启，改为 True。
+APP_ENABLE_PRINT = False
+try:
+    import builtins as _builtins
+    _APP_ORIG_PRINT = _builtins.print
+except Exception:
+    _APP_ORIG_PRINT = None
+
+def print(*args, **kwargs):  # noqa: A001  (shadow built-in intentionally)
+    if APP_ENABLE_PRINT and _APP_ORIG_PRINT is not None:
+        _APP_ORIG_PRINT(*args, **kwargs)
+
+# =========================
+# Thread-local StdIO Router
+# =========================
+# 说明：APP_ENABLE_PRINT 只影响 app.py 自己的 print。
+# 节点脚本/第三方库大量使用 sys.stdout/sys.stderr 或 logging 输出，
+# 且 Flask/WorkflowEngine 可能多线程并发执行节点。
+# 这里安装线程本地 stdout/stderr 路由器：每个请求线程可选择“静音/捕获/放行”。
+
+CAPTURE_NODE_STDIO_WHEN_SILENCED = True  # 静音时是否捕获节点脚本 stdout/stderr 到 debug
+MAX_CAPTURED_STDIO_CHARS = 4000         # 只保留末尾 N 字符，避免 debug 爆炸
+
+
+def _is_thread_stdio_router(obj) -> bool:
+    return bool(getattr(obj, "__thread_stdio_router__", False))
+
+
+class _ThreadLocalStdIO(io.TextIOBase):
+    __thread_stdio_router__ = True
+
+    def __init__(self, target, default_console_enabled: bool = True):
+        super().__init__()
+        self._target = target
+        self._default_console_enabled = bool(default_console_enabled)
+        self._local = threading.local()
+        self._write_lock = Lock()
+
+    def writable(self):
+        return True
+
+    @property
+    def encoding(self):
+        return getattr(self._target, "encoding", "utf-8")
+
+    def isatty(self):
+        try:
+            return bool(getattr(self._target, "isatty", lambda: False)())
+        except Exception:
+            return False
+
+    def _get_console_enabled(self) -> bool:
+        if hasattr(self._local, "console_enabled"):
+            try:
+                return bool(self._local.console_enabled)
+            except Exception:
+                return self._default_console_enabled
+        return self._default_console_enabled
+
+    def _get_buffer(self):
+        return getattr(self._local, "buffer", None)
+
+    def _set_state(self, console_enabled: bool, buffer):
+        self._local.console_enabled = bool(console_enabled)
+        self._local.buffer = buffer
+
+    def write(self, s):
+        try:
+            buf = self._get_buffer()
+            if buf is not None:
+                try:
+                    buf.write(s)
+                except Exception:
+                    pass
+
+            if self._get_console_enabled():
+                try:
+                    with self._write_lock:
+                        self._target.write(s)
+                except Exception:
+                    pass
+            return len(s)
+        except Exception:
+            return len(s)
+
+    def flush(self):
+        try:
+            buf = self._get_buffer()
+            if buf is not None:
+                try:
+                    buf.flush()
+                except Exception:
+                    pass
+            with self._write_lock:
+                try:
+                    self._target.flush()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
+def _install_thread_stdio_router():
+    try:
+        if not _is_thread_stdio_router(sys.stdout):
+            sys.stdout = _ThreadLocalStdIO(sys.stdout, default_console_enabled=bool(APP_ENABLE_PRINT))
+    except Exception:
+        pass
+    try:
+        if not _is_thread_stdio_router(sys.stderr):
+            sys.stderr = _ThreadLocalStdIO(sys.stderr, default_console_enabled=bool(APP_ENABLE_PRINT))
+    except Exception:
+        pass
+
+
+@contextmanager
+def _thread_stdio_scope(console_enabled: bool = True, capture: bool = False):
+    _install_thread_stdio_router()
+    buf = io.StringIO() if capture else None
+    out_router = sys.stdout if _is_thread_stdio_router(sys.stdout) else None
+    err_router = sys.stderr if _is_thread_stdio_router(sys.stderr) else None
+    prev = None
+    try:
+        prev = (
+            (getattr(out_router, "_get_console_enabled", lambda: True)(),
+             getattr(out_router, "_get_buffer", lambda: None)()) if out_router else (True, None),
+            (getattr(err_router, "_get_console_enabled", lambda: True)(),
+             getattr(err_router, "_get_buffer", lambda: None)()) if err_router else (True, None),
+        )
+        if out_router:
+            out_router._set_state(console_enabled=console_enabled, buffer=buf)
+        if err_router:
+            err_router._set_state(console_enabled=console_enabled, buffer=buf)
+        yield buf
+    finally:
+        try:
+            if prev and out_router:
+                out_router._set_state(console_enabled=prev[0][0], buffer=prev[0][1])
+            if prev and err_router:
+                err_router._set_state(console_enabled=prev[1][0], buffer=prev[1][1])
+        except Exception:
+            pass
+
+
+def _merge_debug_with_stdio(debug_text: str, stdio_text: str) -> str:
+    try:
+        dt = debug_text or ""
+        st = (stdio_text or "").strip()
+        if not st:
+            return dt
+        if MAX_CAPTURED_STDIO_CHARS and len(st) > MAX_CAPTURED_STDIO_CHARS:
+            st = st[-MAX_CAPTURED_STDIO_CHARS:]
+        block = f"[STDIO]\n{st}"
+        return f"{dt}\n\n{block}".strip() if dt else block
+    except Exception:
+        return debug_text or ""
+
+
+# 进程启动即安装：后续每个请求线程按需静音/捕获
+_install_thread_stdio_router()
+
+# 可选：压低 Werkzeug/Flask 默认日志输出（不属于 print，但会刷控制台）
+try:
+    logging.getLogger("werkzeug").setLevel(logging.ERROR)
+except Exception:
+    pass
+try:
+    # requests/urllib3 的 DEBUG 日志（不是 print）也会刷控制台
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+except Exception:
+    pass
 
 # 占位符 {{InputN}} 插值工具（支持 Num/String/Boolean）
 import re
@@ -105,7 +282,8 @@ def hash_file(filepath):
     return sha256_hash.hexdigest()
 def extract_node_kind(file_path):
     """从文件中提取NodeKind值"""
-    node_kind_pattern = re.compile(r"NodeKind\s*=\s*'([^']+)'")
+    # 兼容单引号/双引号：NodeKind = 'xxx' 或 NodeKind = "xxx"
+    node_kind_pattern = re.compile(r"NodeKind\s*=\s*['\"]([^'\"]+)['\"]")
     try:
         with open(file_path, 'r', encoding='utf-8') as file:  # 指定使用utf-8编码读取
             contents = file.read()
@@ -1217,19 +1395,23 @@ def run_node_single():
             if not langgraph_agent_path.is_file():
                 return jsonify({"error": f"Langgraph/agent.py not found at {langgraph_agent_path}"}), 404
 
-            with lock:
-                spec   = importlib.util.spec_from_file_location("langgraph_agent", langgraph_agent_path)
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[spec.name] = module
-                spec.loader.exec_module(module)
+            capture = (not bool(APP_ENABLE_PRINT)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+            with _thread_stdio_scope(console_enabled=bool(APP_ENABLE_PRINT), capture=capture) as _buf:
+                with lock:
+                    spec   = importlib.util.spec_from_file_location("langgraph_agent", langgraph_agent_path)
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = module
+                    spec.loader.exec_module(module)
 
-            # 打印传入脚本的 node["messages"]
-            try:
-                print('[DBG:CALL:LangGraph] node.messages =', json.dumps(node.get('messages', []), ensure_ascii=False))
-            except Exception as _e_msg1:
-                print('[DBG:CALL:LangGraph] print error:', _e_msg1)
-            result = module.run_node(node)
-            output, debug_text = normalize_result(result)
+                # 打印传入脚本的 node["messages"]
+                try:
+                    print('[DBG:CALL:LangGraph] node.messages =', json.dumps(node.get('messages', []), ensure_ascii=False))
+                except Exception as _e_msg1:
+                    print('[DBG:CALL:LangGraph] print error:', _e_msg1)
+                result = module.run_node(node)
+                output, debug_text = normalize_result(result)
+            if _buf is not None:
+                debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
             return jsonify({
                 "output":       output,
@@ -1249,19 +1431,23 @@ def run_node_single():
         return jsonify({"error": f"Script {node_name} not found"}), 404
 
     try:
-        with lock:
-            spec   = importlib.util.spec_from_file_location(script_path.stem, script_path)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+        capture = (not bool(APP_ENABLE_PRINT)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+        with _thread_stdio_scope(console_enabled=bool(APP_ENABLE_PRINT), capture=capture) as _buf:
+            with lock:
+                spec   = importlib.util.spec_from_file_location(script_path.stem, script_path)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = module
+                spec.loader.exec_module(module)
 
-        # 打印传入脚本的 node["messages"]
-        try:
-            print('[DBG:CALL:Script] node.messages =', json.dumps(node.get('messages', []), ensure_ascii=False))
-        except Exception as _e_msg2:
-            print('[DBG:CALL:Script] print error:', _e_msg2)
-        result = module.run_node(node)
-        output, debug_text = normalize_result(result)
+            # 打印传入脚本的 node["messages"]
+            try:
+                print('[DBG:CALL:Script] node.messages =', json.dumps(node.get('messages', []), ensure_ascii=False))
+            except Exception as _e_msg2:
+                print('[DBG:CALL:Script] print error:', _e_msg2)
+            result = module.run_node(node)
+            output, debug_text = normalize_result(result)
+        if _buf is not None:
+            debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
         return jsonify({
             "output":       output,
@@ -1382,14 +1568,18 @@ def run_node_route():
             if not langgraph_agent_path.is_file():
                 return jsonify({"error": f"Langgraph/agent.py not found at {langgraph_agent_path}"}), 404
 
-            with lock:
-                spec   = importlib.util.spec_from_file_location("langgraph_agent", langgraph_agent_path)
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[spec.name] = module
-                spec.loader.exec_module(module)
+            capture = (not bool(APP_ENABLE_PRINT)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+            with _thread_stdio_scope(console_enabled=bool(APP_ENABLE_PRINT), capture=capture) as _buf:
+                with lock:
+                    spec   = importlib.util.spec_from_file_location("langgraph_agent", langgraph_agent_path)
+                    module = importlib.util.module_from_spec(spec)
+                    sys.modules[spec.name] = module
+                    spec.loader.exec_module(module)
 
-            result = module.run_node(node)
-            output, debug_text = workflow._normalize_result(result)
+                result = module.run_node(node)
+                output, debug_text = workflow._normalize_result(result)
+            if _buf is not None:
+                debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
             return jsonify({
                 "output":       output,
@@ -1407,14 +1597,18 @@ def run_node_route():
         return jsonify({"error": f"Script {node_name} not found"}), 404
 
     try:
-        with lock:
-            spec   = importlib.util.spec_from_file_location(script_path.stem, script_path)
-            module = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+        capture = (not bool(APP_ENABLE_PRINT)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+        with _thread_stdio_scope(console_enabled=bool(APP_ENABLE_PRINT), capture=capture) as _buf:
+            with lock:
+                spec   = importlib.util.spec_from_file_location(script_path.stem, script_path)
+                module = importlib.util.module_from_spec(spec)
+                sys.modules[spec.name] = module
+                spec.loader.exec_module(module)
 
-        result = module.run_node(node)
-        output, debug_text = workflow._normalize_result(result)
+            result = module.run_node(node)
+            output, debug_text = workflow._normalize_result(result)
+        if _buf is not None:
+            debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
         return jsonify({
             "output":       output,
@@ -1558,31 +1752,87 @@ def read_data():
             # 处理 SQLite 数据库
             try:
                 import sqlite3
-                conn = sqlite3.connect(file_path, timeout=5.0)
+                # 优先用只读方式打开，避免对数据库做任何写入/模式切换（有些库是只读/被占用/或不希望创建 -wal/-shm）
+                conn = None
+                try:
+                    p = Path(file_path).resolve()
+                    db_uri = f"file:{p.as_posix()}?mode=ro"
+                    conn = sqlite3.connect(db_uri, uri=True, timeout=5.0)
+                except Exception:
+                    # 回退：普通打开（尽量兼容老 sqlite / 特殊路径）
+                    conn = sqlite3.connect(file_path, timeout=5.0)
+
                 cur = conn.cursor()
-                cur.execute("PRAGMA journal_mode=WAL;")
-                cur.execute("PRAGMA synchronous=NORMAL;")
+                cur.execute("PRAGMA query_only=ON;")
                 cur.execute("PRAGMA busy_timeout=5000;")
 
+                # 快速一致性检查（如果数据库损坏/被截断，能给出更明确的提示）
+                try:
+                    check_row = cur.execute("PRAGMA quick_check;").fetchone()
+                    check_res = check_row[0] if check_row else None
+                    if check_res and str(check_res).lower() != "ok":
+                        hint = (
+                            "SQLite quick_check 未通过，说明该 .db 文件内部结构不一致/疑似损坏。"
+                            "常见原因：复制/下载未完成、写入过程中程序异常退出/断电、磁盘/网盘问题，"
+                            "或有其它进程正在写这个库导致你读到不一致快照。"
+                            "建议：先关闭所有可能占用该库的程序；确认 .db 是完整文件（必要时重新复制/重新下载）；"
+                            "用 sqlite3 执行 `PRAGMA integrity_check;` 进一步验证；"
+                            "若需救数据可尝试 sqlite3 的 `.recover` 生成新库（或导出/重建）。"
+                        )
+                        return jsonify({
+                            'status': 'fail',
+                            'message': f'SQLite integrity check failed: {check_res}',
+                            'resolved_path': file_path,
+                            'hint': hint,
+                        })
+                except Exception:
+                    # quick_check 在严重损坏时也可能抛异常，交给后续统一异常处理
+                    pass
+
                 # 获取所有表名
-                table_names = pd.read_sql_query("SELECT name FROM sqlite_master WHERE type='table'", conn)['name'].tolist()
+                table_names = pd.read_sql_query(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+                    conn
+                )['name'].tolist()
 
                 for table_name in table_names:
                     # 读取整表（与 Excel 行为一致），可按需改为 LIMIT 预览
                     q = f'SELECT * FROM "{table_name}"'
-                    df = pd.read_sql_query(q, conn)
-                    df = df.fillna("Empty")
+                    try:
+                        df = pd.read_sql_query(q, conn)
+                        df = df.fillna("Empty")
 
-                    response_data[table_name] = df.to_dict(orient='records')
-                    columns_data[table_name] = df.columns.tolist()
+                        response_data[table_name] = df.to_dict(orient='records')
+                        columns_data[table_name] = df.columns.tolist()
+                    except Exception as table_e:
+                        # 单表坏了也别拖垮整个库；给前端返回可见提示
+                        response_data[table_name] = []
+                        columns_data[table_name] = []
+                        logging.warning(f"SQLite table read failed: {table_name}: {table_e}")
 
                 conn.close()
             except Exception as e:
                 try:
-                    conn.close()
+                    if conn is not None:
+                        conn.close()
                 except Exception:
                     pass
-                return jsonify({'status': 'fail', 'message': f'Error processing SQLite file: {str(e)}'})
+                msg = str(e)
+                hint = None
+                if "database disk image is malformed" in msg.lower():
+                    hint = (
+                        "SQLite reports the file is corrupted or incomplete. "
+                        "Common causes: interrupted copy/download, power loss during write, "
+                        "or selecting a different physical file than expected. "
+                        "Try validating with `PRAGMA integrity_check;` in sqlite3, "
+                        "or re-copy/regenerate the .db."
+                    )
+                return jsonify({
+                    'status': 'fail',
+                    'message': f'Error processing SQLite file: {msg}',
+                    'resolved_path': file_path,
+                    'hint': hint,
+                })
 
         else:
             return jsonify({'status': 'fail', 'message': 'Invalid file type. Only .xlsx, .json, .jsonl, .db and .sqlite are allowed.'})
@@ -1708,94 +1958,27 @@ def get_project_files():
 @app.route('/browse', methods=['POST'])
 def browse_directory():
     dir_path = request.json.get('path', '.')  # 获取请求中的路径，如果没有提供则默认为当前目录
+    original_path = request.json.get('path', '.')
 
-    # 检查路径是否包含'@TempFiles'
-    if '@TempFiles' in dir_path:
-        # 这里假设根目录下和当前目录下都有一个TempFiles文件夹
-        # 你可以根据实际情况调整这些路径
-        root_temp_path = os.path.join(os.path.abspath(os.sep), 'TempFiles')
-        current_temp_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'TempFiles')
-        
-        # 选择一个实际存在的路径
-        if os.path.exists(root_temp_path):
-            actual_path = root_temp_path
-        elif os.path.exists(current_temp_path):
-            actual_path = current_temp_path
-        else:
-            error_message = f"'TempFiles' directory not found in expected locations."
-            logging.error(error_message)
-            return jsonify({'error': error_message}), 404
-        
-        # 替换'@TempFiles'为实际路径
-        dir_path = dir_path.replace('@TempFiles', actual_path)
-    if '@NoteBook' in dir_path:
-        # 这里假设根目录下和当前目录下都有一个TempFiles文件夹
-        # 你可以根据实际情况调整这些路径
-        root_temp_path = os.path.join(os.path.abspath(os.sep), 'NoteBook')
-        current_temp_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'NoteBook')
+    # 将 @TempFiles/@NoteBook/@Memory/@Nodes/@WorkFlow 映射到项目内固定目录
+    # 注意：这里必须与 `_resolve_tempfiles()` 使用同一套目录，否则“浏览到的文件”和“后端实际读取的文件”可能不是同一个。
+    placeholder_map = {
+        '@TempFiles': str(TEMP_DIR),
+        '@NoteBook':  str(NOTEBOOK_DIR),
+        '@Memory':    str(MEMORY_DIR),
+        '@Nodes':     str(NODES_DIR),
+        '@WorkFlow':  str(WORKFLOW_DIR),
+    }
+    used_marker = None
+    used_actual_path = None
+    for marker, actual_path in placeholder_map.items():
+        if marker in dir_path:
+            used_marker = marker
+            used_actual_path = actual_path
+            dir_path = dir_path.replace(marker, actual_path)
+            break
 
-        # 选择一个实际存在的路径
-        if os.path.exists(root_temp_path):
-            actual_path = root_temp_path
-        elif os.path.exists(current_temp_path):
-            actual_path = current_temp_path
-        else:
-            error_message = f"'NoteBook' directory not found in expected locations."
-            logging.error(error_message)
-            return jsonify({'error': error_message}), 404
-        # 替换'@TempFiles'为实际路径
-        dir_path = dir_path.replace('@NoteBook', actual_path)
-    if '@Memory' in dir_path:
-        # 这里假设根目录下和当前目录下都有一个TempFiles文件夹
-        # 你可以根据实际情况调整这些路径
-        root_temp_path = os.path.join(os.path.abspath(os.sep), 'Memory')
-        current_temp_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'Memory')
-
-        # 选择一个实际存在的路径
-        if os.path.exists(root_temp_path):
-            actual_path = root_temp_path
-        elif os.path.exists(current_temp_path):
-            actual_path = current_temp_path
-        else:
-            error_message = f"'Memory' directory not found in expected locations."
-            logging.error(error_message)
-            return jsonify({'error': error_message}), 404
-        # 替换'@TempFiles'为实际路径
-        dir_path = dir_path.replace('@Memory', actual_path)
-    if '@Nodes' in dir_path:
-        # 这里假设根目录下和当前目录下都有一个Nodes文件夹
-        root_temp_path = os.path.join(os.path.abspath(os.sep), 'Nodes')
-        current_temp_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'Nodes')
-
-        # 选择一个实际存在的路径
-        if os.path.exists(root_temp_path):
-            actual_path = root_temp_path
-        elif os.path.exists(current_temp_path):
-            actual_path = current_temp_path
-        else:
-            error_message = f"'Nodes' directory not found in expected locations."
-            logging.error(error_message)
-            return jsonify({'error': error_message}), 404
-        # 替换'@Nodes'为实际路径
-        dir_path = dir_path.replace('@Nodes', actual_path)
-    if '@WorkFlow' in dir_path:
-        # 这里假设根目录下和当前目录下都有一个WorkFlow文件夹
-        root_temp_path = os.path.join(os.path.abspath(os.sep), 'WorkFlow')
-        current_temp_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'WorkFlow')
-
-        # 选择一个实际存在的路径
-        if os.path.exists(root_temp_path):
-            actual_path = root_temp_path
-        elif os.path.exists(current_temp_path):
-            actual_path = current_temp_path
-        else:
-            error_message = f"'WorkFlow' directory not found in expected locations."
-            logging.error(error_message)
-            return jsonify({'error': error_message}), 404
-        # 替换'@WorkFlow'为实际路径
-        dir_path = dir_path.replace('@WorkFlow', actual_path)
-        
-    else:
+    if used_marker is None:
         # 检查路径是否包含文件后缀
         if os.path.splitext(dir_path)[1]:  # 如果路径包含文件后缀
             dir_path = os.path.dirname(dir_path)  # 退回到文件所在的文件夹
@@ -1809,18 +1992,10 @@ def browse_directory():
         for item in os.listdir(dir_path):  # 遍历目录中的所有项目
             item_path = os.path.join(dir_path, item)
             # 这里保持返回的路径显示为'@TempFiles'、'@WorkFlow'、'@Nodes'、'@Memory'、'@NoteBook'，如果原始路径中包含这些特殊前缀
-            original_path = request.json.get('path', '.')
             display_path = item_path
-            if '@TempFiles' in original_path:
-                display_path = item_path.replace(actual_path, '@TempFiles')
-            elif '@WorkFlow' in original_path:
-                display_path = item_path.replace(actual_path, '@WorkFlow')
-            elif '@Nodes' in original_path:
-                display_path = item_path.replace(actual_path, '@Nodes')
-            elif '@Memory' in original_path:
-                display_path = item_path.replace(actual_path, '@Memory')
-            elif '@NoteBook' in original_path:
-                display_path = item_path.replace(actual_path, '@NoteBook')
+            # 若本次是从占位符目录浏览，则把真实路径根替换回占位符，方便前端继续拼接导航
+            if used_marker is not None and used_actual_path is not None and used_marker in original_path:
+                display_path = item_path.replace(used_actual_path, used_marker)
             items.append({
                 'name': item,
                 'is_dir': os.path.isdir(item_path),  # 判断是否是文件夹
@@ -1877,12 +2052,15 @@ def get_workflow_files():
     return jsonify(workflow_files)
 
 
-def safe_write_json(file_path, data, max_retries=3):
+def safe_write_json(file_path, data, max_retries=3, compact: bool = True):
     for attempt in range(max_retries):
         try:
             # 在 Windows 上使用 'w' 模式会自动获取独占写入权限
             with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, ensure_ascii=False, indent=2)
+                if compact:
+                    json.dump(data, f, ensure_ascii=False, separators=(',', ':'))
+                else:
+                    json.dump(data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
             print(f"❌ Write attempt {attempt + 1} failed: {e}")
@@ -1891,10 +2069,50 @@ def safe_write_json(file_path, data, max_retries=3):
             continue
     return False
 
+# 历史记录限额（防止文件无限增大）
+HISTORY_MAX_SESSIONS_PER_FILE = 30          # 每个历史文件最多保留多少个“会话/轮次”
+HISTORY_MAX_ITEMS_PER_SESSION = 500        # 每个会话最多保留多少条记录（超出会裁剪保留最新）
+HISTORY_MAX_STRING_CHARS = 20000           # 单字段字符串最大长度（超出会截断，防止 prompt/debug 爆炸）
+
+def _parse_bool_param(v, default: bool = True) -> bool:
+    """把查询参数/字符串解析成 bool。"""
+    if v is None:
+        return default
+    try:
+        s = str(v).strip().lower()
+    except Exception:
+        return default
+    if s in ("0", "false", "no", "off", "disable", "disabled"):
+        return False
+    if s in ("1", "true", "yes", "on", "enable", "enabled"):
+        return True
+    return default
+
+def _truncate_history_strings(obj, max_chars: int = HISTORY_MAX_STRING_CHARS, _depth: int = 0):
+    """递归截断历史 payload 内过长的字符串，避免单条记录就把文件撑爆。"""
+    if _depth > 6:
+        return obj
+    try:
+        if isinstance(obj, str):
+            if max_chars and len(obj) > max_chars:
+                return obj[:max_chars] + f"\n...[truncated {len(obj) - max_chars} chars]"
+            return obj
+        if isinstance(obj, list):
+            return [_truncate_history_strings(x, max_chars=max_chars, _depth=_depth + 1) for x in obj]
+        if isinstance(obj, dict):
+            return {k: _truncate_history_strings(v, max_chars=max_chars, _depth=_depth + 1) for k, v in obj.items()}
+    except Exception:
+        return obj
+    return obj
+
 @app.route('/addHistory', methods=['POST'])
 def add_history():
     data = request.json
     project_name = request.args.get('ProjectName')
+
+    # 是否记录历史（前端设置为“否”时，直接跳过写入）
+    if not _parse_bool_param(request.args.get('RecordHistory'), default=True):
+        return jsonify({'message': 'History recording disabled'}), 200
     
     # 验证项目名称是否存在
     if not project_name:
@@ -1907,6 +2125,8 @@ def add_history():
     # 验证收到的数据是否为字典（JSON对象）
     if not isinstance(data, dict):
         return jsonify({'error': 'Invalid data format. Expected a JSON object.'}), 400
+    # 防止 prompt/debug 超大：先做字符串截断再落盘
+    data = _truncate_history_strings(data)
 
     # 按日期切分，避免单文件过大导致读取卡顿
     today_label = datetime.now().strftime('%Y%m%d')
@@ -1951,6 +2171,18 @@ def add_history():
             json_data = []
 
         # 将数据添加到现有的最后一个数组中
+        # “Start” 语义：新开一轮会话（否则一天内会堆进同一个数组导致无限变大）
+        is_start = False
+        try:
+            if isinstance(data, dict) and ("NodeKind" not in data):
+                name_s = str(data.get("name", "")).strip().lower()
+                msg_s = str(data.get("message", "")).strip().lower()
+                if name_s in ("new started", "start", "new conversation started") or msg_s.startswith("new conversation"):
+                    is_start = True
+        except Exception:
+            is_start = False
+        if is_start:
+            json_data.append([])
         if not json_data or not isinstance(json_data[-1], list):
             print("📝 Appending new sublist to json_data.")
             json_data.append([])
@@ -1958,8 +2190,20 @@ def add_history():
         print(f"➕ Adding data to json_data[-1]: {data}")
         json_data[-1].append(data)
 
+        # 强制裁剪：限制会话条数 & 单会话条数，防止历史文件无限增大
+        try:
+            if isinstance(json_data[-1], list) and len(json_data[-1]) > HISTORY_MAX_ITEMS_PER_SESSION:
+                json_data[-1] = json_data[-1][-HISTORY_MAX_ITEMS_PER_SESSION:]
+        except Exception:
+            pass
+        try:
+            if isinstance(json_data, list) and len(json_data) > HISTORY_MAX_SESSIONS_PER_FILE:
+                json_data = json_data[-HISTORY_MAX_SESSIONS_PER_FILE:]
+        except Exception:
+            pass
+
         # 使用安全写入函数保存数据
-        if safe_write_json(file_path, json_data):
+        if safe_write_json(file_path, json_data, compact=True):
             print("✅ Data added successfully.")
             return jsonify({'message': 'Data added successfully'}), 200
         else:
@@ -2063,12 +2307,49 @@ def _find_history_file_by_workflow(workflow_id: str):
 def get_workflow_history_route(workflow_id):
     if not workflow_id:
         return jsonify([]), 200
+    # 默认限制返回条数，防止单次响应过大
+    limit_param = request.args.get('limit', '500')
+    try:
+        limit = int(limit_param) if limit_param is not None else None
+    except Exception:
+        limit = 500
+
+    # ✅ 新版：优先从 workflow.py 的 JSONL 历史读取（并兼容旧 JSON），但对外仍返回旧结构(list[list[...]])
+    try:
+        days_param = request.args.get('days', '7')
+        try:
+            days = int(days_param) if days_param is not None else 7
+        except Exception:
+            days = 7
+        from workflow import get_workflow_engine  # 避免循环导入（运行时引入）
+        engine = get_workflow_engine()
+        sessions = engine._read_history_compatible(workflow_id, days=days)
+        # 与旧接口保持一致：仅截断“最后一个会话”的条数
+        if limit and isinstance(sessions, list) and sessions:
+            try:
+                last_session = sessions[-1] if isinstance(sessions[-1], list) else sessions
+                if isinstance(last_session, list):
+                    sessions = [last_session[-limit:]]
+            except Exception:
+                pass
+        return jsonify(sessions)
+    except Exception:
+        # 读 JSONL 失败则继续走旧文件读取逻辑
+        pass
+
     history_path = _find_history_file_by_workflow(workflow_id)
     if not history_path:
         return jsonify([])
     try:
         with open(history_path, 'r', encoding='utf-8') as f:
             json_data = json.load(f)
+        if limit and isinstance(json_data, list) and json_data:
+            try:
+                last_session = json_data[-1] if isinstance(json_data[-1], list) else json_data
+                if isinstance(last_session, list):
+                    json_data = [last_session[-limit:]]
+            except Exception:
+                pass
         return jsonify(json_data)
     except json.JSONDecodeError:
         return jsonify({'error': '记录文件损坏'}), 500
@@ -2078,12 +2359,38 @@ def get_workflow_history_route(workflow_id):
 @app.route('/history/runs', methods=['GET'])
 def list_history_runs():
     project_name = (request.args.get('project_name') or '').strip()
+    # 可选：只列出“记录模式快照文件”（YYYYMMDD_HHMMSS_xxxxxx.json）
+    only_snapshots = (request.args.get('only_snapshots') or request.args.get('onlySnapshots') or '').strip().lower()
+    only_snapshots = only_snapshots in ('1', 'true', 'yes', 'on')
+    # 可选：在列出前自动裁剪快照文件数量（超过则删除最老的）
+    max_files = request.args.get('max_files') or request.args.get('maxFiles') or request.args.get('HistoryMaxFiles')
+    try:
+        max_files = int(max_files) if max_files is not None else 0
+    except Exception:
+        max_files = 0
+    if max_files < 0:
+        max_files = 0
     history_dir = Path('History')
     history_dir.mkdir(parents=True, exist_ok=True)
     records = []
     target_projects = []
     if project_name:
-        target_projects.append(history_dir / _safe_project_dir(project_name))
+        proj_dir = history_dir / _safe_project_dir(project_name)
+        target_projects.append(proj_dir)
+        # ✅ 自动裁剪：只删除快照文件，不影响 workflow_*.json / YYYYMMDD.json
+        if max_files and max_files > 0 and proj_dir.exists():
+            try:
+                pat = re.compile(r'^\d{8}_\d{6}_.+\.json$', re.I)
+                candidates = [p for p in proj_dir.glob('*.json') if pat.match(p.name)]
+                candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                if len(candidates) > max_files:
+                    for p in candidates[max_files:]:
+                        try:
+                            p.unlink()
+                        except Exception:
+                            pass
+            except Exception:
+                pass
     else:
         target_projects.extend([p for p in history_dir.iterdir() if p.is_dir()])
         # 兼容旧版：根目录下的 JSON 也列出来
@@ -2096,6 +2403,12 @@ def list_history_runs():
             if "__array_" in json_file.stem:
                 # 跳过不需要的子数组工作流记录
                 continue
+            if only_snapshots:
+                try:
+                    if not re.match(r'^\d{8}_\d{6}_.+\.json$', json_file.name, re.I):
+                        continue
+                except Exception:
+                    continue
             stat = json_file.stat()
             label, ts_label = _split_history_stem(json_file.stem)
             records.append({
@@ -2108,6 +2421,9 @@ def list_history_runs():
                 'modified_at': datetime.fromtimestamp(stat.st_mtime).isoformat()
             })
     records.sort(key=lambda item: item['modified_at'], reverse=True)
+    # 若只列快照且设置了 max_files，则兜底截断返回条数（即便删除失败也不至于 UI 加载 1000+）
+    if only_snapshots and max_files and max_files > 0 and isinstance(records, list) and len(records) > max_files:
+        records = records[:max_files]
     return jsonify({'project': project_name, 'items': records})
 
 @app.route('/history/run', methods=['GET'])
@@ -2142,6 +2458,47 @@ def get_history_run():
     if isinstance(data, dict):
         return jsonify(data)
     return jsonify({'nodes': data})
+
+@app.route('/history/prune', methods=['POST'])
+def prune_history_runs_route():
+    """
+    按项目目录裁剪“记录模式/记录列表”的快照文件数量：
+    - 仅清理 History/<project>/ 下形如 YYYYMMDD_HHMMSS_xxxxxx.json 的文件
+    - 不影响 workflow_*.json 或 YYYYMMDD.json 等其它用途文件
+    """
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        project_name = (payload.get('project_name') or payload.get('ProjectName') or '').strip()
+        max_files = payload.get('max_files', payload.get('maxFiles', payload.get('HistoryMaxFiles')))
+        try:
+            max_files = int(max_files)
+        except Exception:
+            max_files = 0
+        if not project_name:
+            return jsonify({'error': 'project_name is required'}), 400
+        if max_files < 0:
+            max_files = 0
+
+        history_root = Path('History')
+        proj_dir = history_root / _safe_project_dir(project_name)
+        if not proj_dir.exists():
+            return jsonify({'status': 'ok', 'deleted': 0, 'kept': 0})
+
+        pat = re.compile(r'^\d{8}_\d{6}_.+\.json$', re.I)
+        candidates = [p for p in proj_dir.glob('*.json') if pat.match(p.name)]
+        candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+        deleted = 0
+        if max_files and max_files > 0 and len(candidates) > max_files:
+            for p in candidates[max_files:]:
+                try:
+                    p.unlink()
+                    deleted += 1
+                except Exception:
+                    pass
+        kept = min(len(candidates), max_files) if (max_files and max_files > 0) else len(candidates)
+        return jsonify({'status': 'ok', 'deleted': deleted, 'kept': kept, 'max_files': max_files})
+    except Exception as e:
+        return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
 
 @app.route('/get-missing-packages')
 def get_missing_packages():
@@ -2223,6 +2580,8 @@ def load_project():
 def get_node_details(node_name):
     try:
         file_path = os.path.join('Nodes', f'{node_name}.py')  # 确保路径正确
+        load_error = ""
+        load_trace = ""
         
         # 初始化 IsLoadSuccess 标志，假设为 True
         is_load_success = True
@@ -2246,9 +2605,20 @@ def get_node_details(node_name):
         sys.modules["node_module"] = node_module
         
         try:
-            spec.loader.exec_module(node_module)  # 尝试加载模块
-        except ModuleNotFoundError as e:
-            is_load_success = False  # 如果库未找到，将标志设为 False
+            # 静音节点脚本 import-time 的 print/logging（避免前端频繁获取详情时刷屏）
+            capture = (not bool(APP_ENABLE_PRINT)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+            with _thread_stdio_scope(console_enabled=bool(APP_ENABLE_PRINT), capture=capture) as _buf:
+                spec.loader.exec_module(node_module)  # 尝试加载模块
+            # 不把 stdio 返回给前端，避免污染结构；需要排查时可手动打开 APP_ENABLE_PRINT
+        except Exception as e:
+            # 任意加载失败都不应让前端崩溃：标记失败，但仍返回空 Inputs/Outputs 结构
+            is_load_success = False
+            try:
+                load_error = str(e)
+                load_trace = traceback.format_exc()
+            except Exception:
+                load_error = "unknown"
+                load_trace = ""
 
         # 获取 Outputs, Inputs, 和 Lable
         # 使用单独的 try-except 来确保即使加载模块失败，其他信息也可以正常获取
@@ -2297,10 +2667,23 @@ def get_node_details(node_name):
             "InputIsAdd": InputIsAdd,
             "OutputsIsAdd": OutputsIsAdd,
             "NodeKind": NodeKind,
-            "IsLoadSuccess": is_load_success  # 返回加载库是否成功
+            "IsLoadSuccess": is_load_success,  # 返回加载库是否成功
+            "error": load_error,
+            "trace": load_trace,
         })
     except Exception as e:
-        return jsonify({"error": str(e)})
+        # 兜底：永远保证 Inputs/Outputs 存在，避免前端读取 .length 直接报错
+        return jsonify({
+            "Outputs": [],
+            "Inputs": [],
+            "Lable": [],
+            "InputIsAdd": '',
+            "OutputsIsAdd": '',
+            "NodeKind": '',
+            "IsLoadSuccess": False,
+            "error": str(e),
+            "trace": traceback.format_exc(),
+        })
 
 # 添加新的路由用于工作流管理
 @app.route("/workflow/start", methods=["POST"])
@@ -2551,6 +2934,30 @@ def stop_workflow_route(workflow_id):
 def cleanup_workflow_route(workflow_id):
     result = workflow.cleanup_workflow(workflow_id)
     return jsonify(result)
+
+@app.route("/workflow/record-history/<workflow_id>", methods=["POST"])
+def set_workflow_record_history(workflow_id):
+    """运行中动态开关：是否记录该 workflow 的历史（同时影响 workflow.py 内部 History 与 run 快照）。"""
+    if not workflow_id:
+        return jsonify({"error": "workflow_id is required"}), 400
+    try:
+        payload = request.get_json(force=True, silent=True) or {}
+        enabled = payload.get("enabled", True)
+        enabled = bool(enabled)
+        from workflow import get_workflow_engine  # 避免循环导入
+        engine = get_workflow_engine()
+        with getattr(engine, "lock", threading.Lock()):
+            wf = getattr(engine, "workflows", {}).get(workflow_id)
+            if not wf:
+                return jsonify({"error": "Workflow not found"}), 404
+            gd = wf.get("graph_data") if isinstance(wf, dict) else None
+            if not isinstance(gd, dict):
+                gd = {}
+                wf["graph_data"] = gd
+            gd["RecordHistory"] = enabled
+        return jsonify({"status": "ok", "workflow_id": workflow_id, "RecordHistory": enabled})
+    except Exception as e:
+        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
 
 @app.route("/workflow/list", methods=["GET"])
 def list_workflows_route():

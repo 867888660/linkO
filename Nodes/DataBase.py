@@ -9,6 +9,12 @@ from openpyxl.utils import get_column_letter
 import sqlite3
 import time
 
+# ========== SQLite 行为开关 ==========
+# True: 严格模式，不允许运行时自动补列（避免 ALTER TABLE 导致锁表/变慢）。
+#       如遇缺列会直接抛错，提示先手动建好列。
+# False: 兼容模式，允许自动补 TEXT 列。
+STRICT_SCHEMA = True
+
 # ========== 元数据 ==========
 OutPutNum, InPutNum = 1, 1
 Outputs = [{
@@ -400,6 +406,8 @@ class SQLiteBackend:
     def _ensure_missing_cols_text(self, name: str, cols: list):
         existing = self._get_existing_cols(name)
         missing = [c for c in cols if c not in existing]
+        if missing and STRICT_SCHEMA:
+            raise ValueError(f"Missing columns in {name}: {missing}")
         for c in missing:
             try:
                 self.cur.execute(f'ALTER TABLE "{name}" ADD COLUMN "{c}" TEXT;')
@@ -580,7 +588,7 @@ def run_node(node: dict):
         if file_ext in ['.db', '.sqlite']:
             backend = SQLiteBackend(file_path)
             names = backend.list_sheets_or_tables()
-            df_dict = {name: backend.read_df(name) for name in names}
+            df_dict = {}   # 懒加载：谁用谁读
         else:
             backend = ExcelBackend(file_path, file_ext)
             df_dict = backend.df_dict
@@ -609,9 +617,17 @@ def run_node(node: dict):
             target   = norm(out.get('selectBox4', 'All'))
 
             if sheet_name not in df_dict:
-                # SQLite 首次导入：允许 Json输入 在缺表时创建
-                if file_ext in ['.db', '.sqlite'] and action == 'Json输入':
-                    df_dict[sheet_name] = pd.DataFrame()
+                if file_ext in ['.db', '.sqlite']:
+                    # SQLite：懒加载；但 Json输入 允许在缺表时先创建“空镜像”
+                    if action == 'Json输入':
+                        df_dict[sheet_name] = pd.DataFrame()
+                    else:
+                        try:
+                            df_dict[sheet_name] = backend.read_df(sheet_name)
+                        except Exception:
+                            out['Context'] = 'Sheet not found'
+                            summary.append(f"Sheet '{sheet_name}' 不存在")
+                            continue
                 else:
                     out['Context'] = 'Sheet not found'
                     summary.append(f"Sheet '{sheet_name}' 不存在")
@@ -659,11 +675,8 @@ def run_node(node: dict):
                         affected = backend.delete_where(sheet_name, where_sql, where_params)
                         out['Context'] = f"已删除 {affected} 行（已落库）"
                         summary.append(f"{sheet_name} 删除 {affected} 行（SQLite）")
-                        # 刷新内存镜像，避免同批后续步骤读到旧数据
-                        try:
-                            df_dict[sheet_name] = backend.read_df(sheet_name)
-                        except Exception:
-                            pass
+                        # 不主动回读整表：让缓存失效，后续若需要再懒加载
+                        df_dict.pop(sheet_name, None)
                     cond_cache.clear()
                     continue  # —— 一定要提前结束，避免落回 Pandas 分支 —— 
                 # —— 非 SQLite（Excel/JSON）保持旧行为 —— 
@@ -693,11 +706,8 @@ def run_node(node: dict):
                         affected = backend.update_where(sheet_name, target, str(new_val), where_sql, where_params)
                         out['Context'] = f"修改完成（{affected} 行，已落库）"
                         summary.append(f"{sheet_name} 修改 {affected} 行 -> {target}={new_val!r}（SQLite）")
-                        # 立刻刷新内存镜像
-                        try:
-                            df_dict[sheet_name] = backend.read_df(sheet_name)
-                        except Exception:
-                            pass
+                        # 不主动回读整表：让缓存失效，后续若需要再懒加载
+                        df_dict.pop(sheet_name, None)
                     cond_cache.clear()
                     continue
                 # 非 SQLite（Excel/JSON）保持旧行为
@@ -757,11 +767,8 @@ def run_node(node: dict):
                             n = backend.append_rows(sheet_name, json_rows)
                             out['Context'] = f"插入 JSON {n} 行（批量追加）"
                             summary.append(f"{sheet_name} 追加 JSON {n} 行")
-                            # 刷新内存镜像
-                            try:
-                                df_dict[sheet_name] = backend.read_df(sheet_name)
-                            except Exception:
-                                pass
+                            # 新增后不回读整表：让缓存失效，后续若需要再懒加载
+                            df_dict.pop(sheet_name, None)
                     else:
                         # 非 SQLite（Excel/JSON）维持原行为
                         df_dict[sheet_name] = pd.concat([sheet_df, json_rows], ignore_index=True)

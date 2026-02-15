@@ -39,6 +39,51 @@ const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标�
 const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
 let recordSearchRefilterTimer = null;
 
+// ==================== 历史记录开关（本地设置） ====================
+const WORKFLOW_LS_RECORD_HISTORY_ENABLED = 'workflow_record_history_enabled';
+// 记录列表（History/项目/时间戳_随机.json）最大保留文件数：0 表示不限制
+const WORKFLOW_LS_RECORD_HISTORY_MAX_FILES = 'workflow_record_history_max_files';
+const WORKFLOW_HISTORY_FETCH_LIMIT_DEFAULT = 200;
+
+function getWorkflowRecordHistoryEnabled() {
+  try {
+    const v = localStorage.getItem(WORKFLOW_LS_RECORD_HISTORY_ENABLED);
+    if (v === null || v === undefined || v === '') return true; // 默认开启
+    return !(String(v).toLowerCase() === 'false' || String(v) === '0');
+  } catch (_) {
+    return true;
+  }
+}
+
+function setWorkflowRecordHistoryEnabled(enabled) {
+  try {
+    localStorage.setItem(WORKFLOW_LS_RECORD_HISTORY_ENABLED, enabled ? '1' : '0');
+  } catch (_) {}
+}
+
+function getWorkflowRecordHistoryMaxFiles() {
+  // 0 = 不限制；默认给一个比较保守的上限，避免历史无限增长拖慢 UI
+  const DEFAULT_MAX = 200;
+  try {
+    const v = localStorage.getItem(WORKFLOW_LS_RECORD_HISTORY_MAX_FILES);
+    if (v === null || v === undefined || v === '') return DEFAULT_MAX;
+    const n = parseInt(String(v), 10);
+    if (!Number.isFinite(n) || isNaN(n)) return DEFAULT_MAX;
+    // 上限保护：防止误填一个特别离谱的数字导致磁盘爆炸
+    return Math.max(0, Math.min(n, 5000));
+  } catch (_) {
+    return DEFAULT_MAX;
+  }
+}
+
+function setWorkflowRecordHistoryMaxFiles(maxFiles) {
+  try {
+    const n = parseInt(String(maxFiles), 10);
+    if (!Number.isFinite(n) || isNaN(n)) return;
+    localStorage.setItem(WORKFLOW_LS_RECORD_HISTORY_MAX_FILES, String(Math.max(0, Math.min(n, 5000))));
+  } catch (_) {}
+}
+
 function cancelRecordAnnotation(reason = '') {
   // 递增 token 使已排队/延迟启动的任务自动失效
   recordAnnotateToken++;
@@ -3292,6 +3337,148 @@ function getProjectHistoryKey() {
   return (parts[parts.length - 1] || '').trim();
 }
 
+// === Record mode render normalization ===
+// 记录快照通常只有 nodes/edges，不一定包含 Inputs/Outputs 的 Link(连接数)、IsLabel、甚至 Kind/value 字段。
+// 这会导致：锚点看起来“都没连接”、以及卡片内不显示输入参数值。
+function normalizeGraphForRender(g) {
+  try {
+    if (!g || typeof g !== 'object') return g;
+    const nodes = Array.isArray(g.nodes) ? g.nodes : [];
+    const edges = Array.isArray(g.edges) ? g.edges : [];
+    if (!nodes.length) return g;
+
+    const byId = {};
+    nodes.forEach(n => { if (n && n.id) byId[n.id] = n; });
+
+    const inferKind = (io) => {
+      if (!io || typeof io !== 'object') return 'String';
+      const k = (io.Kind === null || typeof io.Kind === 'undefined') ? '' : String(io.Kind);
+      if (k) return k;
+      // best-effort inference
+      if (typeof io.Boolean === 'boolean') return 'Boolean';
+      if (typeof io.Num === 'number') return 'Num';
+      if (typeof io.Num === 'string' && io.Num.trim() !== '' && Number.isFinite(Number(io.Num))) return 'Num';
+      return 'String';
+    };
+
+    const coerceBoolean = (v) => {
+      if (typeof v === 'boolean') return v;
+      if (v === 1 || v === '1') return true;
+      if (v === 0 || v === '0') return false;
+      if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+      }
+      return undefined;
+    };
+
+    const ensureIOFields = (io) => {
+      if (!io || typeof io !== 'object') return;
+      io.Kind = inferKind(io);
+      // Link / IsLabel defaults
+      if (typeof io.Link !== 'number' || !Number.isFinite(io.Link)) io.Link = 0;
+      if (typeof io.IsLabel !== 'boolean') io.IsLabel = false;
+
+      // Normalize value fields for existing card renderer (which mainly reads Context/Num/Boolean)
+      const kind = String(io.Kind || '');
+      if (kind === 'Num') {
+        if ((io.Num === null || typeof io.Num === 'undefined' || io.Num === '') && io.Parameters !== undefined) {
+          const num = Number(io.Parameters);
+          if (Number.isFinite(num)) io.Num = num;
+        }
+      } else if (kind === 'Boolean' || kind === 'Trigger') {
+        if (typeof io.Boolean !== 'boolean' && io.Parameters !== undefined) {
+          const b = coerceBoolean(io.Parameters);
+          if (typeof b === 'boolean') io.Boolean = b;
+        }
+      } else if (kind.includes('String') || kind === 'Label' || kind === 'Text') {
+        if ((io.Context === null || typeof io.Context === 'undefined' || io.Context === '') && io.Parameters !== undefined) {
+          io.Context = String(io.Parameters);
+        }
+      } else {
+        // Unknown kind -> treat like string
+        if ((io.Context === null || typeof io.Context === 'undefined' || io.Context === '') && io.Parameters !== undefined) {
+          io.Context = String(io.Parameters);
+        }
+      }
+    };
+
+    // 1) Ensure arrays & base fields exist, and sanitize IO entries
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object') return;
+      if (!Array.isArray(n.Inputs)) n.Inputs = [];
+      if (!Array.isArray(n.Outputs)) n.Outputs = [];
+      if (typeof n.TriggerLink !== 'number' || !Number.isFinite(n.TriggerLink)) n.TriggerLink = 0;
+      n.Inputs.forEach(ensureIOFields);
+      n.Outputs.forEach(ensureIOFields);
+    });
+
+    // 2) Recompute Link counts from edges (critical for anchor connected rendering)
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n.Inputs)) n.Inputs.forEach(io => { if (io && typeof io === 'object') io.Link = 0; });
+      if (Array.isArray(n.Outputs)) n.Outputs.forEach(io => { if (io && typeof io === 'object') io.Link = 0; });
+      n.TriggerLink = 0;
+    });
+
+    edges.forEach(e => {
+      if (!e || typeof e !== 'object') return;
+      const s = byId[e.source];
+      const t = byId[e.target];
+      if (!s || !t) return;
+      const sInputs = Array.isArray(s.Inputs) ? s.Inputs.length : 0;
+      const sOutputs = Array.isArray(s.Outputs) ? s.Outputs.length : 0;
+      const tInputs = Array.isArray(t.Inputs) ? t.Inputs.length : 0;
+      const tOutputs = Array.isArray(t.Outputs) ? t.Outputs.length : 0;
+
+      const sA = Number(e.sourceAnchor);
+      const tA = Number(e.targetAnchor);
+
+      if (Number.isFinite(sA)) {
+        const outIdx = sA - sInputs;
+        if (outIdx >= 0 && outIdx < sOutputs) {
+          const out = s.Outputs[outIdx];
+          if (out && typeof out === 'object') out.Link = (Number(out.Link) || 0) + 1;
+        }
+      }
+
+      if (Number.isFinite(tA)) {
+        const triggerAnchor = tInputs + tOutputs;
+        if ((t.NodeKind === 'IfNode' || (String(t.NodeKind || '').includes('IfNode'))) && tA === triggerAnchor) {
+          t.TriggerLink = (Number(t.TriggerLink) || 0) + 1;
+        } else if (tA >= 0 && tA < tInputs) {
+          const inp = t.Inputs[tA];
+          if (inp && typeof inp === 'object') inp.Link = (Number(inp.Link) || 0) + 1;
+        }
+      }
+    });
+
+    // 3) Auto show inline values when not connected (IsLabel missing in snapshot)
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object' || !Array.isArray(n.Inputs)) return;
+      n.Inputs.forEach(inp => {
+        if (!inp || typeof inp !== 'object') return;
+        if ((Number(inp.Link) || 0) > 0) {
+          inp.IsLabel = false;
+          return;
+        }
+        // Not connected: if value exists, default to show
+        const k = String(inp.Kind || '');
+        let hasValue = false;
+        if (k === 'Num') hasValue = (inp.Num !== null && typeof inp.Num !== 'undefined' && String(inp.Num) !== '' && Number.isFinite(Number(inp.Num)));
+        else if (k === 'Boolean' || k === 'Trigger') hasValue = (typeof inp.Boolean === 'boolean');
+        else hasValue = (inp.Context !== null && typeof inp.Context !== 'undefined' && String(inp.Context).trim() !== '');
+        if (hasValue && typeof inp.IsLabel !== 'boolean') inp.IsLabel = true;
+        if (hasValue) inp.IsLabel = true;
+      });
+    });
+  } catch (e) {
+    console.warn('[RECORD] normalizeGraphForRender failed:', e);
+  }
+  return g;
+}
+
 async function enterRecordMode() {
   try {
     isRecordMode = true;
@@ -3311,14 +3498,23 @@ async function enterRecordMode() {
         console.log('[RECORD] 从图数据中恢复 ProjectName:', ProjectName);
       }
       
-      // 确保所有已完成节点的 IsBlock 为 true
+      // 确保关键状态节点的 IsBlock 为 true（否则外框颜色不会显示）
       if (graphDataToLoad.nodes) {
         graphDataToLoad.nodes.forEach(node => {
-          if (node && (node.isFinish || node.IsError)) {
+          if (
+            node && (
+              node.isFinish ||
+              node.IsRunning ||
+              node.IsError ||
+              (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+            )
+          ) {
             node.IsBlock = true;
           }
         });
       }
+      // 🔥 关键修复：从 edges 反算 Link，并补齐 IsLabel/Kind/value 字段，确保锚点连接状态与参数值正常显示
+      normalizeGraphForRender(graphDataToLoad);
       ChangeDatas(graphDataToLoad);
       RefreshEdge();
       // 手动触发节点更新
@@ -3343,6 +3539,22 @@ async function enterRecordMode() {
     } else {
       // 非 monitor_completed 模式：使用当前图数据
       const currentGraph = graph.save();
+      try {
+        if (currentGraph && Array.isArray(currentGraph.nodes)) {
+          currentGraph.nodes.forEach(node => {
+            if (
+              node && (
+                node.isFinish ||
+                node.IsRunning ||
+                node.IsError ||
+                (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+              )
+            ) {
+              node.IsBlock = true;
+            }
+          });
+        }
+      } catch (_) {}
       window.__recordModeCurrentGraph = structuredClone(currentGraph);
       console.log('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
     }
@@ -3383,7 +3595,11 @@ async function loadRecordItems() {
   setRecordLoadingIndicator(true);
   recordItemsCache = [];
   try {
-    const query = historyKey ? `?project_name=${encodeURIComponent(historyKey)}` : '';
+    // 记录列表：让后端按 max_files 自动裁剪最老的快照文件，避免越积越多导致 1000+ 卡顿
+    const maxFiles = (() => { try { return getWorkflowRecordHistoryMaxFiles(); } catch(_) { return 200; } })();
+    const query = historyKey
+      ? `?project_name=${encodeURIComponent(historyKey)}&only_snapshots=1&max_files=${encodeURIComponent(String(maxFiles))}`
+      : `?only_snapshots=1&max_files=${encodeURIComponent(String(maxFiles))}`;
     const url = `/history/runs${query}`;
     console.log('[RECORD] 请求URL:', url);
     const response = await fetch(url);
@@ -3664,17 +3880,10 @@ function renderRecordPanel(items) {
     const doFilter = () => {
       const q = (inputEl.value || '').trim().toLowerCase();
       const itemsEls = list.querySelectorAll('.record-panel-item');
-      let hit = 0;
       itemsEls.forEach(el => {
         const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
-        const ok = q ? text.includes(q) : true;
-        if (ok && q) hit++;
-        el.style.display = ok ? '' : 'none';
+        el.style.display = q ? (text.includes(q) ? '' : 'none') : '';
       });
-      // 如果当前索引命中很少/为 0，则后台按需补全深度搜索索引，再自动重跑过滤
-      if (q && hit === 0) {
-        scheduleRecordSearchIndexBuild(q, doFilter);
-      }
     };
     inputEl.addEventListener('input', doFilter);
     inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doFilter(); });
@@ -3765,7 +3974,14 @@ async function applyRecordSnapshot(filename) {
     if (!nodes || !Array.isArray(nodes)) {
       throw new Error('记录文件缺少节点数据');
     }
+    // 记录文件可能包含 edges（用于还原连线）；旧记录可能没有，回退到 baseGraph.edges
+    const edges = Array.isArray(payload?.edges)
+      ? payload.edges
+      : (payload?.nodes && Array.isArray(payload.nodes.edges) ? payload.nodes.edges : null);
     const nextGraph = structuredClone(recordModeBaseGraph);
+    if (Array.isArray(edges) && edges.length) {
+      nextGraph.edges = structuredClone(edges);
+    }
     const nodeMap = {};
     nextGraph.nodes.forEach(node => {
       nodeMap[node.id] = node;
@@ -3777,9 +3993,16 @@ async function applyRecordSnapshot(filename) {
       }
     });
     
-    // 🔥 关键修复：确保所有已完成、运行中或错误的节点都有 IsBlock=true，以便显示边框
+    // 🔥 关键修复：确保关键状态节点都有 IsBlock=true，以便显示边框/颜色
     nextGraph.nodes.forEach(node => {
-      if (node && (node.isFinish || node.IsRunning || node.IsError)) {
+      if (
+        node && (
+          node.isFinish ||
+          node.IsRunning ||
+          node.IsError ||
+          (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+        )
+      ) {
         node.IsBlock = true;
       }
     });
@@ -3851,8 +4074,13 @@ function mergeRecordNode(target, source) {
     target.Outputs = structuredClone(source.Outputs);
   }
   
-  // 🔥 关键修复：如果节点已完成、运行中或错误，确保 IsBlock=true（即使记录中没有）
-  if (target.isFinish || target.IsRunning || target.IsError) {
+  // 🔥 关键修复：如果节点处于关键状态（完成/运行/错误/逻辑触发），确保 IsBlock=true（即使记录中没有）
+  if (
+    target.isFinish ||
+    target.IsRunning ||
+    target.IsError ||
+    (typeof target.TriggerLink !== 'undefined' && target.TriggerLink !== 0)
+  ) {
     target.IsBlock = true;
   }
 }
@@ -7338,17 +7566,38 @@ const database = graph.save();
                                 console.warn('Outputs refresh skipped:', e);
                               }         
                           } else {
-                              console.error('Error:', data.message,data);
+                              console.error('Error:', data && data.message, data);
                               if (pathButton) {
                                 pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
                               }
+                              // 将后端错误显示给用户（按 nodeId+filePath 去重，避免输入时频繁弹窗）
+                              try {
+                                const msg = (data && data.message) ? String(data.message) : 'Load Fail';
+                                const resolved = (data && data.resolved_path) ? `\n\nPath: ${data.resolved_path}` : '';
+                                const hint = (data && data.hint) ? `\n\nHint: ${data.hint}` : '';
+                                const dedupKey = `${id}::${filePath}::${msg}`;
+                                if (!window.__dbLoadFailDedup) window.__dbLoadFailDedup = {};
+                                if (!window.__dbLoadFailDedup[dedupKey]) {
+                                  window.__dbLoadFailDedup[dedupKey] = Date.now();
+                                  alert(`${msg}${resolved}${hint}`);
+                                }
+                              } catch (_) {}
                           }
                       })
                       .catch(error => {
-                          console.error('Error:', error,data);
+                          console.error('Error:', error);
                           if (pathButton) {
                             pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
                           }
+                          try {
+                            const msg = (error && error.message) ? String(error.message) : String(error);
+                            const dedupKey = `${id}::${filePath}::${msg}`;
+                            if (!window.__dbLoadFailDedup) window.__dbLoadFailDedup = {};
+                            if (!window.__dbLoadFailDedup[dedupKey]) {
+                              window.__dbLoadFailDedup[dedupKey] = Date.now();
+                              alert(`Read_DataBase request failed: ${msg}\n\nPath: ${filePath}`);
+                            }
+                          } catch (_) {}
                       });
                   }
                   ChangeAnchorValue(id, labelTextarea.value, 'Input', input.Id); // 假定 id 和 ChangeNodeLabel 已定义
@@ -12545,20 +12794,60 @@ function createSideWindow(item, isCheckMode = false) {
   console.log('  - tempNode.Outputs 详情:', tempNode?.Outputs);
 
   // 生成输入区域 HTML
+  // Inputs/Outputs 的值字段在不同节点/版本里可能不一致（Context/Num/Boolean/Parameters/value...）
+  // 这里做一次统一兜底，避免“记录模式输入为空”的体验问题。
+  function getIOValue(io) {
+    if (!io || typeof io !== 'object') return '';
+    const kind = (io.Kind === null || typeof io.Kind === 'undefined') ? '' : String(io.Kind);
+
+    // helper: pick "present" value without treating 0/false as empty
+    const pick = (...vals) => {
+      for (const v of vals) {
+        if (v === 0) return 0;
+        if (v === false) return false;
+        if (v === true) return true;
+        if (v === null || typeof v === 'undefined') continue;
+        if (typeof v === 'string') return v;
+        // allow numbers/objects
+        return v;
+      }
+      return '';
+    };
+
+    // Prefer explicit typed fields
+    if (kind === 'Num') {
+      const v = pick(io.Num, io.Parameters, io.Value, io.value);
+      return (v === '' ? '' : String(v));
+    }
+    if (kind === 'Boolean' || kind === 'Trigger') {
+      const v = pick(io.Boolean, io.Parameters, io.Value, io.value);
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      if (v === 0) return 'false';
+      if (v === 1) return 'true';
+      if (v === '' || v === null || typeof v === 'undefined') return '';
+      return String(v);
+    }
+    if (kind.includes('String') || kind === 'Label' || kind === 'Text') {
+      const v = pick(io.Context, io.Parameters, io.Text, io.Value, io.value);
+      return (v === '' ? '' : String(v));
+    }
+
+    // Unknown kind: best-effort fallback
+    const v = pick(io.Context, io.Num, io.Boolean, io.Parameters, io.Text, io.Value, io.value);
+    if (typeof v === 'object') {
+      try { return JSON.stringify(v, null, 2); } catch (_) { return String(v); }
+    }
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    return (v === '' ? '' : String(v));
+  }
+
   let inputsHtml = `
   <div class="section-container">
       <h3>Inputs</h3>
   `;
   if (node?.Inputs && Array.isArray(node.Inputs)) {
   node.Inputs.forEach((input, index) => {
-  let value = '';
-  if (input.Kind === 'Num') {
-      value = input.Num ?? '';
-  } else if (input.Kind.includes('String')) {
-      value = input.Context ?? '';
-  } else if (input.Kind === 'Boolean') {
-      value = input.Boolean ? 'true' : 'false';
-  }
+  const value = getIOValue(input);
 
   inputsHtml += `
       <div class="input-item">
@@ -12618,14 +12907,7 @@ function createSideWindow(item, isCheckMode = false) {
   `;
   if (tempNode?.Outputs && Array.isArray(tempNode.Outputs)) {
   tempNode.Outputs.forEach((output, index) => {
-      let value = '';
-      if (output.Kind === 'Num') {
-          value = output.Num ?? '';
-      } else if (output.Kind?.includes('String')) {
-          value = output.Context ?? '';
-      } else if (output.Kind === 'Boolean' || output.Kind === 'Trigger') {
-          value = output.Boolean ? 'true' : 'false';
-      }
+      const value = getIOValue(output);
 
       outputsHtml += `
           <div class="output-item">
@@ -16270,6 +16552,14 @@ function runFunction() {
     window.currentHasPassivityTrigger = nodes.some(n => n.NodeKind?.includes('passivityTrigger'));
     
     let DataTemp=graph.save();
+    // 把“是否记录历史”注入到 graph_data，供后端 workflow 引擎决定是否落盘
+    try {
+      DataTemp.RecordHistory = !!getWorkflowRecordHistoryEnabled();
+    } catch (_) {}
+    // 把“最大保存记录数”注入到 graph_data，供后端在保存记录快照后自动清理最老文件
+    try {
+      DataTemp.HistoryMaxFiles = getWorkflowRecordHistoryMaxFiles();
+    } catch (_) {}
     DataTemp.nodes.forEach(nodez => {
       nodez.IsBlock = true;
       nodez.IsRunning = false;
@@ -16914,6 +17204,14 @@ async function executeNode(node, count, DataTemp, nodes, edges) {
 
 
 function RefreshEdge () {
+  // ✅ 记录模式：不要运行“过滤边/重算锚点/写回图”的逻辑
+  // 否则只要 edge 的 sourceAnchorID/targetAnchorID 与端口 Id 有任何不一致，就会被过滤成空，表现为“查看记录没有边”
+  try {
+    if (typeof isRecordMode !== 'undefined' && isRecordMode) {
+      try { graph.refresh?.(); } catch (_) {}
+      return;
+    }
+  } catch (_) {}
   // 预热阶段：仅当仍满足预热规则时才跳过刷新
   const stillPreheat = !!window.inPreheat && !!window.currentHasPassivityTrigger && !!currentWorkflowId;
   console.warn('RefreshEdge: window.inPreheat', window.inPreheat, 'stillPreheat', stillPreheat);
@@ -17323,6 +17621,10 @@ try {
   setWorkflowPollingInterval(2000);
 } catch (_) {}
 function addHistory(data) { // 
+  // 允许用户在设置里关闭历史记录（仅停止写入，不影响工作流运行）
+  if (!getWorkflowRecordHistoryEnabled()) {
+    return;
+  }
   let Temp;
   if(data!='Start')
   {
@@ -17337,6 +17639,20 @@ function addHistory(data) { //
       debug: data.debug || '',
       status: data.status || '',
       isFinish: data.isFinish || false,
+      // 关联边：保留与该节点相关的 edges（用于回放/定位）
+      edges: (() => {
+        try {
+          const raw = graph && typeof graph.save === 'function' ? graph.save() : null;
+          const allEdges = raw && Array.isArray(raw.edges) ? raw.edges : [];
+          const nodeId = data && data.id;
+          if (!nodeId) return [];
+          return allEdges
+            .filter(e => e && (e.source === nodeId || e.target === nodeId))
+            .map(slimEdge);
+        } catch (_) {
+          return [];
+        }
+      })(),
       Outputs: data.Outputs.map(item => {
           // 根据 Kind 字段的内容选择性保留 Context, Boolean, 或 Num
           let selectedField;
@@ -17383,11 +17699,21 @@ function addHistory(data) { //
   }
   else
   {
-    //让赋值Temp =['message': 'New conversation started']
-    Temp = JSON.stringify({name: 'New started'});
+    // Start 记录：除了“新会话”标记，也带上当前图的 edges（之前这里被省略了）
+    // 这样后端历史文件中能还原连线关系（尤其是并行边/曲线参数等）
+    const startPayload = { name: 'New started' };
+    try {
+      const raw = graph && typeof graph.save === 'function' ? graph.save() : null;
+      const allEdges = raw && Array.isArray(raw.edges) ? raw.edges : [];
+      startPayload.edges = allEdges.map(slimEdge);
+    } catch (_) {
+      startPayload.edges = [];
+    }
+    Temp = JSON.stringify(startPayload);
     
   }
-  fetch(`/addHistory?ProjectName=${ProjectName}`, {
+  const recordHistory = getWorkflowRecordHistoryEnabled() ? 1 : 0;
+  fetch(`/addHistory?ProjectName=${ProjectName}&RecordHistory=${recordHistory}`, {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
@@ -17404,7 +17730,10 @@ function addHistory(data) { //
     });
 }
 function loadHistory() {
-  fetch(`/getHistory?ProjectName=${ProjectName}`)
+  // 历史关闭时不做自动拉取，避免无意义网络请求
+  if (!getWorkflowRecordHistoryEnabled()) return;
+  const limit = WORKFLOW_HISTORY_FETCH_LIMIT_DEFAULT;
+  fetch(`/getHistory?ProjectName=${ProjectName}&limit=${encodeURIComponent(limit)}`)
   .then(response => response.json())
   .then(data => {
       //console.log('Success:', data);
@@ -17475,11 +17804,20 @@ function slimNode(node) {
 
 /** 精简 edge 结构 */
 function slimEdge(edge) {
+  // 之前这里裁剪过猛，导致有些 edge 相关信息（例如曲线/并行边参数、样式/类型等）无法恢复
+  // 这里在“仍然轻量”的前提下，把常用字段补回来；pick 会自动忽略不存在的键
   return pick(edge, [
     'id',
     'source', 'target',
     'sourceAnchor', 'targetAnchor',
-    'targetAnchorID','sourceAnchorID'
+    'targetAnchorID','sourceAnchorID',
+    // optional rendering/layout fields (G6 / custom)
+    'type', 'label',
+    'curveOffset', 'curvePosition', 'minCurveOffset',
+    'controlPoints', 'points', 'startPoint', 'endPoint',
+    'router', 'connector',
+    'style', 'stateStyles',
+    'zIndex'
   ]);
 }
 
@@ -17922,6 +18260,8 @@ let secretsConfigWorkflow = { secrets: [], llmMappings: {} };
 let llmNodesWorkflow = [];
 let selectedSecretIndexWorkflow = -1;
 let settingsTabsInitializedWorkflow = false;
+let pendingRecordHistoryEnabledWorkflow = null;
+let pendingRecordHistoryMaxFilesWorkflow = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const settingsBtn = document.getElementById('settingsBtnWorkflow');
@@ -17964,6 +18304,10 @@ function initSettingsMenuWorkflow() {
               <i class="fas fa-code-branch"></i>
               <span>LLM Key</span>
             </div>
+            <div class="settings-menu-item" data-section="history">
+              <i class="fas fa-history"></i>
+              <span>历史</span>
+            </div>
           </div>
           <div class="settings-content">
             <div id="secretsSectionWorkflow" class="settings-section">
@@ -17976,6 +18320,36 @@ function initSettingsMenuWorkflow() {
               <h3>LLM 密钥分配</h3>
               <div class="llm-key-list" id="llmKeyListWorkflow">
                 <!-- LLM 分配列表 -->
+              </div>
+            </div>
+            <div id="historySectionWorkflow" class="settings-section" style="display:none;">
+              <h3>历史记录</h3>
+              <div class="secret-item">
+                <div class="history-form-group">
+                  <div class="history-title">是否记录历史（addHistory / 工作流 History）</div>
+                  <label class="history-toggle" for="disableHistoryWorkflow">
+                    <input type="checkbox" id="disableHistoryWorkflow">
+                    <span class="history-toggle-text">勾选后不记录历史（已有历史不会删除）</span>
+                  </label>
+                  <div class="history-title" style="margin-top:10px;">最大保存记录数（记录列表）</div>
+                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <input
+                      type="number"
+                      id="historyMaxFilesWorkflow"
+                      min="0"
+                      max="5000"
+                      step="1"
+                      placeholder="例如 200（0=不限制）"
+                      style="width: 260px;"
+                    />
+                    <div style="color: rgba(255,255,255,.6); font-size: 12px; line-height: 1.4;">
+                      超过后自动删除最老的记录文件（只影响“记录模式/记录列表”的运行快照）
+                    </div>
+                  </div>
+                  <div class="history-hint">
+                    为避免历史无限变大：后端会自动裁剪“单次会话条数/会话数量”，并截断超长字符串字段。
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -18366,6 +18740,63 @@ function initSettingsMenuWorkflow() {
         .llm-key-list::-webkit-scrollbar-thumb:hover {
           background: linear-gradient(180deg, rgba(0, 212, 255, 0.9), rgba(123, 47, 247, 0.9));
         }
+        .history-form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .history-title {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 14px;
+          font-weight: 600;
+        }
+        /* history number input: reuse secret input look */
+        #settingsModalWorkflow #historyMaxFilesWorkflow {
+          padding: 10px 12px;
+          background: rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 8px;
+          color: #fff;
+          font-size: 14px;
+          transition: all 0.2s ease;
+          outline: none;
+        }
+        #settingsModalWorkflow #historyMaxFilesWorkflow:focus {
+          border-color: rgba(0, 212, 255, 0.6);
+          box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.12);
+        }
+        .history-toggle {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 12px 14px;
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 10px;
+          cursor: pointer;
+          user-select: none;
+        }
+        /* 覆盖全局 input 样式：避免 checkbox 被 width:100% 拉伸成“长条” */
+        #settingsModalWorkflow .history-toggle input[type="checkbox"] {
+          width: 20px !important;
+          height: 20px !important;
+          min-width: 20px !important;
+          flex: 0 0 20px !important;
+          margin-top: 2px;
+          transform: none !important;
+        }
+        .history-toggle-text {
+          color: rgba(255, 255, 255, 0.85);
+          font-size: 14px;
+          line-height: 1.5;
+          word-break: break-word;
+        }
+        .history-hint {
+          margin-top: 10px;
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 12px;
+          line-height: 1.6;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -18400,6 +18831,29 @@ function initSettingsMenuWorkflow() {
     
     document.getElementById('settingsApplyBtnWorkflow').addEventListener('click', async () => {
       await saveSecretsConfigWorkflow();
+      // 保存“是否记录历史”开关（只在点“应用”时落盘到 localStorage）
+      try {
+        if (pendingRecordHistoryEnabledWorkflow !== null) {
+          setWorkflowRecordHistoryEnabled(!!pendingRecordHistoryEnabledWorkflow);
+        }
+      } catch (_) {}
+      // 保存“最大保存记录数”（只在点“应用”时落盘到 localStorage）
+      try {
+        if (pendingRecordHistoryMaxFilesWorkflow !== null) {
+          setWorkflowRecordHistoryMaxFiles(pendingRecordHistoryMaxFilesWorkflow);
+          // 尝试让后端立刻按新上限清理（非必须；失败也不影响后续自动清理）
+          try {
+            const pn = getProjectHistoryKey();
+            if (pn) {
+              fetch('/history/prune', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_name: pn, max_files: pendingRecordHistoryMaxFilesWorkflow })
+              }).catch(() => {});
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
       modal.style.display = 'none';
       document.body.classList.remove('modal-open');
     });
@@ -18409,6 +18863,50 @@ function initSettingsMenuWorkflow() {
   modal.style.display = 'flex';
   document.body.classList.add('modal-open');
   loadSecretsConfigWorkflow();
+  initHistorySettingsWorkflow();
+}
+
+function initHistorySettingsWorkflow() {
+  // 每次打开弹窗时，都刷新一次 checkbox 的状态（支持用户在别处改 localStorage）
+  try {
+    pendingRecordHistoryEnabledWorkflow = getWorkflowRecordHistoryEnabled();
+    const cb = document.getElementById('disableHistoryWorkflow');
+    if (cb) {
+      // 勾选 = 不记录历史
+      cb.checked = !pendingRecordHistoryEnabledWorkflow;
+      cb.onchange = () => {
+        pendingRecordHistoryEnabledWorkflow = !cb.checked;
+        // 立即生效：不需要等待点击“应用”
+        try {
+          setWorkflowRecordHistoryEnabled(!!pendingRecordHistoryEnabledWorkflow);
+        } catch (_) {}
+        // 同步到后端：保证运行中的 workflow 也立刻停止/恢复写历史
+        try {
+          const wfId = window.currentWorkflowId || window.monitoredWorkflowId || (typeof currentWorkflowId !== 'undefined' ? currentWorkflowId : null);
+          if (wfId) {
+            fetch(`/workflow/record-history/${encodeURIComponent(wfId)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: !!pendingRecordHistoryEnabledWorkflow })
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      };
+    }
+    // 最大保存记录数（记录列表）
+    try {
+      pendingRecordHistoryMaxFilesWorkflow = getWorkflowRecordHistoryMaxFiles();
+      const maxInp = document.getElementById('historyMaxFilesWorkflow');
+      if (maxInp) {
+        maxInp.value = String(pendingRecordHistoryMaxFilesWorkflow);
+        maxInp.onchange = () => {
+          const n = parseInt(String(maxInp.value || ''), 10);
+          if (!Number.isFinite(n) || isNaN(n)) return;
+          pendingRecordHistoryMaxFilesWorkflow = Math.max(0, Math.min(n, 5000));
+        };
+      }
+    } catch (_) {}
+  } catch (_) {}
 }
 
 async function loadSecretsConfigWorkflow() {
@@ -18577,7 +19075,8 @@ function initSettingsTabsWorkflow() {
   const menuItems = document.querySelectorAll('.settings-menu-item');
   const sections = {
     secrets: document.getElementById('secretsSectionWorkflow'),
-    'llm-key': document.getElementById('llmKeySectionWorkflow')
+    'llm-key': document.getElementById('llmKeySectionWorkflow'),
+    history: document.getElementById('historySectionWorkflow')
   };
 
   menuItems.forEach(item => {

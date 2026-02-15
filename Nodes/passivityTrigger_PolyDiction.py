@@ -25,7 +25,7 @@ except ImportError:
 
 # **Define the number of outputs and inputs**
 OutPutNum = 2
-InPutNum = 7  # limit, offset_start, closed, retry, save_path, offset_end, category_filter
+InPutNum = 8  # limit, offset_start, closed, retry, save_path, offset_end, category_filter, event_id
 # **Define the number of outputs and inputs**
 
 # **Initialize Outputs and Inputs arrays and assign names directly**
@@ -54,6 +54,7 @@ FunctionIntroduction = (
     '  - name: save_path\n    type: string\n    required: true\n    description: JSON文件保存路径，例如 "./output"\n'
     '  - name: offset_end\n    type: number\n    required: true\n    description: 结束偏移量，-1为无上限模式（遇尾页暂停），>0为边界模式（递增至该值后停止）\n'
     '  - name: category_filter\n    type: string\n    required: true\n    description: 类别过滤，"All"表示全部类别，或指定tag_id/tag slug/tag label\n'
+    '  - name: event_id\n    type: string\n    required: false\n    description: 事件ID（EventId），来自 Gamma Events API 的 event.id；为空/All 表示不过滤\n'
     'outputs:\n'
     '  - name: Save_Path\n    type: string\n    description: 保存的JSON文件完整路径\n'
     '  - name: DeBug\n    type: string\n    description: 调试信息，包含配置参数、抓取数量、处理状态等\n```\n'
@@ -121,6 +122,12 @@ Inputs[6]['name'] = 'category_filter'
 Inputs[6]['Isnecessary'] = True
 Inputs[6]['IsLabel'] = True
 Inputs[6]['Context'] = 'All'  # 类别/分区（tag_id 或 tag slug/label；All 表示不过滤）
+
+Inputs[7]['Kind'] = 'String'
+Inputs[7]['name'] = 'event_id'
+Inputs[7]['Isnecessary'] = False
+Inputs[7]['IsLabel'] = True
+Inputs[7]['Context'] = ''  # EventId（Gamma Events API 的 event.id）；空/All 表示不过滤
 
 Outputs[0]['Kind'] = 'String'
 Outputs[0]['name'] = 'Save_Path'
@@ -242,7 +249,35 @@ def _resolve_tag_id(category_filter: str, session: requests.Session, debug_lines
         debug_lines.append(f"tag_not_found: '{cf}' (available samples: {', '.join(sample_tags)})")
     return None
 
-def fetch_markets(limit: int, offset: int, closed: bool, retry: int, category_filter: str = "ALL", debug_lines: List[str] = None) -> List[Dict[str, Any]]:
+def _normalize_event_id(event_id: str) -> str:
+    s = (event_id or "").strip()
+    if not s or s.upper() == "ALL":
+        return ""
+    return s
+
+def _extract_event_id_from_market_stub(stub: Dict[str, Any]) -> str:
+    """
+    从 market stub 中尽可能提取 event_id。
+    兼容字段：
+    - event_id / eventId
+    - events: [{id: ...}, ...] 或 ["id", ...]
+    """
+    if not isinstance(stub, dict):
+        return ""
+    for k in ("event_id", "eventId", "eventID", "EventID"):
+        v = stub.get(k)
+        if v:
+            return str(v).strip()
+    evs = stub.get("events")
+    if isinstance(evs, list) and evs:
+        first = evs[0]
+        if isinstance(first, dict) and first.get("id"):
+            return str(first.get("id")).strip()
+        if isinstance(first, str):
+            return first.strip()
+    return ""
+
+def fetch_markets(limit: int, offset: int, closed: bool, retry: int, category_filter: str = "ALL", event_id: str = "", debug_lines: List[str] = None) -> List[Dict[str, Any]]:
     params = {
         "limit": limit,
         "offset": offset,
@@ -251,7 +286,39 @@ def fetch_markets(limit: int, offset: int, closed: bool, retry: int, category_fi
         "withClobTokenIds": "true",
         "withOutcomes": "true"
     }
-    
+
+    # ✅ 新增：按 EventID 过滤（Gamma Events API 的 event.id）
+    eid = _normalize_event_id(event_id)
+    if eid:
+        # 优先用 /events/{id}（官方定义：events contain their associated markets）
+        try:
+            ev = robust_get(f"{GAMMA}/events/{eid}", params=None, retry=max(1, retry), timeout=12)
+            markets = None
+            if isinstance(ev, dict):
+                if isinstance(ev.get("markets"), list):
+                    markets = ev.get("markets")
+                elif isinstance(ev.get("data"), dict) and isinstance(ev["data"].get("markets"), list):
+                    markets = ev["data"].get("markets")
+                elif isinstance(ev.get("event"), dict) and isinstance(ev["event"].get("markets"), list):
+                    markets = ev["event"].get("markets")
+            if markets is not None:
+                # closed 过滤（若字段存在）
+                if closed is False:
+                    markets = [m for m in markets if not bool((m or {}).get("closed", False))] if isinstance(markets, list) else markets
+                # 做一次与 /markets 一致的“分页切片”
+                page = markets[int(offset): int(offset) + int(limit)] if isinstance(markets, list) else []
+                if debug_lines is not None:
+                    debug_lines.append(f"event_markets_mode: event_id={eid}, total={len(markets) if isinstance(markets, list) else 'n/a'}, page={len(page)}")
+                return page
+        except Exception as e:
+            if debug_lines is not None:
+                debug_lines.append(f"event_markets_mode_fail: {type(e).__name__} -> fallback_to_markets_api")
+
+        # 兜底：在 /markets 查询侧尝试 event_id 过滤（若后端支持）
+        params["event_id"] = eid
+        if debug_lines is not None:
+            debug_lines.append(f"filter_applied: event_id={eid} (markets_api_fallback)")
+
     # ✅ 改：用 tag_id 在请求端过滤（更快、更符合官方）
     tag_id = _resolve_tag_id(category_filter, SESS, debug_lines=debug_lines)
     if tag_id is not None:
@@ -752,6 +819,10 @@ def run_node(node):
     _cat_filter_input = node['Inputs'][6]
     category_filter = str(_cat_filter_input.get('Context') or _cat_filter_input.get('Num') or 'All').strip()
 
+    # 读取 event_id（可选）
+    _event_input = node['Inputs'][7] if len(node.get('Inputs', [])) >= 8 else {}
+    event_id = str(_event_input.get('Context') or _event_input.get('Num') or '').strip()
+
     ensure_dir(save_path)
 
     # —— 取本次要处理的 offset（带状态续跑）——
@@ -765,14 +836,14 @@ def run_node(node):
             off = offset_end
 
     debug_lines: List[str] = []
-    debug_lines.append(f"config: limit={limit}, offset=[{off},{off}], offset_end={offset_end}, bounded_mode={bounded_mode}, closed={closed}, retry={retry}, category_filter={category_filter}")
+    debug_lines.append(f"config: limit={limit}, offset=[{off},{off}], offset_end={offset_end}, bounded_mode={bounded_mode}, closed={closed}, retry={retry}, category_filter={category_filter}, event_id={event_id}")
     debug_lines.append(f"save_path={save_path}")
 
     # 1) 抓取该页 /markets
     if bounded_mode and off >= offset_end:
         node['_state']['finished'] = True
         return Array
-    stubs_all: List[Dict[str, Any]] = fetch_markets(limit=limit, offset=off, closed=closed, retry=retry, category_filter=category_filter, debug_lines=debug_lines)
+    stubs_all: List[Dict[str, Any]] = fetch_markets(limit=limit, offset=off, closed=closed, retry=retry, category_filter=category_filter, event_id=event_id, debug_lines=debug_lines)
     markets_fetched = len(stubs_all)
     debug_lines.append(f"markets_fetched={markets_fetched}")
 
@@ -817,6 +888,7 @@ def run_node(node):
             "endDate": endDate,
             "yesToken": yes_token,
             "noToken": no_token,
+            "event_id": _extract_event_id_from_market_stub(stub),
         }
         records.append(rec)
     

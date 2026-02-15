@@ -1,0 +1,1563 @@
+import json
+import os
+import re
+import sqlite3
+import hashlib
+from datetime import datetime, timezone, timedelta
+from typing import Any, Dict, Iterable, List, Optional, Tuple
+
+# =========================
+# Node metadata
+# =========================
+OutPutNum = 2
+InPutNum = 16
+
+Outputs = [
+    {
+        'Num': None, 'Context': None, 'Boolean': False, 'Kind': None,
+        'Id': f'Output{i + 1}', 'name': f'OutPut{i + 1}', 'Link': 0
+    }
+    for i in range(OutPutNum)
+]
+
+Inputs = [
+    {
+        'Num': None, 'Context': None, 'Boolean': False, 'Kind': None,
+        'Id': f'Input{i + 1}', 'Isnecessary': True, 'name': f'Input{i + 1}',
+        'Link': 0, 'IsLabel': False
+    }
+    for i in range(InPutNum)
+]
+
+NodeKind = 'Normal'
+InputIsAdd = False
+OutputIsAdd = False
+Lable = [{'Id': 'Label1', 'Kind': 'None'}]
+
+Inputs[0]['Kind'] = 'String_FilePath'
+Inputs[0]['name'] = 'SavePath'
+
+Inputs[1]['Kind'] = 'String'
+Inputs[1]['name'] = 'SaveName'
+
+Inputs[2]['Kind'] = 'String'
+Inputs[2]['name'] = 'YesJson'
+
+Inputs[3]['Kind'] = 'String'
+Inputs[3]['name'] = 'NoJson'
+
+Inputs[4]['Kind'] = 'String'
+Inputs[4]['name'] = 'RealTimeJson'
+
+# 新增：强制由外部提供的批次时间与盘口字段（不再依赖 KV 兜底解析）
+Inputs[5]['Kind'] = 'String'
+Inputs[5]['name'] = 'NowTime'
+
+Inputs[6]['Kind'] = 'String'
+Inputs[6]['name'] = 'Yes_ask'
+
+Inputs[7]['Kind'] = 'String'
+Inputs[7]['name'] = 'Yes_bid'
+
+Inputs[8]['Kind'] = 'String'
+Inputs[8]['name'] = 'No_ask'
+
+Inputs[9]['Kind'] = 'String'
+Inputs[9]['name'] = 'No_bid'
+
+# 新增：Action（可直接写入 Action_Data；也可与 RealTimeJson.actions 同时使用）
+Inputs[10]['Kind'] = 'String'
+Inputs[10]['name'] = 'Action'
+
+# 新增：买入/卖出模式 & 份额数（写入 Action_Data）
+# 说明：
+# - YesMode / NoMode：建议传 BUY/SELL 或任意你自定义的模式字符串
+# - YesQty / NoQty：建议传数字字符串（此组件按 TEXT 写入 SQLite）
+Inputs[11]['Kind'] = 'String'
+Inputs[11]['name'] = 'YesMode'
+
+Inputs[12]['Kind'] = 'String'
+Inputs[12]['name'] = 'NoMode'
+
+Inputs[13]['Kind'] = 'String'
+Inputs[13]['name'] = 'YesQty'
+
+Inputs[14]['Kind'] = 'String'
+Inputs[14]['name'] = 'NoQty'
+
+# 新增：Symbol（用于按标的维度写入 & 去重）
+Inputs[15]['Kind'] = 'String'
+Inputs[15]['name'] = 'Symbol'
+
+# 可选输入（避免 UI/运行时强制要求）
+for _i in range(2, InPutNum):
+    Inputs[_i]['Isnecessary'] = False
+
+# outputs
+Outputs[0]['Kind'] = 'String'
+Outputs[0]['name'] = 'Result'
+
+Outputs[1]['Kind'] = 'String'
+Outputs[1]['name'] = 'Full_Path'
+
+FunctionIntroduction = (
+    '组件功能：将 Yes / No / 实时 的 JSON 输入解析为结构化记录，并写入 SQLite 的四张业务表：'
+    '`Yes_Data` / `No_Data` / `RealTime_Data` / `Action_Data`。\n\n'
+    '代码功能摘要：\n'
+    '- 输入分三路：YesJson / NoJson / RealTimeJson（支持 `{...}`、`[{...},{...}]`、多行 JSONL、多个 JSON 拼接；不再支持 KV 行兜底）\n'
+    '- 可选 Action 输入：写入 `Action_Data`（同样支持 JSON/JSONL/多段 JSON）\n'
+    '- 可选 YesMode/NoMode/YesQty/NoQty：写入 `Action_Data`（用于记录买入/卖出模式与份额数）\n'
+    '- 自动解析列：遇到 dict 记录时，用其 key 自动生成/扩展表列（SQLite `ALTER TABLE ADD COLUMN`）\n'
+    '- 按记录插入：每条记录插入 1 行；非 dict 记录会写入 `value_text` 列\n'
+    '- 每行附带 `saved_at_utc` 字段\n\n'
+    '参数：\n'
+    '```yaml\n'
+    'inputs:\n'
+    '  - name: SavePath\n'
+    '    type: string (folder)\n'
+    '    required: true\n'
+    '    description: SQLite 文件保存目录\n'
+    '  - name: SaveName\n'
+    '    type: string\n'
+    '    required: true\n'
+    '    description: SQLite 文件名（可不带扩展名，默认补 .db）\n'
+    '  - name: YesJson\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Yes 数据（JSON/多段 JSON/JSONL）\n'
+    '  - name: NoJson\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: No 数据（JSON/多段 JSON/JSONL）\n'
+    '  - name: RealTimeJson\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: 实时数据（JSON/多段 JSON/JSONL）\n'
+    '  - name: NowTime\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: 批次统一时间（优先级最高，用于写入 query_time / saved_at_utc）\n'
+    '  - name: Yes_ask\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Yes ask（写入 Yes_Data 的 ask）\n'
+    '  - name: Yes_bid\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Yes bid（写入 Yes_Data 的 bid）\n'
+    '  - name: No_ask\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: No ask（写入 No_Data 的 ask）\n'
+    '  - name: No_bid\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: No bid（写入 No_Data 的 bid）\n'
+    '  - name: Action\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Action 数据（写入 Action_Data；支持 JSON/多段 JSON/JSONL）\n'
+    '  - name: YesMode\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Yes 买入/卖出模式（写入 Action_Data）\n'
+    '  - name: NoMode\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: No 买入/卖出模式（写入 Action_Data）\n'
+    '  - name: YesQty\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: Yes 份额数/数量（写入 Action_Data）\n'
+    '  - name: NoQty\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: No 份额数/数量（写入 Action_Data）\n'
+    '  - name: Symbol\n'
+    '    type: string\n'
+    '    required: false\n'
+    '    description: 标的/代码（用于写入 symbol 列，并按 symbol 维度去重）\n'
+    'outputs:\n'
+    '  - name: Result\n'
+    '    type: string\n'
+    '    description: 保存摘要（每路写入/跳过/错误数）\n'
+    '  - name: Full_Path\n'
+    '    type: string\n'
+    '    description: 实际保存的 SQLite 文件完整路径\n'
+    '```\n'
+)
+
+
+# =========================
+# Column inference / name sanitize
+# =========================
+_SQLITE_RESERVED_COLS = {"id", "saved_at_utc"}
+
+# 表级更新时间：存到 __meta_cols 里，作为每张业务表的“伪列名”
+# - table_name = 业务表名（Yes_Data / No_Data / RealTime_Data / Action_Data）
+# - col_name   = "__table_updated_time"
+# - last_value = 本批次的 saved_at_utc（通常等于 unified_query_time）
+# - updated_at_utc = 写 meta 的系统时间（UTC）
+_META_TABLE_UPDATED_COL = "__table_updated_time"
+
+# 单列去重时忽略的“易变字段”（这些字段变化不触发写入）
+_DEDUPE_IGNORE_KEYS_LOWER = {
+    "ts_utc",
+    "ingested_at",
+    "nowtime",
+    "latency_ms",
+    "query_time_beijing",
+    "query_time",
+}
+
+# RealTime 拆行时要剔除的“时间/易变字段”（这些字段不入库）
+_RT_STRIP_KEYS_LOWER = {
+    "ts_utc",
+    "ingested_at",
+    "nowtime",
+    "latency_ms",
+    "query_time_beijing",
+    "query_time",
+    "saved_at_utc",
+}
+
+# 单行内容指纹的伪“列名”（存到 meta 表里，不会真的建到业务表）
+_RT_DEDUPE_FP_COL = "__rt_data_fingerprint"
+_ACT_DEDUPE_FP_COL = "__action_fingerprint"
+_ACT_BATCH_DEDUPE_FP_COL = "__action_batch_fingerprint"
+
+# RealTime：当这两个核心字段都不变时，整条实时记录不插入（直接沿用上一时间点）
+_RT_NO_UPDATE_IF_SAME_COLS = ("data_price", "data_market_cap_used")
+
+# Action 指纹去重时忽略的字段（这些字段变化不应触发写入）
+_ACTION_FP_IGNORE_KEYS_LOWER = {
+    # 时间/批次类
+    "query_time",
+    "query_time_beijing",
+    "ts_utc",
+    "nowtime",
+    "ingested_at",
+    "latency_ms",
+    "saved_at_utc",
+    # Action 的“定位/来源”类（内容相同则视为重复）
+    "rt_time",
+    "action_index",
+    "action_source",
+    "action_raw_json",
+    # 原始 JSON 备份列：不参与“动作是否变化”的判定（避免仅格式变化导致重复写入）
+    "originaljson",
+    # print 是日志/解释文本，可能包含 day_to_end 等易变行；不应触发“动作变化”
+    "print",
+}
+
+
+# Action 解析 action_raw_json 时，递归剔除的“时间/易变字段”（不入库也不参与指纹）
+_ACTION_STRIP_KEYS_LOWER = {
+    "ts_utc",
+    "timestamp",
+    "time",
+    "query_time",
+    "query_time_beijing",
+    "saved_at_utc",
+    "nowtime",
+    "ingested_at",
+    "latency_ms",
+}
+
+
+def _sanitize_col_name(name: Any) -> str:
+    """
+    把任意 key 转成 SQLite 安全列名：
+    - 仅保留 [A-Za-z0-9_]
+    - 其它字符替换为 _
+    - 不以数字开头
+    - 避免保留列名冲突
+    """
+    s = _safe_str(name).strip()
+    if not s:
+        s = "col"
+    s = re.sub(r"\s+", "_", s)
+    s = re.sub(r"[^A-Za-z0-9_]", "_", s)
+    s = re.sub(r"_+", "_", s).strip("_")
+    if not s:
+        s = "col"
+    if re.match(r"^\d", s):
+        s = "c_" + s
+    if s.lower() in _SQLITE_RESERVED_COLS:
+        s = s + "_v"
+    return s
+
+
+def _to_sqlite_value(v: Any) -> Any:
+    """
+    尽量把值转成 SQLite 可存储的标量：
+    - dict/list -> JSON 字符串
+    - bool -> 0/1
+    - number -> 原样
+    - 其它 -> str
+    """
+    if v is None:
+        return None
+    if isinstance(v, bool):
+        return 1 if v else 0
+    if isinstance(v, (int, float)):
+        return v
+    if isinstance(v, (dict, list)):
+        try:
+            return json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            return _safe_str(v)
+    return _safe_str(v)
+
+
+def _safe_str(x: Any) -> str:
+    try:
+        return "" if x is None else str(x)
+    except Exception:
+        return ""
+
+
+def _iter_json_from_text(text: str) -> Iterable[Any]:
+    """
+    从杂乱字符串中尽量提取 JSON 对象/数组：
+    - 支持 '{...}{...}' / '{...}\n{...}' / '[{...},{...}]' 等
+    - 会跳过中间无关字符
+    """
+    s = _safe_str(text)
+    if not s:
+        return
+
+    dec = json.JSONDecoder()
+    i, n = 0, len(s)
+    while i < n:
+        ch = s[i]
+        if ch.isspace():
+            i += 1
+            continue
+        if ch not in "{[":
+            i += 1
+            continue
+        try:
+            obj, j = dec.raw_decode(s, i)
+            yield obj
+            i = j
+        except Exception:
+            i += 1
+
+
+def _maybe_json_load(v: Any) -> Any:
+    """
+    如果 v 是形如 '{...}' / '[...]' 的字符串，尝试 json.loads；失败则返回原值。
+    """
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    if not s:
+        return v
+    if not ((s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]"))):
+        return v
+    try:
+        return json.loads(s)
+    except Exception:
+        return v
+
+
+def _try_parse_json_text(v: Any) -> Any:
+    """
+    若 v 是 JSON 文本则尽量解析；否则返回原值。
+    """
+    if not isinstance(v, str):
+        return v
+    s = v.strip()
+    if not s:
+        return v
+    if not ((s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]"))):
+        return v
+    try:
+        return json.loads(s)
+    except Exception:
+        return v
+
+
+def _strip_keys_recursive(obj: Any, strip_keys_lower: set) -> Any:
+    """
+    递归删除 dict 中指定 key（大小写不敏感）；list 会逐元素处理。
+    用于剔除 ts_utc 等时间字段，避免入库/触发去重。
+    """
+    if obj is None:
+        return None
+    if isinstance(obj, dict):
+        out: Dict[str, Any] = {}
+        for k, v in obj.items():
+            kl = _safe_str(k).strip().lower()
+            if kl in strip_keys_lower:
+                continue
+            out[_safe_str(k).strip()] = _strip_keys_recursive(v, strip_keys_lower)
+        return out
+    if isinstance(obj, list):
+        return [_strip_keys_recursive(x, strip_keys_lower) for x in obj]
+    return obj
+
+
+def _extract_data_as_dict(data_val: Any) -> Optional[Dict[str, Any]]:
+    """
+    RealTime 中常见的 data 形态：
+    - dict
+    - [ {..} ]  (单元素数组包了一层)
+    - str 形式的 JSON（dict 或 list）
+    目标：尽量抽出一个 dict，用于展开为列。
+    """
+    v = _maybe_json_load(data_val)
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, list) and len(v) == 1 and isinstance(v[0], dict):
+        return v[0]
+    return None
+
+
+def _extract_action_as_dict(action_val: Any) -> Optional[Dict[str, Any]]:
+    """
+    actions 元素常见形态：
+    - dict: {"pct":0.5,"side":"Y","type":"SETPOST"}
+    - str:  '{"pct":0.5,"side":"Y","type":"SETPOST"}'
+    - [ {..} ]: 单元素数组包一层
+    目标：尽量抽出一个 dict，用于展开为列（pct/side/type 等）。
+    """
+    v = _maybe_json_load(action_val)
+    if isinstance(v, dict):
+        return v
+    if isinstance(v, list) and len(v) == 1 and isinstance(v[0], dict):
+        return v[0]
+    return None
+
+
+def _json_text_or_none(v: Any) -> Optional[str]:
+    """
+    把 dict/list 转成 JSON 文本（用于备份原始结构）；否则返回 None。
+    """
+    if isinstance(v, (dict, list)):
+        try:
+            return json.dumps(v, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        except Exception:
+            return _safe_str(v)
+    return None
+
+
+def _extract_realtime_query_time(rt_raw: Any) -> Optional[str]:
+    """
+    从 RealTimeJson 的 JSON 内容中抽取 query_time（仅 JSON；不做 KV 兜底）。
+    - 优先取 dict 里的 query_time / query_time_beijing / ts_utc / NowTime（大小写不敏感）
+    """
+    if rt_raw is None or _safe_str(rt_raw).strip() == "":
+        return None
+
+    records, _ = _normalize_to_records(rt_raw)
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        lower_map = {(_safe_str(k).strip().lower()): k for k in r.keys()}
+        for cand in ("query_time", "query_time_beijing", "ts_utc", "nowtime"):
+            if cand in lower_map:
+                val = r.get(lower_map[cand])
+                sv = _safe_str(val).strip()
+                if sv:
+                    return sv
+    return None
+
+
+def _iso_utc_to_beijing_str(s: Optional[str]) -> Optional[str]:
+    """
+    把类似 2026-02-02T02:11:45Z / 2026-02-02T02:11:45+00:00 转成北京时间字符串：YYYY-MM-DD HH:MM:SS
+    解析失败则返回 None。
+    """
+    if not s:
+        return None
+    text = _safe_str(s).strip()
+    if not text:
+        return None
+    try:
+        # fromisoformat 不支持 'Z'
+        t = text.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(t)
+        if dt.tzinfo is None:
+            # 当作 UTC
+            dt = dt.replace(tzinfo=timezone.utc)
+        bj = dt.astimezone(timezone.utc).astimezone(timezone(timedelta(hours=8)))
+        return bj.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return None
+
+
+def _normalize_to_records(raw: Any) -> Tuple[List[Any], int]:
+    """
+    解析并归一化成“记录列表”：
+    - dict 作为 1 条记录
+    - list 作为多条记录（逐元素展开）
+    - text 支持 raw_decode 扫描多个 JSON
+    返回: (records, parse_error_count)
+    """
+    errors = 0
+    records: List[Any] = []
+
+    if raw is None:
+        return [], 0
+
+    if isinstance(raw, dict):
+        return [raw], 0
+
+    if isinstance(raw, list):
+        # 数组默认按多条记录处理
+        return list(raw), 0
+
+    text = _safe_str(raw).strip()
+    if not text:
+        return [], 0
+
+    # 1) 优先：整段就是标准 JSON
+    if (text.startswith("{") and text.endswith("}")) or (text.startswith("[") and text.endswith("]")):
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, list):
+                return list(obj), 0
+            return [obj], 0
+        except Exception:
+            pass
+
+    # 2) 扫描：多段 JSON 拼接
+    for obj in _iter_json_from_text(text):
+        if isinstance(obj, list):
+            records.extend(list(obj))
+        else:
+            records.append(obj)
+
+    if records:
+        return records, 0
+
+    # 3) 兜底：JSONL（逐行严格 json.loads）
+    for line in text.splitlines():
+        ln = line.strip()
+        if not ln:
+            continue
+        try:
+            obj = json.loads(ln)
+            if isinstance(obj, list):
+                records.extend(list(obj))
+            else:
+                records.append(obj)
+            continue
+        except Exception:
+            errors += 1
+
+    return records, errors
+
+
+def _ensure_db_and_table(conn: sqlite3.Connection):
+    cur = conn.cursor()
+    cur.execute("PRAGMA journal_mode=WAL;")
+    cur.execute("PRAGMA synchronous=NORMAL;")
+    cur.execute("PRAGMA busy_timeout=5000;")
+    # 统一元数据表（只保留这一张）：保存每张业务表每一列的 last_value + 更新时间
+    # - 允许按 symbol 做维度（symbol='' 表示表级/全局）
+    # - 旧版本可能存在 __meta_cols（无 symbol）或 __meta_cols_v2（有 symbol）
+    #   这里做一次迁移/合并，最终保证只剩 __meta_cols 一张表
+    def _table_exists(name: str) -> bool:
+        row = cur.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", (name,)
+        ).fetchone()
+        return row is not None
+
+    def _table_info(name: str) -> List[Tuple[Any, ...]]:
+        return cur.execute(f'PRAGMA table_info("{name}")').fetchall()
+
+    # 目标 schema：__meta_cols(table_name, symbol, col_name, last_value, updated_at_utc)
+    def _create_meta_cols(name: str):
+        cur.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS "{name}" (
+                table_name TEXT NOT NULL,
+                symbol TEXT NOT NULL DEFAULT '',
+                col_name TEXT NOT NULL,
+                last_value TEXT,
+                updated_at_utc TEXT,
+                PRIMARY KEY (table_name, symbol, col_name)
+            );
+            """
+        )
+
+    meta_exists = _table_exists("__meta_cols")
+    v2_exists = _table_exists("__meta_cols_v2")
+
+    # 若只有 v2，直接改名为 __meta_cols（最干净）
+    if (not meta_exists) and v2_exists:
+        try:
+            cur.execute('ALTER TABLE "__meta_cols_v2" RENAME TO "__meta_cols";')
+            v2_exists = False
+            meta_exists = True
+        except Exception:
+            # rename 失败就走 merge 逻辑
+            meta_exists = False
+
+    need_migrate = False
+    if meta_exists:
+        info = _table_info("__meta_cols")
+        cols_lower = [(_safe_str(r[1]).strip().lower()) for r in info]  # r[1]=name
+        pk_cols_lower = [(_safe_str(r[1]).strip().lower()) for r in info if int(r[5] or 0) > 0]  # r[5]=pk
+        # 旧表没有 symbol，或 symbol 不在主键 => 需要迁移到新 schema
+        if ("symbol" not in cols_lower) or ("symbol" not in pk_cols_lower):
+            need_migrate = True
+    else:
+        need_migrate = True
+
+    if need_migrate:
+        # 统一迁移到新表，再替换
+        _create_meta_cols("__meta_cols_new")
+        # 1) 先搬旧 __meta_cols（无 symbol）到新表，symbol 填 ''
+        if _table_exists("__meta_cols"):
+            try:
+                info = _table_info("__meta_cols")
+                cols_lower = [(_safe_str(r[1]).strip().lower()) for r in info]
+                if "symbol" in cols_lower:
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO "__meta_cols_new"(table_name, symbol, col_name, last_value, updated_at_utc)
+                        SELECT table_name, symbol, col_name, last_value, updated_at_utc FROM "__meta_cols";
+                        """
+                    )
+                else:
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO "__meta_cols_new"(table_name, symbol, col_name, last_value, updated_at_utc)
+                        SELECT table_name, '', col_name, last_value, updated_at_utc FROM "__meta_cols";
+                        """
+                    )
+            except Exception:
+                pass
+        # 2) 再合并 v2（有 symbol）
+        if _table_exists("__meta_cols_v2"):
+            try:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO "__meta_cols_new"(table_name, symbol, col_name, last_value, updated_at_utc)
+                    SELECT table_name, symbol, col_name, last_value, updated_at_utc FROM "__meta_cols_v2";
+                    """
+                )
+            except Exception:
+                pass
+
+        # 3) 替换旧表
+        try:
+            if _table_exists("__meta_cols"):
+                cur.execute('DROP TABLE "__meta_cols";')
+        except Exception:
+            pass
+        try:
+            if _table_exists("__meta_cols_v2"):
+                cur.execute('DROP TABLE "__meta_cols_v2";')
+        except Exception:
+            pass
+        try:
+            cur.execute('ALTER TABLE "__meta_cols_new" RENAME TO "__meta_cols";')
+        except Exception:
+            # 兜底：至少确保目标表存在
+            _create_meta_cols("__meta_cols")
+    else:
+        # 已是新 schema：确保表存在
+        _create_meta_cols("__meta_cols")
+        # 如果还残留 v2，就合并进来并删掉
+        if v2_exists:
+            try:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO "__meta_cols"(table_name, symbol, col_name, last_value, updated_at_utc)
+                    SELECT table_name, symbol, col_name, last_value, updated_at_utc FROM "__meta_cols_v2";
+                    """
+                )
+            except Exception:
+                pass
+            try:
+                cur.execute('DROP TABLE "__meta_cols_v2";')
+            except Exception:
+                pass
+
+    conn.commit()
+
+
+def _ensure_table(conn: sqlite3.Connection, table: str):
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS "{table}" (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            saved_at_utc TEXT NOT NULL
+        );
+        """
+    )
+    cur.execute(f'CREATE INDEX IF NOT EXISTS "idx_{table}_saved_at" ON "{table}"(saved_at_utc);')
+    conn.commit()
+
+
+def _get_existing_columns(conn: sqlite3.Connection, table: str) -> List[str]:
+    cur = conn.cursor()
+    rows = cur.execute(f'PRAGMA table_info("{table}")').fetchall()
+    # row: (cid, name, type, notnull, dflt_value, pk)
+    return [r[1] for r in rows]
+
+
+def _get_last_col_value(conn: sqlite3.Connection, table: str, col: str, symbol: str = "") -> Optional[str]:
+    """
+    获取某表某列的 last_value（用于单列去重比较）。
+    """
+    try:
+        cur = conn.cursor()
+        # 统一只读 __meta_cols（带 symbol 维度）
+        row = cur.execute(
+            'SELECT last_value FROM "__meta_cols" WHERE table_name = ? AND symbol = ? AND col_name = ? LIMIT 1',
+            (table, symbol or "", col),
+        ).fetchone()
+        # 兼容：若按 symbol 没命中，尝试回退到 symbol=''
+        if row is None and (symbol or "") != "":
+            row = cur.execute(
+                'SELECT last_value FROM "__meta_cols" WHERE table_name = ? AND symbol = ? AND col_name = ? LIMIT 1',
+                (table, "", col),
+            ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+
+
+def _set_last_col_value(conn: sqlite3.Connection, table: str, col: str, value: Optional[str], symbol: str = ""):
+    """
+    写入某表某列的 last_value（用于单列去重）。
+    """
+    try:
+        cur = conn.cursor()
+        # 统一只写 __meta_cols（带 symbol 维度）
+        cur.execute(
+            """
+            INSERT INTO "__meta_cols"(table_name, symbol, col_name, last_value, updated_at_utc)
+            VALUES(?, ?, ?, ?, ?)
+            ON CONFLICT(table_name, symbol, col_name) DO UPDATE SET
+                last_value=excluded.last_value,
+                updated_at_utc=excluded.updated_at_utc;
+            """,
+            (table, symbol or "", col, value, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    except Exception:
+        return
+
+
+def _stable_json_fingerprint(obj: Any) -> str:
+    """
+    对 dict 做稳定序列化，用于去重指纹（保证 key 顺序一致）。
+    """
+    if obj is None:
+        return ""
+    try:
+        return json.dumps(obj, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    except Exception:
+        return _safe_str(obj)
+
+
+def _infer_symbol_from_records(records: List[Any]) -> str:
+    """
+    尽量从记录中推断 symbol（用于按标的维度写入 & 去重）。
+    规则尽量保守：只取常见字段名，找到第一个非空字符串即返回。
+    """
+    # 尽量覆盖常见来源/命名（大小写不敏感）
+    cand_keys = (
+        "symbol",
+        "ticker",
+        "market",
+        "market_symbol",
+        "marketid",
+        "market_id",
+        "event",
+        "eventid",
+        "event_id",
+        "eventslug",
+        "event_slug",
+        "slug",
+        "contract",
+        "contractid",
+        "contract_id",
+        "token",
+        "tokenid",
+        "token_id",
+        "asset",
+        "assetid",
+        "asset_id",
+        "id",
+    )
+    for r in records:
+        if not isinstance(r, dict):
+            continue
+        lower_map = {(_safe_str(k).strip().lower()): k for k in r.keys()}
+        for ck in cand_keys:
+            if ck in lower_map:
+                v = r.get(lower_map[ck])
+                sv = _safe_str(v).strip()
+                if sv:
+                    return sv
+        # 尝试从 data 里找 symbol
+        if "data" in r:
+            d = _extract_data_as_dict(r.get("data"))
+            if isinstance(d, dict):
+                lower_map2 = {(_safe_str(k).strip().lower()): k for k in d.keys()}
+                for ck in cand_keys:
+                    if ck in lower_map2:
+                        v = d.get(lower_map2[ck])
+                        sv = _safe_str(v).strip()
+                        if sv:
+                            return sv
+    return ""
+
+
+def _ensure_columns(conn: sqlite3.Connection, table: str, col_names: List[str], existing_cols_cache: Dict[str, set]):
+    """
+    确保这些列存在；不存在就 ALTER TABLE ADD COLUMN。
+    SQLite 的 ALTER TABLE ADD COLUMN 不能加 IF NOT EXISTS（旧版本），所以用 cache/查表规避。
+    """
+    if table not in existing_cols_cache:
+        existing_cols_cache[table] = set(_get_existing_columns(conn, table))
+
+    existing = existing_cols_cache[table]
+    cur = conn.cursor()
+    changed = False
+    for c in col_names:
+        if c in existing:
+            continue
+        cur.execute(f'ALTER TABLE "{table}" ADD COLUMN "{c}" TEXT;')
+        existing.add(c)
+        changed = True
+    if changed:
+        conn.commit()
+
+
+def run_node(node):
+    save_path = node['Inputs'][0].get('Context')
+    save_name = node['Inputs'][1].get('Context')
+    yes_raw = node['Inputs'][2].get('Context')
+    no_raw = node['Inputs'][3].get('Context')
+    rt_raw = node['Inputs'][4].get('Context')
+    now_time = node['Inputs'][5].get('Context') if len(node.get('Inputs', [])) > 5 else None
+    yes_ask = node['Inputs'][6].get('Context') if len(node.get('Inputs', [])) > 6 else None
+    yes_bid = node['Inputs'][7].get('Context') if len(node.get('Inputs', [])) > 7 else None
+    no_ask = node['Inputs'][8].get('Context') if len(node.get('Inputs', [])) > 8 else None
+    no_bid = node['Inputs'][9].get('Context') if len(node.get('Inputs', [])) > 9 else None
+    action_raw = node['Inputs'][10].get('Context') if len(node.get('Inputs', [])) > 10 else None
+    yes_mode = node['Inputs'][11].get('Context') if len(node.get('Inputs', [])) > 11 else None
+    no_mode = node['Inputs'][12].get('Context') if len(node.get('Inputs', [])) > 12 else None
+    yes_qty = node['Inputs'][13].get('Context') if len(node.get('Inputs', [])) > 13 else None
+    no_qty = node['Inputs'][14].get('Context') if len(node.get('Inputs', [])) > 14 else None
+    symbol = node['Inputs'][15].get('Context') if len(node.get('Inputs', [])) > 15 else None
+
+    save_path = _safe_str(save_path).strip()
+    save_name = _safe_str(save_name).strip().replace("\n", "").replace("\r", "")
+    symbol_s = _safe_str(symbol).strip()
+
+    if not save_path:
+        Outputs[0]['Context'] = "Error: SavePath 不能为空"
+        Outputs[1]['Context'] = ""
+        return Outputs
+
+    if not save_name:
+        Outputs[0]['Context'] = "Error: SaveName 不能为空"
+        Outputs[1]['Context'] = ""
+        return Outputs
+
+    if not (save_name.lower().endswith(".db") or save_name.lower().endswith(".sqlite")):
+        save_name += ".db"
+
+    os.makedirs(save_path, exist_ok=True)
+    full_path = os.path.join(save_path, save_name)
+
+    try:
+        conn = sqlite3.connect(full_path, timeout=5.0)
+        try:
+            _ensure_db_and_table(conn)
+            tables = {
+                "Yes": "Yes_Data",
+                "No": "No_Data",
+                "RealTime": "RealTime_Data",
+                "Action": "Action_Data",
+            }
+            for t in tables.values():
+                _ensure_table(conn, t)
+
+            cur = conn.cursor()
+            existing_cols_cache: Dict[str, set] = {}
+            # 单列去重：缓存 (table, col) -> last_value，减少频繁查库
+            last_col_cache: Dict[Tuple[str, str, str], Optional[str]] = {}
+            yes_val = yes_raw
+            no_val = no_raw
+            rt_val = rt_raw
+
+            # 若未显式提供 symbol，则尽量从输入 JSON 推断（优先 RealTime，其次 Yes/No）
+            if not symbol_s:
+                try:
+                    rt_records, _pe = _normalize_to_records(rt_val)
+                    symbol_s = _infer_symbol_from_records(rt_records) or symbol_s
+                except Exception:
+                    pass
+            if not symbol_s:
+                try:
+                    y_records, _pe = _normalize_to_records(yes_val)
+                    symbol_s = _infer_symbol_from_records(y_records) or symbol_s
+                except Exception:
+                    pass
+            if not symbol_s:
+                try:
+                    n_records, _pe = _normalize_to_records(no_val)
+                    symbol_s = _infer_symbol_from_records(n_records) or symbol_s
+                except Exception:
+                    pass
+
+            # 统一批次时间：NowTime > RealTimeJson(JSON 内) > 当前 UTC
+            now_time_s = _safe_str(now_time).strip()
+            unified_query_time = now_time_s or _extract_realtime_query_time(rt_val) or datetime.now(timezone.utc).isoformat()
+            # 保存时间与 query_time 对齐（字段名仍为 saved_at_utc）
+            saved_at_utc = unified_query_time
+            unified_query_time_beijing = _iso_utc_to_beijing_str(unified_query_time)
+
+            def _save_one(source_label: str, raw_val: Any) -> Tuple[int, int, int]:
+                """
+                返回: (inserted, skipped, parse_err)
+                """
+                if raw_val is None or _safe_str(raw_val).strip() == "":
+                    return 0, 0, 0
+                table = tables[source_label]
+                records, parse_err = _normalize_to_records(raw_val)
+                valid_records = [r for r in records if r is not None]
+                inserted = 0
+                skipped = 0
+                # Action_Data：不按 symbol 维度写入/去重（表内也不需要 symbol 列）
+                is_action_table = source_label == "Action"
+                # RealTime_Data.data_json：直接存入“整段 RealTimeJson 原始输入”（不加工）
+                rt_raw_text: Optional[str] = None
+                if source_label == "RealTime":
+                    try:
+                        if isinstance(raw_val, str):
+                            rt_raw_text = raw_val
+                        elif isinstance(raw_val, (dict, list)):
+                            rt_raw_text = json.dumps(raw_val, ensure_ascii=False, separators=(",", ":"))
+                        else:
+                            rt_raw_text = _safe_str(raw_val)
+                    except Exception:
+                        rt_raw_text = _safe_str(raw_val)
+                    # 不做 strip，尽量保留原始输入文本（用户要求“无需加工”）
+                    rt_raw_text = _safe_str(rt_raw_text)
+
+                def _norm_cmp(sql_val: Any) -> Optional[str]:
+                    if sql_val is None:
+                        return None
+                    try:
+                        return str(sql_val)
+                    except Exception:
+                        return _safe_str(sql_val)
+
+                def _get_last_cached(col: str, sym: str = "") -> Optional[str]:
+                    key = (table, sym or "", col)
+                    if key not in last_col_cache:
+                        last_col_cache[key] = _get_last_col_value(conn, table, col, symbol=(sym or ""))
+                    return last_col_cache[key]
+
+                def _set_last_cached(col: str, val: Optional[str], sym: str = ""):
+                    _set_last_col_value(conn, table, col, val, symbol=(sym or ""))
+                    last_col_cache[(table, sym or "", col)] = val
+
+                def _pick_value_ci(d: Dict[str, Any], keys: Tuple[str, ...]) -> Any:
+                    """
+                    在 dict 中按大小写不敏感挑选第一个存在的 key 的值。
+                    """
+                    lower_map = {(_safe_str(k).strip().lower()): k for k in d.keys()}
+                    for kk in keys:
+                        k2 = kk.strip().lower()
+                        if k2 in lower_map:
+                            return d.get(lower_map[k2])
+                    return None
+
+                # RealTime：允许把 data 里的列表拆成多条记录
+                if source_label == "RealTime":
+                    expanded: List[Any] = []
+                    for r0 in valid_records:
+                        if not isinstance(r0, dict):
+                            expanded.append(r0)
+                            continue
+                        # 仅从 data 拆；data_json 在本组件语义中固定为“整段 RealTimeJson 原文”
+                        payload = None
+                        if "data" in r0:
+                            payload = _try_parse_json_text(r0.get("data"))
+
+                        if isinstance(payload, list) and payload and all(isinstance(x, dict) for x in payload):
+                            expanded.extend(payload)
+                        else:
+                            expanded.append(r0)
+                    valid_records = expanded
+
+                for r in valid_records:
+                    try:
+                        changed_meta: List[Tuple[str, Optional[str]]] = []
+                        value_text_cmp: Optional[str] = None
+                        if isinstance(r, dict):
+                            # RealTime：按“整行指纹”去重，并剔除时间字段后全量写入（每个 symbol 一条记录）
+                            if source_label == "RealTime":
+                                # 以记录自身 symbol 为准（列表拆行场景会带 symbol）
+                                row_symbol = _safe_str(r.get("symbol")).strip() or symbol_s or ""
+                                r["symbol"] = row_symbol
+
+                                # 剔除时间/易变字段（不入库）
+                                stripped: Dict[str, Any] = {}
+                                for k, v in r.items():
+                                    kl = _safe_str(k).strip().lower()
+                                    if kl in _RT_STRIP_KEYS_LOWER:
+                                        continue
+                                    stripped[_safe_str(k).strip()] = v
+                                # 保底：至少保留 symbol
+                                if "symbol" not in stripped:
+                                    stripped["symbol"] = row_symbol
+                                # 按需求：data_json 直接保存整段 RealTimeJson 原文（每条行都带一份）
+                                if rt_raw_text is not None and rt_raw_text != "":
+                                    stripped["data_json"] = rt_raw_text
+
+                                # 指纹去重（按 symbol 维度）
+                                # 注意：data_json 是“原始整段输入”，不参与去重/Meta（否则包含时间字段会导致重复写入）
+                                fp_payload = {
+                                    kk: _to_sqlite_value(vv)
+                                    for kk, vv in stripped.items()
+                                    if _safe_str(kk).strip().lower() != "data_json"
+                                }
+                                # 为了 meta 表更易读：指纹不再保存整段 JSON，而是保存短 hash
+                                # （仍然基于稳定序列化，保证同内容同指纹）
+                                fp_json = _stable_json_fingerprint(fp_payload)
+                                fp = hashlib.sha1(_safe_str(fp_json).encode("utf-8", errors="ignore")).hexdigest()[:16]
+                                if fp and fp == (_get_last_cached(_RT_DEDUPE_FP_COL, row_symbol) or ""):
+                                    # 即使跳过，也记录本 symbol 最近一次处理时间
+                                    try:
+                                        # 表级刷新时间：统一写到 symbol=''，便于一眼查看每条边最新刷新时间
+                                        _set_last_cached(_META_TABLE_UPDATED_COL, _safe_str(saved_at_utc).strip() or None, "")
+                                    except Exception:
+                                        pass
+                                    # 需求：data_json 原文直接写入 __meta_cols（表级 symbol=''），即使跳过也更新
+                                    try:
+                                        if rt_raw_text is not None and rt_raw_text != "":
+                                            _set_last_cached("data_json", rt_raw_text, "")
+                                    except Exception:
+                                        pass
+                                    skipped += 1
+                                    continue
+
+                                # 全量写入（非时间字段）
+                                seen_cols = set()
+                                row_cols: List[str] = []
+                                row_vals: List[Any] = []
+                                for k, v in stripped.items():
+                                    base = _sanitize_col_name(k)
+                                    col = base
+                                    if col in seen_cols:
+                                        suffix = hashlib.sha1(_safe_str(k).encode("utf-8", errors="ignore")).hexdigest()[:8]
+                                        col = f"{base}_{suffix}"
+                                    seen_cols.add(col)
+                                    row_cols.append(col)
+                                    row_vals.append(_to_sqlite_value(v))
+
+                                _ensure_columns(conn, table, row_cols, existing_cols_cache)
+                                cols = ["saved_at_utc"] + row_cols
+                                vals = [saved_at_utc] + row_vals
+
+                                placeholders = ",".join(["?"] * len(cols))
+                                col_sql = ",".join([f'"{c}"' for c in cols])
+                                cur.execute(f'INSERT INTO "{table}"({col_sql}) VALUES({placeholders})', vals)
+                                inserted += 1
+                                if fp:
+                                    _set_last_cached(_RT_DEDUPE_FP_COL, fp, row_symbol)
+                                # 需求：data_json 原文直接写入 __meta_cols（表级 symbol=''）
+                                try:
+                                    if rt_raw_text is not None and rt_raw_text != "":
+                                        _set_last_cached("data_json", rt_raw_text, "")
+                                except Exception:
+                                    pass
+                                # 写入 RealTime 的“二级分类 meta”（按 symbol 细分到 price/market_cap_musd/...）
+                                # 让 __meta_cols 呈现：table_name + symbol + col_name(指标名) + last_value
+                                try:
+                                    for mk, mv in fp_payload.items():
+                                        mkl = _safe_str(mk).strip().lower()
+                                        if mkl in {"symbol", "data_json"}:
+                                            continue
+                                        meta_col = _sanitize_col_name(mk)
+                                        _set_last_cached(meta_col, _norm_cmp(mv), row_symbol)
+                                except Exception:
+                                    pass
+                                try:
+                                    # 表级刷新时间：统一写到 symbol=''，便于一眼查看每条边最新刷新时间
+                                    _set_last_cached(_META_TABLE_UPDATED_COL, _safe_str(saved_at_utc).strip() or None, "")
+                                except Exception:
+                                    pass
+                                continue
+
+                            # 非 RealTime：注入 symbol（用于写入 & 去重）
+                            # 重要：即使推断不到 symbol，也强制写入 symbol 列（至少让表结构包含 symbol，便于后续排查/补写）
+                            if not is_action_table:
+                                r["symbol"] = symbol_s or ""
+                            else:
+                                # Action_Data：即使上游携带 symbol，也不写入表（避免产生 symbol 列）
+                                try:
+                                    for _k in list(r.keys()):
+                                        if _safe_str(_k).strip().lower() == "symbol":
+                                            del r[_k]
+                                except Exception:
+                                    pass
+
+                            # 注入统一时间
+                            # 强制统一三表的 query_time：以 RealTimeJson 的时间为准
+                            if unified_query_time:
+                                r["query_time"] = unified_query_time
+                            if unified_query_time_beijing:
+                                r["query_time_beijing"] = unified_query_time_beijing
+
+                            # 注入盘口（由新增 inputs 提供，优先级最高）
+                            if source_label == "Yes":
+                                ya = _safe_str(yes_ask).strip()
+                                yb = _safe_str(yes_bid).strip()
+                                if ya:
+                                    r["ask"] = ya
+                                if yb:
+                                    r["bid"] = yb
+                            elif source_label == "No":
+                                na = _safe_str(no_ask).strip()
+                                nb = _safe_str(no_bid).strip()
+                                if na:
+                                    r["ask"] = na
+                                if nb:
+                                    r["bid"] = nb
+
+                            # RealTime: actions 单独拆到 Action_Data；此处避免把整段 actions 列表写入 RealTime_Data
+                            if source_label == "RealTime" and "actions" in r:
+                                raw_actions = r.get("actions")
+                                actions_json = _json_text_or_none(_maybe_json_load(raw_actions))
+                                if actions_json:
+                                    r["actions_json"] = actions_json
+                                try:
+                                    del r["actions"]
+                                except Exception:
+                                    pass
+
+                            # RealTime: 解析并展开 data -> data_<key> 列
+                            if source_label == "RealTime" and "data" in r:
+                                raw_data = r.get("data")
+                                # 备份原始 data（若是结构化）
+                                data_json = _json_text_or_none(_maybe_json_load(raw_data))
+                                if data_json:
+                                    r["data_json"] = data_json
+
+                                data_dict = _extract_data_as_dict(raw_data)
+                                if data_dict is not None:
+                                    for dk, dv in data_dict.items():
+                                        # 用前缀避免和顶层字段冲突
+                                        r[f"data_{_safe_str(dk).strip()}"] = dv
+                                    # 原始 data 不再以单列写入（避免重复和大字段）
+                                    try:
+                                        del r["data"]
+                                    except Exception:
+                                        pass
+
+                            # RealTime 的“拆行 + 去时间字段 + 整行指纹去重”已在上方专用分支处理
+
+                            # RealTime 额外去重：仅关注“核心实时数据”（data_* / data_json），忽略 query_time* 等
+                            if source_label == "RealTime":
+                                fp_payload: Dict[str, Any] = {}
+                                for k, v in r.items():
+                                    ks = _safe_str(k)
+                                    if ks.startswith("data_"):
+                                        fp_payload[ks] = _to_sqlite_value(v)
+                                if not fp_payload and "data_json" in r:
+                                    fp_payload["data_json"] = _safe_str(r.get("data_json"))
+                                # 若 data 不是可展开结构，也纳入指纹（避免 fp 为空导致误判）
+                                if not fp_payload and "data" in r:
+                                    fp_payload["data"] = _to_sqlite_value(r.get("data"))
+                                # 保底：至少把 symbol 放进去，避免不同 symbol 共用一个 fp
+                                if symbol_s:
+                                    fp_payload["symbol"] = symbol_s
+                                fp = _stable_json_fingerprint(fp_payload)
+                                if fp and fp == (_get_last_cached(_RT_DEDUPE_FP_COL, symbol_s or "") or ""):
+                                    skipped += 1
+                                    continue
+                                if fp:
+                                    changed_meta.append((_RT_DEDUPE_FP_COL, fp))
+
+                            # Action 额外去重：忽略时间/索引/来源，只要“动作内容”不变就不插入
+                            if source_label == "Action":
+                                # 如果 action_raw_json 是一个包含 actions/print 的 JSON，把它拆成两列
+                                # - actions: list/dict（会转成 JSON 存 TEXT）
+                                # - print : 可能是 list[str]（按行拼接成可读 TEXT）
+                                try:
+                                    raw_txt = _safe_str(r.get("action_raw_json")).strip()
+                                    if raw_txt:
+                                        # 备份原始 JSON（用户需要的列名：OriginalJson）
+                                        if "OriginalJson" not in r:
+                                            r["OriginalJson"] = raw_txt
+                                        parsed = _try_parse_json_text(raw_txt)
+                                        parsed = _strip_keys_recursive(parsed, _ACTION_STRIP_KEYS_LOWER)
+                                        if isinstance(parsed, dict):
+                                            lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
+                                            if "actions" in lower_map:
+                                                r["actions"] = parsed.get(lower_map["actions"])
+                                            if "print" in lower_map:
+                                                r["print"] = parsed.get(lower_map["print"])
+                                        elif isinstance(parsed, list):
+                                            # 若 raw_json 直接就是 actions 列表
+                                            r["actions"] = parsed
+                                except Exception:
+                                    pass
+
+                                # 规范化 print：list[str] -> 多行文本；其它结构 -> JSON 文本；标量 -> str
+                                try:
+                                    if "print" in r:
+                                        pv = r.get("print")
+                                        if isinstance(pv, list) and all(isinstance(x, str) for x in pv):
+                                            r["print"] = "\n".join(pv)
+                                        elif isinstance(pv, (dict, list)):
+                                            r["print"] = json.dumps(
+                                                pv, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+                                            )
+                                        else:
+                                            r["print"] = _safe_str(pv)
+                                except Exception:
+                                    pass
+
+                                fp_payload: Dict[str, Any] = {}
+                                for k, v in r.items():
+                                    kl = _safe_str(k).strip().lower()
+                                    if kl in _ACTION_FP_IGNORE_KEYS_LOWER:
+                                        continue
+                                    # 也跳过 query_time*（即便大小写不同）
+                                    if kl in _DEDUPE_IGNORE_KEYS_LOWER:
+                                        continue
+                                    fp_payload[_safe_str(k).strip()] = _to_sqlite_value(v)
+                                fp = _stable_json_fingerprint(fp_payload)
+                                if fp and fp == (_get_last_cached(_ACT_DEDUPE_FP_COL, "" if is_action_table else (symbol_s or "")) or ""):
+                                    skipped += 1
+                                    continue
+                                if fp:
+                                    changed_meta.append((_ACT_DEDUPE_FP_COL, fp))
+
+                            # 单列去重：只写“发生变化”的非易变列；易变列不参与触发判断
+                            seen_cols = set()
+                            changed_cols: List[str] = []
+                            changed_vals: List[Any] = []
+                            volatile_cols: List[str] = []
+                            volatile_vals: List[Any] = []
+
+                            for k, v in r.items():
+                                base = _sanitize_col_name(k)
+                                col = base
+                                if col in seen_cols:
+                                    # 同一条记录里列名冲突时加短 hash（仅用于列名去重）
+                                    suffix = hashlib.sha1(_safe_str(k).encode("utf-8", errors="ignore")).hexdigest()[:8]
+                                    col = f"{base}_{suffix}"
+                                seen_cols.add(col)
+
+                                sql_val = _to_sqlite_value(v)
+                                kl = _safe_str(k).strip().lower()
+                                # Action_Data：像 print/originaljson/action_raw_json 这类字段只用于展示/排查，
+                                # 即使变化也不应触发插入新行（否则 day_to_end 等日志变化会导致重复写入）
+                                is_volatile = (kl in _DEDUPE_IGNORE_KEYS_LOWER) or (is_action_table and kl in _ACTION_FP_IGNORE_KEYS_LOWER)
+                                if is_volatile:
+                                    volatile_cols.append(col)
+                                    volatile_vals.append(sql_val)
+                                    continue
+
+                                cur_v = _norm_cmp(sql_val)
+                                # Action_Data：不分 symbol
+                                last_v = _get_last_cached(col, "" if is_action_table else (symbol_s or ""))
+                                if cur_v == last_v:
+                                    continue
+                                changed_cols.append(col)
+                                changed_vals.append(sql_val)
+                                changed_meta.append((col, cur_v))
+
+                            # 没有任何“非易变列”的变化 => 整行跳过
+                            if not changed_cols:
+                                skipped += 1
+                                continue
+
+                            row_cols = changed_cols + volatile_cols
+                            row_vals = changed_vals + volatile_vals
+                            _ensure_columns(conn, table, row_cols, existing_cols_cache)
+
+                            cols = ["saved_at_utc"] + row_cols
+                            vals = [saved_at_utc] + row_vals
+                        else:
+                            # 非 dict：落到 value_text（单列去重）
+                            sql_val = _to_sqlite_value(r)
+                            value_text_cmp = _norm_cmp(sql_val)
+                            if value_text_cmp == _get_last_cached("value_text", "" if is_action_table else (symbol_s or "")):
+                                skipped += 1
+                                continue
+
+                            # 非 dict：落到 value_text
+                            need_cols = ["value_text"]
+                            if is_action_table:
+                                _ensure_columns(conn, table, need_cols, existing_cols_cache)
+                                cols = ["saved_at_utc", "value_text"]
+                                vals = [saved_at_utc, sql_val]
+                            else:
+                                # 同样强制带 symbol 列（可能为空字符串）
+                                need_cols.append("symbol")
+                                _ensure_columns(conn, table, need_cols, existing_cols_cache)
+                                cols = ["saved_at_utc", "value_text", "symbol"]
+                                vals = [saved_at_utc, sql_val, symbol_s or ""]
+
+                        placeholders = ",".join(["?"] * len(cols))
+                        col_sql = ",".join([f'"{c}"' for c in cols])
+                        cur.execute(f'INSERT INTO "{table}"({col_sql}) VALUES({placeholders})', vals)
+                        inserted += 1
+                        if isinstance(r, dict):
+                            # Action_Data：不写 symbol，也不按 symbol 做 meta 去重
+                            row_sym = "" if is_action_table else (_safe_str(r.get("symbol")).strip() or symbol_s or "")
+                            for c, vv in changed_meta:
+                                _set_last_cached(c, vv, row_sym)
+                        else:
+                            _set_last_cached("value_text", value_text_cmp, "" if is_action_table else (symbol_s or ""))
+                    except Exception:
+                        parse_err += 1
+                        skipped += 1
+                        continue
+
+                # 表级更新时间：只要这一“路”有输入，就记录一次最新批次时间
+                # 目的：即使本批次全 Skipped，也能在 __meta_cols 里看到该表最近一次处理时间
+                try:
+                    _set_last_cached(
+                        _META_TABLE_UPDATED_COL,
+                        _safe_str(saved_at_utc).strip() or None,
+                        # 统一写到 symbol=''（表级），避免 meta 表按 symbol 膨胀
+                        "",
+                    )
+                except Exception:
+                    pass
+
+                return inserted, skipped, parse_err
+
+            y_ins, y_skip, y_err = _save_one("Yes", yes_val)
+            n_ins, n_skip, n_err = _save_one("No", no_val)
+            r_ins, r_skip, r_err = _save_one("RealTime", rt_val)
+            # Action_Data：收集两路 action 记录后复用 _save_one("Action", ...)
+            action_records: List[Any] = []
+            action_parse_err = 0
+
+            # 1) RealTimeJson.actions
+            if rt_val is not None and _safe_str(rt_val).strip() != "":
+                rt_records, pe = _normalize_to_records(rt_val)
+                action_parse_err += pe
+                for rt in [x for x in rt_records if x is not None]:
+                    if not isinstance(rt, dict):
+                        continue
+                    actions = rt.get("actions")
+                    if not isinstance(actions, list):
+                        continue
+                    rt_time = _safe_str(rt.get("query_time")).strip() or unified_query_time
+                    for idx, act in enumerate(actions):
+                        # act 可能是 dict，也可能是 JSON 字符串；尽量解析成 dict 以拆列保存（pct/side/type）
+                        act_dict = _extract_action_as_dict(act)
+                        if act_dict is not None:
+                            rec = dict(act_dict)
+                            rec["action_index"] = idx
+                            rec["action_source"] = "RealTimeJson.actions"
+                            rec["rt_time"] = rt_time
+                            # 备份原始 action（便于排查）
+                            raw_json = _json_text_or_none(_maybe_json_load(act))
+                            if raw_json:
+                                rec["action_raw_json"] = raw_json
+                            action_records.append(rec)
+                        else:
+                            action_records.append(
+                                {
+                                    "action_index": idx,
+                                    "action_source": "RealTimeJson.actions",
+                                    "rt_time": rt_time,
+                                    "action_value": act,
+                                }
+                            )
+
+            # 2) Action input
+            if action_raw is not None and _safe_str(action_raw).strip() != "":
+                a_records, pe = _normalize_to_records(action_raw)
+                action_parse_err += pe
+                for act in [x for x in a_records if x is not None]:
+                    act_dict = _extract_action_as_dict(act)
+                    if act_dict is not None:
+                        rec = dict(act_dict)
+                        rec["action_source"] = "ActionInput"
+                        raw_json = _json_text_or_none(_maybe_json_load(act))
+                        if raw_json:
+                            rec["action_raw_json"] = raw_json
+                        action_records.append(rec)
+                    else:
+                        action_records.append({"action_source": "ActionInput", "action_value": act})
+
+            # 3) YesMode/NoMode/YesQty/NoQty inputs -> 写入 Action_Data
+            # - 任意字段非空即写入 1 条记录（列名与 Input 名保持一致，便于直接查表）
+            ym = _safe_str(yes_mode).strip()
+            nm = _safe_str(no_mode).strip()
+            yq = _safe_str(yes_qty).strip()
+            nq = _safe_str(no_qty).strip()
+            if ym or nm or yq or nq:
+                action_records.append(
+                    {
+                        "action_source": "ModeQtyInputs",
+                        "rt_time": unified_query_time,
+                        "YesMode": ym or None,
+                        "NoMode": nm or None,
+                        "YesQty": yq or None,
+                        "NoQty": nq or None,
+                    }
+                )
+
+            # 4) 过滤“空动作”：
+            # - 解析 action_raw_json 得到 actions/print
+            # - 若 actions 为空且 print 为空（且无其它有效字段）=> 直接不写入（不插入新行）
+            def _action_has_meaningful_payload(rec: Any) -> bool:
+                if rec is None:
+                    return False
+                if not isinstance(rec, dict):
+                    return _safe_str(rec).strip() != ""
+
+                tmp = dict(rec)
+                try:
+                    raw_txt = _safe_str(tmp.get("action_raw_json")).strip()
+                    if raw_txt:
+                        parsed = _try_parse_json_text(raw_txt)
+                        parsed = _strip_keys_recursive(parsed, _ACTION_STRIP_KEYS_LOWER)
+                        if isinstance(parsed, dict):
+                            lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
+                            if "actions" in lower_map and "actions" not in tmp:
+                                tmp["actions"] = parsed.get(lower_map["actions"])
+                            if "print" in lower_map and "print" not in tmp:
+                                tmp["print"] = parsed.get(lower_map["print"])
+                        elif isinstance(parsed, list):
+                            if "actions" not in tmp:
+                                tmp["actions"] = parsed
+                except Exception:
+                    pass
+
+                # 判定有效字段（排除元字段/易变字段）
+                ignore_keys = {
+                    "action_source",
+                    "rt_time",
+                    "action_index",
+                    "action_raw_json",
+                    "originaljson",
+                    "wake_reason",
+                    "symbol",
+                    "saved_at_utc",
+                    "query_time",
+                    "query_time_beijing",
+                    "ts_utc",
+                    "nowtime",
+                    "ingested_at",
+                    "latency_ms",
+                    # print 不作为“动作是否存在/是否变化”的依据
+                    "print",
+                }
+
+                def _non_empty(v: Any) -> bool:
+                    if v is None:
+                        return False
+                    if isinstance(v, str):
+                        return v.strip() != ""
+                    if isinstance(v, (list, dict)):
+                        return len(v) > 0
+                    return True
+
+                src = _safe_str(tmp.get("action_source")).strip()
+
+                # ModeQtyInputs：允许无 actions，只要模式/数量有值就算有效
+                if src == "ModeQtyInputs":
+                    for kk in ("YesMode", "NoMode", "YesQty", "NoQty"):
+                        if _non_empty(tmp.get(kk)):
+                            return True
+                    return False
+
+                # 其它来源：actions 为空就视为“无动作”，不写入（即使 print 有内容也不写）
+                actions_v = tmp.get("actions")
+                if isinstance(actions_v, (list, dict)):
+                    if len(actions_v) > 0:
+                        return True
+                    # 显式 actions=[] / {} => 直接判定无动作
+                    return False
+
+                # 若没有 actions 字段，但有 action_value（例如 actions 元素不是 dict）也算有效
+                action_value_v = tmp.get("action_value")
+                if _non_empty(action_value_v):
+                    return True
+
+                # 再检查是否有其它非空字段（例如 pct/side/type 等）
+                for k, v in tmp.items():
+                    kl = _safe_str(k).strip().lower()
+                    if kl in ignore_keys:
+                        continue
+                    if _non_empty(v):
+                        return True
+                return False
+
+            if action_records:
+                action_records = [r for r in action_records if _action_has_meaningful_payload(r)]
+
+            if action_records:
+                # Action：整批去重（与上一时间点相同则完全不写入）
+                def _action_batch_fingerprint(recs: List[Any]) -> str:
+                    payloads: List[Any] = []
+                    for rec in recs:
+                        if isinstance(rec, dict):
+                            fp_payload: Dict[str, Any] = {}
+                            for k, v in rec.items():
+                                kl = _safe_str(k).strip().lower()
+                                if kl in _ACTION_FP_IGNORE_KEYS_LOWER:
+                                    continue
+                                if kl in _DEDUPE_IGNORE_KEYS_LOWER:
+                                    continue
+                                fp_payload[_safe_str(k).strip()] = _to_sqlite_value(v)
+                            payloads.append(fp_payload)
+                        else:
+                            payloads.append(_to_sqlite_value(rec))
+                    return _stable_json_fingerprint(payloads)
+
+                batch_fp = _action_batch_fingerprint(action_records)
+                # Action_Data：不按 symbol 维度去重（永久使用空 symbol）
+                last_batch_fp = _get_last_col_value(conn, tables["Action"], _ACT_BATCH_DEDUPE_FP_COL, symbol="")
+                if batch_fp and (last_batch_fp or "") == batch_fp:
+                    a_ins, a_skip, a_err = 0, len(action_records), action_parse_err
+                else:
+                    a_ins, a_skip, a_err = _save_one("Action", action_records)
+                    a_err += action_parse_err
+                    # 仅在“确实尝试处理了这批 action”后更新批次指纹
+                    if batch_fp:
+                        _set_last_col_value(conn, tables["Action"], _ACT_BATCH_DEDUPE_FP_COL, batch_fp, symbol="")
+            else:
+                a_ins, a_skip, a_err = 0, 0, action_parse_err
+
+            conn.commit()
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+        result_text = (
+            f"Saved to SQLite: {full_path}\n"
+            f"Tables:\n"
+            f"  - Yes  -> Yes_Data (Inserted={y_ins}, Skipped={y_skip}, Errors={y_err})\n"
+            f"  - No   -> No_Data  (Inserted={n_ins}, Skipped={n_skip}, Errors={n_err})\n"
+            f"  - RT   -> RealTime_Data (Inserted={r_ins}, Skipped={r_skip}, Errors={r_err})\n"
+            f"  - ACT  -> Action_Data (Inserted={a_ins}, Skipped={a_skip}, Errors={a_err})\n"
+        )
+        Outputs[0]['Context'] = result_text
+        Outputs[1]['Context'] = full_path
+        return Outputs
+
+    except Exception as e:
+        Outputs[0]['Context'] = f"Error: 写入 SQLite 失败: {e}\nDB: {full_path}"
+        Outputs[1]['Context'] = full_path
+        return Outputs
+
+

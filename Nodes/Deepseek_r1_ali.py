@@ -64,7 +64,6 @@ def run_node(node):
     for i in range(len(node['Outputs'])):
         Outputs.append(node['Outputs'][i])
     messages = node["messages"]
-    print('Test 1测试', node,'/n测试/n',messages)
     # Initialize the OpenAI client with DeepSeek API
     api_key = get_llm_api_key()
     client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")

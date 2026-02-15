@@ -1468,6 +1468,14 @@ def browse_directory():
 def add_history():
     data = request.json
     project_name = request.args.get('ProjectName')
+
+    # 兼容前端开关：RecordHistory=0 时不落盘
+    try:
+        rh = request.args.get('RecordHistory')
+        if rh is not None and str(rh).strip().lower() in ('0', 'false', 'no', 'off', 'disabled', 'disable'):
+            return jsonify({'message': 'History recording disabled'}), 200
+    except Exception:
+        pass
     
     if not project_name:
         return jsonify({'error': 'ProjectName is required'}), 400
@@ -1485,14 +1493,42 @@ def add_history():
     else:
         json_data = []
 
-    # 将数据添加到现有的最后一个数组中
+    # 保护：截断超长字符串，避免单条记录撑爆文件
+    def _trunc(obj, max_chars: int = 20000, _depth: int = 0):
+        if _depth > 6:
+            return obj
+        try:
+            if isinstance(obj, str):
+                if max_chars and len(obj) > max_chars:
+                    return obj[:max_chars] + f"\n...[truncated {len(obj) - max_chars} chars]"
+                return obj
+            if isinstance(obj, list):
+                return [_trunc(x, max_chars=max_chars, _depth=_depth + 1) for x in obj]
+            if isinstance(obj, dict):
+                return {k: _trunc(v, max_chars=max_chars, _depth=_depth + 1) for k, v in obj.items()}
+        except Exception:
+            return obj
+        return obj
+    if isinstance(data, dict):
+        data = _trunc(data)
+
+    # 将数据添加到现有的最后一个数组中（并做裁剪）
     if not json_data or not isinstance(json_data[-1], list):
         json_data.append([])
-
     json_data[-1].append(data)
+    try:
+        if isinstance(json_data[-1], list) and len(json_data[-1]) > 500:
+            json_data[-1] = json_data[-1][-500:]
+    except Exception:
+        pass
+    try:
+        if isinstance(json_data, list) and len(json_data) > 30:
+            json_data = json_data[-30:]
+    except Exception:
+        pass
 
     with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(json_data, f, ensure_ascii=False, indent=2)
+        json.dump(json_data, f, ensure_ascii=False, separators=(',', ':'))
 
     return jsonify({'message': 'Data added successfully'}), 200
 def is_process_running(script_name):

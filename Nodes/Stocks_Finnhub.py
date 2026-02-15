@@ -1,12 +1,16 @@
 import json
 import logging
 import os
+import random
 import re
+import threading
 import time
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # **Function definition**
 
@@ -66,11 +70,114 @@ _LOGGER = logging.getLogger("Stocks_Finnhub_Node")
 if not _LOGGER.handlers:
     logging.basicConfig(level=logging.INFO)
 
-_SESS = requests.Session()
-_SESS.headers.update({
+_BASE_HEADERS = {
     "User-Agent": "pm-node/1.0",
     "Accept": "application/json",
-})
+}
+
+# Make connection pooling + retries more robust under concurrent load / flaky networks.
+_RETRY = Retry(
+    total=0,  # we do our own retry loop to also cover JSON parsing and custom backoff
+    connect=0,
+    read=0,
+    status=0,
+    redirect=0,
+    backoff_factor=0,
+    raise_on_status=False,
+)
+_THREAD_LOCAL = threading.local()
+
+# Global rate-limiter across all threads (per-process).
+_RATE_LOCK = threading.Lock()
+_NEXT_ALLOWED_TS = 0.0
+
+def _get_sess() -> requests.Session:
+    """Use one Session per thread to avoid concurrency pitfalls."""
+    sess = getattr(_THREAD_LOCAL, "sess", None)
+    if sess is None:
+        sess = requests.Session()
+        sess.headers.update(_BASE_HEADERS)
+        adapter = HTTPAdapter(max_retries=_RETRY, pool_connections=10, pool_maxsize=10)
+        sess.mount("https://", adapter)
+        sess.mount("http://", adapter)
+        _THREAD_LOCAL.sess = sess
+    return sess
+
+def _throttle(min_interval_ms: int):
+    """Simple global throttle: ensure at least min_interval_ms between outgoing requests."""
+    if not min_interval_ms or min_interval_ms <= 0:
+        return
+    global _NEXT_ALLOWED_TS
+    interval = min_interval_ms / 1000.0
+    while True:
+        with _RATE_LOCK:
+            now = time.time()
+            if now >= _NEXT_ALLOWED_TS:
+                _NEXT_ALLOWED_TS = now + interval
+                return
+            sleep_s = _NEXT_ALLOWED_TS - now
+        if sleep_s > 0:
+            time.sleep(min(sleep_s, 2.0))
+
+def _request_json(
+    url,
+    params,
+    timeout=(5, 15),
+    max_tries=5,
+    backoff_s=0.8,
+    backoff_max_s=12.0,
+    jitter_s=0.25,
+    min_interval_ms=0,
+):
+    """
+    Requests JSON with small retry/backoff.
+    Retries on:
+    - network/connection resets/timeouts
+    - HTTP 429 / 5xx
+    """
+    last_exc = None
+    for i in range(max_tries):
+        try:
+            _throttle(min_interval_ms)
+            resp = _get_sess().get(url, params=params, timeout=timeout)
+            code = resp.status_code
+            if code == 429 or (500 <= code <= 599):
+                # rate-limit / transient server error
+                if i < max_tries - 1:
+                    ra = resp.headers.get("Retry-After")
+                    if ra:
+                        try:
+                            ra_s = float(ra)
+                            time.sleep(min(max(ra_s, 0.0), backoff_max_s))
+                            continue
+                        except Exception:
+                            pass
+                    sleep_s = min(backoff_s * (2 ** i), backoff_max_s) + (random.random() * jitter_s)
+                    time.sleep(sleep_s)
+                    continue
+            # do not retry other 4xx (usually invalid symbol/token/permission)
+            if 400 <= code <= 499 and code != 429:
+                resp.raise_for_status()
+            resp.raise_for_status()
+            try:
+                return resp.json()
+            except Exception as e:
+                # occasionally upstream returns non-JSON or truncated payload; retry
+                last_exc = e
+                if i < max_tries - 1:
+                    sleep_s = min(backoff_s * (2 ** i), backoff_max_s) + (random.random() * jitter_s)
+                    time.sleep(sleep_s)
+                    continue
+                raise
+        except Exception as e:
+            last_exc = e
+            if i < max_tries - 1:
+                sleep_s = min(backoff_s * (2 ** i), backoff_max_s) + (random.random() * jitter_s)
+                time.sleep(sleep_s)
+                continue
+            raise
+    # Should not reach here, but keep mypy/linters happy.
+    raise last_exc
 
 def _parse_symbols(text: str):
     if text is None:
@@ -98,9 +205,7 @@ def _safe_float(x):
 def _get_quote(base, token, symbol):
     # Finnhub Quote API :contentReference[oaicite:7]{index=7}
     url = base.rstrip("/") + "/quote"
-    resp = _SESS.get(url, params={"symbol": symbol, "token": token}, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    return _request_json(url, params={"symbol": symbol, "token": token})
 
 def _get_candle_5m(base, token, symbol):
     # Finnhub Stock Candles API :contentReference[oaicite:8]{index=8}
@@ -114,16 +219,12 @@ def _get_candle_5m(base, token, symbol):
         "to": now,
         "token": token
     }
-    resp = _SESS.get(url, params=params, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    return _request_json(url, params=params)
 
 def _get_profile2(base, token, symbol):
     # Company Profile2 has marketCapitalization and shareOutstanding fields (examples exist) :contentReference[oaicite:9]{index=9}
     url = base.rstrip("/") + "/stock/profile2"
-    resp = _SESS.get(url, params={"symbol": symbol, "token": token}, timeout=10)
-    resp.raise_for_status()
-    return resp.json()
+    return _request_json(url, params={"symbol": symbol, "token": token})
 
 def _extract_last_5m_volume(candle_json):
     # Response includes arrays: c,h,l,o,t,v and status s
@@ -182,33 +283,64 @@ def run_node(node):
 
         base = os.getenv("FINNHUB_BASE_URL", "https://finnhub.io/api/v1").rstrip("/")
         max_workers = int(os.getenv("FINNHUB_MAX_WORKERS", "5"))
+        debug_enabled = os.getenv("FINNHUB_DEBUG", "").strip().lower() in ("1", "true", "yes", "y", "on")
+        # Stability knobs (defaults prioritize stability over speed; tweak via env if needed)
+        min_interval_ms = int(os.getenv("FINNHUB_MIN_INTERVAL_MS", "1100"))  # ~<= 1 rps (safe for many plans)
+        req_max_tries = int(os.getenv("FINNHUB_MAX_TRIES", "5"))
+        req_backoff_s = float(os.getenv("FINNHUB_BACKOFF_S", "0.8"))
+        req_backoff_max_s = float(os.getenv("FINNHUB_BACKOFF_MAX_S", "12"))
+        req_jitter_s = float(os.getenv("FINNHUB_JITTER_S", "0.25"))
+        timeout_connect = float(os.getenv("FINNHUB_TIMEOUT_CONNECT", "5"))
+        timeout_read = float(os.getenv("FINNHUB_TIMEOUT_READ", "15"))
         ts_now = datetime.now(timezone.utc).isoformat()
 
         def _fetch_one(sym):
-            # quote for price
-            q = _get_quote(base, token, sym)
-            last_price = _safe_float(q.get("c"))
-
-            # profile2 for market cap (restore 市值)
-            market_cap_musd = None
-            market_cap_usd = None
-            try:
-                p = _get_profile2(base, token, sym)
-                market_cap_musd = _safe_float(p.get("marketCapitalization"))
-                # Finnhub profile2 的 marketCapitalization 常见口径是 “百万美元” 级别（按其示例字段量级推断）
-                market_cap_usd = market_cap_musd * 1_000_000 if market_cap_musd is not None else None
-            except Exception as e:
-                # profile2 失败不影响现价输出
-                Debugging.append(f"{sym} profile2 error: {repr(e)}")
-
-            return {
+            row = {
                 "symbol": sym,
-                "price": last_price,
-                "market_cap_musd": market_cap_musd,
-                "market_cap_usd": market_cap_usd,
                 "ts_utc": ts_now,
                 "source": "finnhub_quote_profile2"
             }
+
+            # quote for price
+            try:
+                q = _request_json(
+                    base.rstrip("/") + "/quote",
+                    params={"symbol": sym, "token": token},
+                    timeout=(timeout_connect, timeout_read),
+                    max_tries=req_max_tries,
+                    backoff_s=req_backoff_s,
+                    backoff_max_s=req_backoff_max_s,
+                    jitter_s=req_jitter_s,
+                    min_interval_ms=min_interval_ms,
+                )
+                row["price"] = _safe_float(q.get("c"))
+            except Exception as e:
+                # keep consistent structure; let caller decide whether to treat as hard failure
+                row["error"] = repr(e)  # backward compatible field
+                row["error_quote"] = repr(e)
+                return row
+
+            # profile2 for market cap (restore 市值)
+            try:
+                p = _request_json(
+                    base.rstrip("/") + "/stock/profile2",
+                    params={"symbol": sym, "token": token},
+                    timeout=(timeout_connect, timeout_read),
+                    max_tries=req_max_tries,
+                    backoff_s=req_backoff_s,
+                    backoff_max_s=req_backoff_max_s,
+                    jitter_s=req_jitter_s,
+                    min_interval_ms=min_interval_ms,
+                )
+                market_cap_musd = _safe_float(p.get("marketCapitalization"))
+                # Finnhub profile2 的 marketCapitalization 常见口径是 “百万美元” 级别（按其示例字段量级推断）
+                row["market_cap_musd"] = market_cap_musd
+                row["market_cap_usd"] = market_cap_musd * 1_000_000 if market_cap_musd is not None else None
+            except Exception as e:
+                # profile2 失败不影响现价输出
+                row["error_profile2"] = repr(e)
+
+            return row
 
         t0 = time.time()
         rows = []
@@ -235,6 +367,8 @@ def run_node(node):
             "count": len(rows),
             "data": sorted(rows, key=lambda x: x.get("symbol", ""))
         }
+        if debug_enabled:
+            result["debug"] = Debugging
         content = json.dumps(result, ensure_ascii=False)
 
     except Exception as e:

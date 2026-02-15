@@ -4,6 +4,7 @@ import os
 import time
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any
+import re
 
 # 标准库 HTTP（用于 Gamma API 查询；不引入额外第三方依赖）
 from urllib.request import Request, urlopen
@@ -29,7 +30,7 @@ except Exception:
     _IMPORTS_OK = False
 
 # **节点输入输出定义**
-OutPutNum = 5
+OutPutNum = 6
 InPutNum = 8
 NodeKind = 'Normal'
 # **Initialize Outputs and Inputs arrays and assign names directly**
@@ -53,6 +54,7 @@ Outputs[1]['name'] = 'DeBugging'  # DeBugging用于解锁调试功能，输出�
 Outputs[2]['name'] = 'Success'    # 单独输出布尔结果（字符串形式）
 Outputs[3]['name'] = 'OrderID'    # 单独输出订单ID（若有）
 Outputs[4]['name'] = 'tx_hash_hint'  # 相关链上交易哈希提示（单个时直接输出 0x...；多个时输出 JSON 列表；无则为空）
+Outputs[5]['name'] = 'OpenOrdersCount'  # 当前 TOKEN_ID 的在挂单数量（status=live/partial_fill）
 Inputs[0]['IsLabel'] = True
 Inputs[0]['Context'] = 'BUY'#BUY|SELL|WITHDRAW_ORDER
 Inputs[6]['IsLabel'] = True
@@ -72,7 +74,7 @@ FunctionIntroduction = (
     '程序定义了标准的节点结构，初始化输入输出节点数组并设置属性。核心处理逻辑在 run_node 函数中实现：根据 Mode 选择下单/撤单或 redeem 流程，完成 API 凭据生成、构建订单对象、发送订单/执行撤单，或通过 Gamma API 反查 market 并链上 redeemPositions，将结果与调试日志写入输出。\n\n'
     '参数\n```yaml\n'
     'inputs:\n'
-    '  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | BURN/REDEEM/DESTROY）\n'
+    '  - name: Mode\n    type: string\n    required: true\n    description: 操作模式（BUY | SELL | WITHDRAW_ORDER | WITHDRAW_UNFILLABLE | BURN/REDEEM/DESTROY）\n'
     '  - name: PRICE\n    type: string\n    required: false\n    description: 限价，单位 USDC，步长 0.001\n'
     '  - name: SIZE_SHARES\n    type: string\n    required: false\n    description: 交易数量，单位 股\n'
     '  - name: TIME_IN_FORCE_MODE\n    type: string\n    required: false\n    description: 有效期模式，0=GTC,1=IOC,2=FOK\n'
@@ -85,15 +87,114 @@ FunctionIntroduction = (
     '  - name: DeBugging\n    type: string\n    description: 调试日志，多行文本\n'
     '  - name: Success\n    type: string\n    description: 本次操作是否成功（true/false 字符串）\n'
     '  - name: OrderID\n    type: string\n    description: 下单成功返回的订单ID（失败为空字符串）\n'
-    '  - name: tx_hash_hint\n    type: string\n    description: 相关链上交易哈希“提示”。注意：下单成功不一定立刻有链上 tx_hash，可能为空；若只有 1 个哈希则直接输出 0x...；若有多个则输出 JSON 列表字符串。\n```\n'
+    '  - name: tx_hash_hint\n    type: string\n    description: 相关链上交易哈希“提示”。注意：下单成功不一定立刻有链上 tx_hash，可能为空；若只有 1 个哈希则直接输出 0x...；若有多个则输出 JSON 列表字符串。\n'
+    '  - name: OpenOrdersCount\n    type: string\n    description: 当前 TOKEN_ID 的在挂单数量（live/partial_fill）。用于上层避免重复下单。\n'
+    '```\n'
     '\n运行逻辑（用 - 列表描写详细流程）\n'
     '- 初始化输入输出节点数组，并设置节点属性（ID、名称、类型等）\n'
     '- 解析输入参数 Context，包括 Mode、PRICE、SIZE_SHARES 等\n'
     '- 构建 ClobClient 客户端，生成并设置 L2 API 凭据\n'
-    '- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单；BURN/REDEEM/DESTROY 时先撤掉该 TOKEN_ID 挂单，再用 Gamma API 仅靠 TOKEN_ID 反查 conditionId 与 clobTokenIds(YES/NO)，最后链上调用 CTF redeemPositions，并用 balanceOf 前后差额 burned>0 作为“确实销毁成功”判定（BURN 需要环境变量 POLYGON_RPC/RPC_URL 以及 web3.py）\n'
+    '- 根据 Mode 执行不同流程：BUY/SELL 时创建并发送订单；WITHDRAW_ORDER 时列举并取消匹配挂单；WITHDRAW_UNFILLABLE 时先查询当前 L1 best bid/ask（/book，缺失再 /price 兜底），仅撤掉“当前无法立即成交”的挂单（BUY: limit < best_ask；SELL: limit > best_bid）；BURN/REDEEM/DESTROY 时先撤掉该 TOKEN_ID 挂单，再用 Gamma API 仅靠 TOKEN_ID 反查 conditionId 与 clobTokenIds(YES/NO)，最后链上调用 CTF redeemPositions，并用 balanceOf 前后差额 burned>0 作为“确实销毁成功”判定（BURN 需要环境变量 POLYGON_RPC/RPC_URL 以及 web3.py）\n'
     '- 收集结果数据和调试信息，赋值到输出节点 Context（含 Success、OrderID）\n'
     '- 返回包含 Result 和 DeBugging 的 Outputs 数组'
 )
+
+
+_HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
+
+
+def _is_hex_str(x: Any, n_bytes: Optional[int] = None, allow_0x: bool = True) -> bool:
+    s = str(x or "").strip()
+    if allow_0x and s.startswith("0x"):
+        s = s[2:]
+    if not s:
+        return False
+    if n_bytes is not None and len(s) != int(n_bytes) * 2:
+        return False
+    return _HEX_RE.fullmatch(s) is not None
+
+
+def _normalize_private_key(pk: str) -> str:
+    """把 PRIVATE_KEY 规范为 0x + 64 hex；并在非法时给出可读错误。"""
+    s = str(pk or "").strip()
+    # 去掉常见的复制粘贴污染：引号/空格
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    if s.startswith("0x"):
+        h = s[2:].strip()
+    else:
+        h = s.strip()
+    if not _is_hex_str(h, n_bytes=32, allow_0x=False):
+        raise ValueError("PRIVATE_KEY 不是有效的十六进制私钥：需要 64 位 hex（可带 0x 前缀），且只能包含 0-9/a-f。")
+    return "0x" + h.lower()
+
+
+def _http_get_json_with_params(base_url: str, params: Dict[str, Any], timeout: float, debug: Optional[List[str]] = None) -> Any:
+    qs = urlencode({k: v for k, v in (params or {}).items() if v is not None})
+    url = f"{base_url}?{qs}" if qs else base_url
+    return _http_get_json(url, timeout, debug)
+
+
+def _fetch_best_levels_public(host: str, token_id: str, debug: List[str]) -> Dict[str, Optional[float]]:
+    """
+    查询当前盘口 L1：
+    - 优先 GET {host}/book?token_id=...
+    - 若缺失 bid/ask，则用 GET {host}/price?token_id=...&side=SELL/BUY 兜底
+    返回：{"best_bid": float|None, "best_ask": float|None, "source": str}
+    """
+    base = str(host or "").strip().rstrip("/")
+    tid = str(token_id or "").strip()
+    out: Dict[str, Optional[float]] = {"best_bid": None, "best_ask": None, "source": None}  # type: ignore[assignment]
+    if not base or not tid:
+        out["source"] = "invalid_input"
+        return out
+
+    def _to_price(x: Any) -> Optional[float]:
+        try:
+            if isinstance(x, dict):
+                v = x.get("price")
+            elif isinstance(x, (list, tuple)) and len(x) >= 1:
+                v = x[0]
+            else:
+                v = None
+            return None if v is None else float(v)
+        except Exception:
+            return None
+
+    # 1) /book
+    try:
+        js = _http_get_json_with_params(f"{base}/book", {"token_id": tid}, REQUEST_TIMEOUT_SECONDS, debug)
+        bids = js.get("bids") if isinstance(js, dict) else None
+        asks = js.get("asks") if isinstance(js, dict) else None
+        bid_prices = [_to_price(x) for x in (bids or []) if _to_price(x) is not None]
+        ask_prices = [_to_price(x) for x in (asks or []) if _to_price(x) is not None]
+        out["best_bid"] = max(bid_prices) if bid_prices else None
+        out["best_ask"] = min(ask_prices) if ask_prices else None
+        out["source"] = "book"
+        _append_debug(debug, f"[mkt] /book tid={tid[:12]}… nbid={len(bids or [])} nask={len(asks or [])} bid={out['best_bid']} ask={out['best_ask']}")
+    except Exception as e:
+        out["source"] = f"book_error:{type(e).__name__}"
+        _append_debug(debug, f"[mkt] /book failed: {e}")
+
+    # 2) /price fallback
+    if out.get("best_bid") is None:
+        try:
+            pj = _http_get_json_with_params(f"{base}/price", {"token_id": tid, "side": "SELL"}, REQUEST_TIMEOUT_SECONDS, debug)
+            if isinstance(pj, dict) and pj.get("price") is not None:
+                out["best_bid"] = float(pj["price"])
+                out["source"] = (out.get("source") or "") + "+price_bid"
+        except Exception as e:
+            _append_debug(debug, f"[mkt] /price SELL failed (ignore): {e}")
+    if out.get("best_ask") is None:
+        try:
+            pj = _http_get_json_with_params(f"{base}/price", {"token_id": tid, "side": "BUY"}, REQUEST_TIMEOUT_SECONDS, debug)
+            if isinstance(pj, dict) and pj.get("price") is not None:
+                out["best_ask"] = float(pj["price"])
+                out["source"] = (out.get("source") or "") + "+price_ask"
+        except Exception as e:
+            _append_debug(debug, f"[mkt] /price BUY failed (ignore): {e}")
+
+    return out
 
 
 def _append_debug(debug_list: List[str], message: str) -> None:
@@ -289,6 +390,24 @@ def _list_open_orders(c: Any, debug: List[str]) -> List[Dict]:
     except Exception as e:
         _append_debug(debug, f"get_orders error: {e}")
         return []
+
+
+def _count_open_orders_for_token(c: Any, token_id: str, debug: List[str]) -> int:
+    """统计当前 token_id 的在挂单数量（status=live/partial_fill）。"""
+    tok = str(token_id or "").strip()
+    if not tok:
+        return 0
+    try:
+        open_orders = _list_open_orders(c, debug)
+        live = [
+            od for od in (open_orders or [])
+            if str(od.get("token_id") or "").strip() == tok
+            and str(od.get("status") or "").strip().lower() in ("live", "partial_fill", "partial-fill", "partial")
+        ]
+        return int(len(live))
+    except Exception as e:
+        _append_debug(debug, f"count open orders failed (ignore): {e}")
+        return 0
 
 
 def _get_position_balance(c: Any, token_id: int, debug: List[str]) -> Optional[float]:
@@ -543,8 +662,11 @@ def _normalize_hex32(x: Any) -> str:
     if not s.startswith('0x'):
         s = '0x' + s
     if len(s) == 66:
-        return s
-    h = s[2:]
+        return s if _is_hex_str(s, n_bytes=32, allow_0x=True) else ''
+    h = s[2:].strip()
+    # 如果原始内容包含非 hex 字符，直接返回空（上层给出友好错误）
+    if not _is_hex_str(h, allow_0x=False):
+        return ''
     h = h.rjust(64, '0')[:64]
     return '0x' + h
 
@@ -570,7 +692,10 @@ def _burn_redeem_positions(private_key: str, token_id_int: int, market: Dict[str
 
     condition_id = _normalize_hex32(market.get('conditionId') or market.get('condition_id'))
     if not condition_id:
-        raise RuntimeError("Gamma market 未提供 conditionId，无法 redeem")
+        raw = market.get('conditionId') or market.get('condition_id')
+        raise RuntimeError(f"Gamma market 的 conditionId 缺失或不是有效 hex（收到: {raw}），无法 redeem")
+    if not _is_hex_str(condition_id, n_bytes=32, allow_0x=True):
+        raise RuntimeError(f"Gamma market 的 conditionId 不是有效 hex32（收到: {condition_id}），无法 redeem")
 
     token_ids = market.get('clobTokenIds') or market.get('clobTokenIDs') or market.get('clob_token_ids')
     if isinstance(token_ids, str):
@@ -738,6 +863,7 @@ def run_node(node):
         Outputs[2]['Context'] = "false"
         Outputs[3]['Context'] = ""
         Outputs[4]['Context'] = ""
+        Outputs[5]['Context'] = ""
         return Outputs
     def _get_input(idx: int):
         try:
@@ -769,6 +895,9 @@ def run_node(node):
         if not token_id:
             raise ValueError("缺少 TOKEN_ID")
 
+        # 更早、更清晰地校验 PRIVATE_KEY（否则会出现含糊的 Non-hexadecimal digit found）
+        private_key = _normalize_private_key(private_key)
+
         tif_mode = int(float(tif_in)) if tif_in not in (None, "") else 0
         tif = _resolve_tif(tif_mode)
 
@@ -778,12 +907,18 @@ def run_node(node):
         _append_debug(Debugging, f"GET /ok -> {ok_val}")
         # 凭据创建使用原始逻辑，避免不必要的改动与参数不匹配
         _create_or_set_creds(client, Debugging)
-        _append_debug(Debugging, f"wallet: {Account.from_key(private_key).address}")
+        try:
+            _append_debug(Debugging, f"wallet: {Account.from_key(private_key).address}")
+        except Exception as e:
+            raise ValueError(
+                f"PRIVATE_KEY 解析失败（常见原因：包含空格/引号/非 hex 字符，或长度不是 64 位 hex）。原始错误: {e}"
+            )
 
         result: Dict[str, object] = {"success": False}
         order_id_out: str = ""
         success_out: bool = False
         tx_hash_hint: List[str] = []
+        open_orders_count_out: int = 0
 
         if mode in ("BUY", "SELL"):
             if not price:
@@ -871,6 +1006,90 @@ def run_node(node):
                             break
                 result.update({"success": True, "action": "WITHDRAW_ORDER", "cancelled": cancelled, "matched": len(targets)})
                 success_out = True
+        elif mode == "WITHDRAW_UNFILLABLE":
+            # 仅撤掉“当前无法立即成交”的挂单（不改变 Inputs，复用 PRICE 作为可选过滤）
+            open_orders = [od for od in _list_open_orders(client, Debugging) if od.get('status') in ("live", "partial_fill")]
+            price_filter = round(float(Decimal(str(price)).quantize(Decimal("0.001"), rounding=ROUND_HALF_UP)), 3) if price not in (None, "") else None
+            targets = [
+                od for od in open_orders
+                if str(od.get('token_id')) == token_id
+                and (
+                    price_filter is None
+                    or (od.get('price') is not None and round(float(od.get('price')), 3) == price_filter)
+                )
+            ]
+            if not targets:
+                _append_debug(Debugging, "未找到匹配条件的在挂单（WITHDRAW_UNFILLABLE）；如需按价格过滤请提供 PRICE。")
+                result.update({"success": True, "action": "WITHDRAW_UNFILLABLE", "cancelled": 0, "matched": 0, "skipped_unknown": 0})
+                success_out = True
+            else:
+                mkt = _fetch_best_levels_public(host, token_id, Debugging)
+                best_bid = mkt.get("best_bid")
+                best_ask = mkt.get("best_ask")
+                cancelled = 0
+                skipped_unknown = 0
+                kept_marketable = 0
+                cancelled_ids: List[str] = []
+
+                for od in targets:
+                    side = str(od.get("side") or "").upper()
+                    limit_p = od.get("price")
+                    try:
+                        limit_pf = float(limit_p) if limit_p is not None else None
+                    except Exception:
+                        limit_pf = None
+
+                    # 无法判断盘口/价格时，保守：不撤
+                    if limit_pf is None:
+                        skipped_unknown += 1
+                        continue
+
+                    is_marketable: Optional[bool] = None
+                    if side == "BUY":
+                        if best_ask is not None:
+                            is_marketable = (limit_pf + 1e-12) >= float(best_ask)
+                    elif side == "SELL":
+                        if best_bid is not None:
+                            is_marketable = (limit_pf - 1e-12) <= float(best_bid)
+                    else:
+                        skipped_unknown += 1
+                        continue
+
+                    if is_marketable is None:
+                        skipped_unknown += 1
+                        continue
+                    if is_marketable:
+                        kept_marketable += 1
+                        continue
+
+                    oid = str(od.get("orderID") or "").strip()
+                    if not oid:
+                        skipped_unknown += 1
+                        continue
+                    # 触发撤单
+                    for method in ("cancel_order", "cancel", "delete_order"):
+                        if hasattr(client, method):
+                            r = _with_retry(getattr(client, method), oid, debug=Debugging, label=f"{method}({oid})")
+                            cancelled += 1
+                            if len(cancelled_ids) < 20:
+                                cancelled_ids.append(oid)
+                            _append_debug(Debugging, f"cancel(unfillable) -> {oid} :: {r}")
+                            break
+
+                result.update({
+                    "success": True,
+                    "action": "WITHDRAW_UNFILLABLE",
+                    "token_id": token_id,
+                    "matched": len(targets),
+                    "cancelled": cancelled,
+                    "kept_marketable": kept_marketable,
+                    "skipped_unknown": skipped_unknown,
+                    "best_bid": best_bid,
+                    "best_ask": best_ask,
+                    "market_source": mkt.get("source"),
+                    "cancelled_order_ids": cancelled_ids,
+                })
+                success_out = True
         elif mode in ("BURN", "DESTROY", "REDEEM"):
             # 1) 先撤掉该 token 的所有在挂单（避免边 redeem 边成交导致余额变化）
             open_orders = [od for od in _list_open_orders(client, Debugging) if od.get('status') in ("live", "partial_fill")]
@@ -916,11 +1135,18 @@ def run_node(node):
             except Exception:
                 tx_hash_hint = []
         else:
-            raise ValueError("Mode 必须是 BUY、SELL、WITHDRAW_ORDER 或 BURN")
+            raise ValueError("Mode 必须是 BUY、SELL、WITHDRAW_ORDER、WITHDRAW_UNFILLABLE 或 BURN")
+
+        # 输出：当前 token 的在挂单数量（尽力查询；失败则为 0）
+        open_orders_count_out = _count_open_orders_for_token(client, token_id, Debugging)
 
         # 同步到 Result（便于上层统一落库/追踪）；Outputs[4] 仍会单独输出一份
         try:
             result["tx_hash_hint"] = tx_hash_hint
+        except Exception:
+            pass
+        try:
+            result["open_orders_count"] = open_orders_count_out
         except Exception:
             pass
 
@@ -934,6 +1160,7 @@ def run_node(node):
             Outputs[4]['Context'] = str(tx_hash_hint[0])
         else:
             Outputs[4]['Context'] = json.dumps(tx_hash_hint, ensure_ascii=False)
+        Outputs[5]['Context'] = str(int(open_orders_count_out))
     except Exception as e:
         err_msg = str(e)
         Outputs[0]['Context'] = json.dumps({"success": False, "error": err_msg}, ensure_ascii=False)
@@ -948,6 +1175,7 @@ def run_node(node):
         Outputs[2]['Context'] = "false"
         Outputs[3]['Context'] = ""
         Outputs[4]['Context'] = ""
+        Outputs[5]['Context'] = ""
 
     Outputs[1]['Context'] = "\n".join(Debugging)
     return Outputs

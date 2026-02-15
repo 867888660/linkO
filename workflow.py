@@ -16,6 +16,207 @@ import base64
 import os
 import hashlib
 import uuid
+from datetime import datetime, timedelta
+from contextlib import contextmanager
+import importlib.abc
+
+
+# =========================
+# Runtime Tuning (ALL HERE)
+# =========================
+MAX_WORKERS = int(os.getenv("WF_MAX_WORKERS", "50"))                 # 节点并发上限（原来硬编码 5）
+ENQUEUE_BURST = int(os.getenv("WF_ENQUEUE_BURST", "5"))         # 每轮最多入队N个
+STATE_FLUSH_INTERVAL = float(os.getenv("WF_STATE_FLUSH_MS", "300")) / 1000.0
+ENABLE_DEBUG_PRINT = False       # 一键关闭调试打印
+CACHE_MAX_ITEMS = 50000          # 缓存最大条目保护
+CACHE_TTL_SECONDS = 6 * 3600     # 缓存TTL（6小时）
+CLEANUP_EXPIRED_EVERY_N_RUNS = 200  # 每执行N次触发一次过期清理
+
+# 节点脚本加载策略：
+# - 默认(0)：每次执行创建“独立 module 实例”，避免多线程共享 module 全局变量导致串数据
+# - 设为 1：复用 module（旧行为，性能更好，但脚本若有全局状态/requests.Session 等会在并发下串数据）
+WF_SHARED_NODE_MODULES = os.getenv("WF_SHARED_NODE_MODULES", "0").strip() in ("1", "true", "True", "yes", "YES")
+
+# 节点运行态持久化（默认开启）：
+# - 许多 trigger 类节点（如 passivityTrigger_Timer）用 node["_state"] 保存“上次触发时间”
+# - 工作流执行过程中会 deepcopy 节点以保证并发安全，导致 node["_state"] 默认无法跨轮保留
+# - 开启后：按 (workflow_id, node_id) 在内存中持久化 node["_state"]，使 Timer 的 Second 间隔真正生效
+# - 若担心性能/兼容性，可通过环境变量关闭：WF_PERSIST_NODE_STATE=0
+WF_PERSIST_NODE_STATE = os.getenv("WF_PERSIST_NODE_STATE", "1").strip() in ("1", "true", "True", "yes", "YES")
+
+# =========================
+# Workflow Print Switch
+# =========================
+# 说明：只影响本文件(workflow.py)内的 print(...) 调用；不会全局篡改 builtins.print。
+# 默认跟随 ENABLE_DEBUG_PRINT；若要强制静音，改为 False。
+WORKFLOW_ENABLE_PRINT = bool(ENABLE_DEBUG_PRINT)
+try:
+    import builtins as _builtins
+    _WORKFLOW_ORIG_PRINT = _builtins.print
+except Exception:
+    _WORKFLOW_ORIG_PRINT = None
+
+def print(*args, **kwargs):  # noqa: A001  (shadow built-in intentionally)
+    if WORKFLOW_ENABLE_PRINT and _WORKFLOW_ORIG_PRINT is not None:
+        _WORKFLOW_ORIG_PRINT(*args, **kwargs)
+
+# =========================
+# Thread-local StdIO Router
+# =========================
+# 背景：本文件里的 print 开关只影响 workflow.py 自己的 print；
+# 但 Nodes 节点脚本/第三方库往往直接写 sys.stdout/sys.stderr 或 logging，
+# 在多线程(ThreadPoolExecutor)场景下用 redirect_stdout 这种“全局替换”会互相干扰。
+# 这里安装一个“线程本地”的 stdout/stderr 路由器：每个线程可以选择
+# - 控制台输出开/关
+# - 是否捕获到 buffer（用于返回 debug，而不是刷屏）
+
+CAPTURE_NODE_STDIO_WHEN_SILENCED = True  # 静音时是否把节点脚本的 stdout/stderr 捕获进 debug
+MAX_CAPTURED_STDIO_CHARS = 4000         # 防止 debug 爆炸：只保留末尾 N 字符
+
+
+def _is_thread_stdio_router(obj) -> bool:
+    return bool(getattr(obj, "__thread_stdio_router__", False))
+
+
+class _ThreadLocalStdIO(io.TextIOBase):
+    __thread_stdio_router__ = True
+
+    def __init__(self, target, default_console_enabled: bool = True):
+        super().__init__()
+        self._target = target
+        self._default_console_enabled = bool(default_console_enabled)
+        self._local = threading.local()
+        self._write_lock = threading.Lock()
+
+    def writable(self):
+        return True
+
+    @property
+    def encoding(self):
+        return getattr(self._target, "encoding", "utf-8")
+
+    def isatty(self):
+        try:
+            return bool(getattr(self._target, "isatty", lambda: False)())
+        except Exception:
+            return False
+
+    def _get_console_enabled(self) -> bool:
+        if hasattr(self._local, "console_enabled"):
+            try:
+                return bool(self._local.console_enabled)
+            except Exception:
+                return self._default_console_enabled
+        return self._default_console_enabled
+
+    def _get_buffer(self):
+        return getattr(self._local, "buffer", None)
+
+    def _set_state(self, console_enabled: bool, buffer):
+        self._local.console_enabled = bool(console_enabled)
+        self._local.buffer = buffer
+
+    def write(self, s):
+        try:
+            buf = self._get_buffer()
+            if buf is not None:
+                try:
+                    buf.write(s)
+                except Exception:
+                    pass
+
+            if self._get_console_enabled():
+                try:
+                    with self._write_lock:
+                        self._target.write(s)
+                except Exception:
+                    pass
+            return len(s)
+        except Exception:
+            return len(s)
+
+    def flush(self):
+        try:
+            buf = self._get_buffer()
+            if buf is not None:
+                try:
+                    buf.flush()
+                except Exception:
+                    pass
+            with self._write_lock:
+                try:
+                    self._target.flush()
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
+def _install_thread_stdio_router():
+    """幂等安装：把 sys.stdout/sys.stderr 替换成线程路由器。"""
+    try:
+        if not _is_thread_stdio_router(sys.stdout):
+            sys.stdout = _ThreadLocalStdIO(sys.stdout, default_console_enabled=bool(ENABLE_DEBUG_PRINT))
+    except Exception:
+        pass
+    try:
+        if not _is_thread_stdio_router(sys.stderr):
+            sys.stderr = _ThreadLocalStdIO(sys.stderr, default_console_enabled=bool(ENABLE_DEBUG_PRINT))
+    except Exception:
+        pass
+
+
+@contextmanager
+def _thread_stdio_scope(console_enabled: bool = True, capture: bool = False):
+    """
+    仅影响当前线程的 stdout/stderr 行为：
+    - console_enabled=False：不往控制台吐
+    - capture=True：捕获到 buffer（返回时读取 buffer.getvalue()）
+    """
+    _install_thread_stdio_router()
+
+    buf = io.StringIO() if capture else None
+    out_router = sys.stdout if _is_thread_stdio_router(sys.stdout) else None
+    err_router = sys.stderr if _is_thread_stdio_router(sys.stderr) else None
+    prev = None
+    try:
+        prev = (
+            (getattr(out_router, "_get_console_enabled", lambda: True)(),
+             getattr(out_router, "_get_buffer", lambda: None)()) if out_router else (True, None),
+            (getattr(err_router, "_get_console_enabled", lambda: True)(),
+             getattr(err_router, "_get_buffer", lambda: None)()) if err_router else (True, None),
+        )
+        if out_router:
+            out_router._set_state(console_enabled=console_enabled, buffer=buf)
+        if err_router:
+            err_router._set_state(console_enabled=console_enabled, buffer=buf)
+        yield buf
+    finally:
+        try:
+            if prev and out_router:
+                out_router._set_state(console_enabled=prev[0][0], buffer=prev[0][1])
+            if prev and err_router:
+                err_router._set_state(console_enabled=prev[1][0], buffer=prev[1][1])
+        except Exception:
+            pass
+
+
+def _merge_debug_with_stdio(debug_text: str, stdio_text: str) -> str:
+    try:
+        dt = debug_text or ""
+        st = (stdio_text or "").strip()
+        if not st:
+            return dt
+        if MAX_CAPTURED_STDIO_CHARS and len(st) > MAX_CAPTURED_STDIO_CHARS:
+            st = st[-MAX_CAPTURED_STDIO_CHARS:]
+        block = f"[STDIO]\n{st}"
+        return f"{dt}\n\n{block}".strip() if dt else block
+    except Exception:
+        return debug_text or ""
+
+
+# 进程启动即安装（线程本地，不会改变业务逻辑，只是减少刷屏/便于捕获）
+_install_thread_stdio_router()
 
 # 工作流状态常量
 class WorkflowStatus:
@@ -32,11 +233,68 @@ def retrieve_content_within_braces(text):
         return []
     return [m.strip() for m in re.findall(r'{{\s*(.*?)\s*}}', text, flags=re.S)]
 
+# =========================
+# History JSONL (append-only)
+# =========================
+# 目标：
+# - 写入：改为 append JSONL（不再“读整文件 + 重写整文件”）
+# - 读取：支持 JSONL + 旧 JSON 双兼容
+# - 对外返回结构：保持现有的 “list[list[dict]]（按会话分组）” 形态不变（前端无感）
+
+def _history_jsonl_path(base_dir: Path, day: datetime = None) -> Path:
+    d = (day or datetime.utcnow()).strftime("%Y%m%d")
+    p = Path(base_dir) / "workflow_history"
+    p.mkdir(parents=True, exist_ok=True)
+    return p / f"history-{d}.jsonl"
+
+
+def _iter_jsonl_records(path: Path):
+    if not path.exists():
+        return
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if not s:
+                continue
+            try:
+                yield json.loads(s)
+            except Exception:
+                # 容错：坏行跳过（常见于异常中断导致最后半行）
+                continue
+
+
+def _event_dedupe_key(x: dict) -> str:
+    # 有 event_id 就用 event_id；没有就用组合键
+    try:
+        eid = x.get("event_id") if isinstance(x, dict) else None
+    except Exception:
+        eid = None
+    if eid:
+        return f"eid:{eid}"
+    try:
+        return "k:{wf}|{node}|{etype}|{ts}".format(
+            wf=(x.get("workflow_id", "") if isinstance(x, dict) else ""),
+            node=(x.get("node_id", "") if isinstance(x, dict) else ""),
+            etype=(x.get("event_type", "") if isinstance(x, dict) else ""),
+            ts=(x.get("ts", "") if isinstance(x, dict) else ""),
+        )
+    except Exception:
+        return "k:invalid"
+
+
 class WorkflowEngine:
     def __init__(self, base_dir=None):
         self.base_dir = base_dir or Path(".")
         # 全局状态锁（工作流字典等）
         self.lock = threading.Lock()
+        # Runtime tuning (from unified config above)
+        self.max_workers = MAX_WORKERS
+        self.enable_debug_print = ENABLE_DEBUG_PRINT
+        self.cache_max_items = CACHE_MAX_ITEMS
+        self.cache_ttl_seconds = CACHE_TTL_SECONDS
+        self.cleanup_expired_every_n_runs = CLEANUP_EXPIRED_EVERY_N_RUNS
+        self._run_counter = 0
+        self._cache_time = {}  # 记录缓存键最近更新时间戳: {(cache_name, key): ts}
         # 历史文件写入锁（避免并发读改写导致记录丢失/文件损坏）
         self._history_lock = threading.Lock()
         # 性能开关：默认关闭大量 print（需要排查时再打开）
@@ -45,6 +303,9 @@ class WorkflowEngine:
         self.HISTORY_BUFFER_SIZE = 20
         self.HISTORY_FLUSH_INTERVAL = 0.5  # seconds
         self._history_buffer = {}          # { workflow_id: { "file_path": str, "pending": [...], "last_flush": ts } }
+        # History 限额：防止单个文件/会话无限增大
+        self.HISTORY_MAX_SESSIONS_PER_FILE = 30
+        self.HISTORY_MAX_ITEMS_PER_SESSION = 500
         # 事件日志节流（避免高频 with self.lock 抢锁）
         self._event_throttle_last_ts = {}  # { workflow_id: last_ts }
         self.workflows = {}  # 存储所有工作流的状态
@@ -76,6 +337,25 @@ class WorkflowEngine:
         # 性能优化：ArrayTrigger 队列索引，快速定位最后一个相同 nodeId 的项
         # { workflow_id: { node_id: last_index } }
         self._array_queue_last_index = {}
+
+        # ---- Module cache (min patch) ----
+        self._module_cache = {}         # { abs_path: (mtime, module) }
+        self._module_cache_lock = threading.Lock()
+
+        self._event_throttle_lock = threading.Lock()
+
+        # ---- Persisted per-node state (for triggers like Timer) ----
+        # Many node scripts store runtime state in node["_state"] (e.g. last_fire_ts).
+        # Because workflow runtime frequently deepcopy nodes for thread-safety, that state
+        # would otherwise be lost between polls. We persist it here by (workflow_id, node_id).
+        self._node_state_store = {}   # { (workflow_id, node_id): dict_state }
+        self._node_state_lock = threading.Lock()
+
+        # 兼容旧的 DEBUG_PRINT：统一用 enable_debug_print 控制（不删旧逻辑）
+        try:
+            self.DEBUG_PRINT = bool(self.enable_debug_print)
+        except Exception:
+            pass
 
     # —— 输出过滤器：仅放行以 [TRACE: 开头的行 ——
     class _TracePrefixFilter(io.TextIOBase):
@@ -124,6 +404,138 @@ class WorkflowEngine:
         except Exception:
             pass
 
+    # -------------------------
+    # Debug / cache bookkeeping
+    # -------------------------
+    def dbg(self, *args, **kwargs):
+        if getattr(self, "enable_debug_print", False):
+            print(*args, **kwargs)
+
+    # -------------------------
+    # Persisted node state
+    # -------------------------
+    def _get_node_state(self, workflow_id: str, node_id: str):
+        try:
+            wid = str(workflow_id or "")
+            nid = str(node_id or "")
+            if not wid or not nid:
+                return None
+            with self._node_state_lock:
+                st = self._node_state_store.get((wid, nid))
+            return copy.deepcopy(st) if isinstance(st, dict) else None
+        except Exception:
+            return None
+
+    def _set_node_state(self, workflow_id: str, node_id: str, state):
+        try:
+            wid = str(workflow_id or "")
+            nid = str(node_id or "")
+            if not wid or not nid:
+                return
+            if not isinstance(state, dict):
+                with self._node_state_lock:
+                    self._node_state_store.pop((wid, nid), None)
+                return
+            with self._node_state_lock:
+                # store a deepcopy to avoid accidental shared mutation across threads
+                self._node_state_store[(wid, nid)] = copy.deepcopy(state)
+        except Exception:
+            pass
+
+    def _clear_workflow_node_states(self, workflow_id: str):
+        """Clear persisted node states for a workflow (called on restart/cleanup)."""
+        try:
+            wid = str(workflow_id or "")
+            if not wid:
+                return
+            with self._node_state_lock:
+                stale = [k for k in list(self._node_state_store.keys()) if k and k[0] == wid]
+                for k in stale:
+                    self._node_state_store.pop(k, None)
+        except Exception:
+            pass
+
+    def _mark_cache_touch(self, cache_name, key, now_ts=None):
+        if now_ts is None:
+            now_ts = time.time()
+        self._cache_time[(cache_name, key)] = now_ts
+
+    def _prune_cache_if_needed(self):
+        now = time.time()
+
+        # 周期触发（避免每次都扫）
+        self._run_counter += 1
+        if self._run_counter % self.cleanup_expired_every_n_runs != 0:
+            return
+
+        # A) TTL清理
+        expired = []
+        for (cache_name, key), ts in list(self._cache_time.items()):
+            try:
+                if now - ts > self.cache_ttl_seconds:
+                    expired.append((cache_name, key))
+            except Exception:
+                continue
+        for cache_name, key in expired:
+            self._cache_time.pop((cache_name, key), None)
+            cache_obj = getattr(self, cache_name, None)
+            if isinstance(cache_obj, dict):
+                cache_obj.pop(key, None)
+
+        # B) 最大条目保护（按时间从旧到新裁剪）
+        try:
+            if len(self._cache_time) > self.cache_max_items:
+                over = len(self._cache_time) - self.cache_max_items
+                oldest = sorted(self._cache_time.items(), key=lambda x: x[1])[:over]
+                for (cache_name, key), _ in oldest:
+                    self._cache_time.pop((cache_name, key), None)
+                    cache_obj = getattr(self, cache_name, None)
+                    if isinstance(cache_obj, dict):
+                        cache_obj.pop(key, None)
+        except Exception:
+            pass
+
+    def _runtime_cleanup(self, workflow_id):
+        # 1) 核心运行态
+        self.workflows.pop(workflow_id, None)
+        self.stop_events.pop(workflow_id, None)
+        self.child_workflows.pop(workflow_id, None)
+        self.parent_map.pop(workflow_id, None)
+
+        # 2) 缓存/节流
+        self._history_buffer.pop(workflow_id, None)
+        self._event_throttle_last_ts.pop(workflow_id, None)
+        self._array_queue_last_index.pop(workflow_id, None)
+        # 2.1) per-node persisted state
+        try:
+            self._clear_workflow_node_states(workflow_id)
+        except Exception:
+            pass
+
+        # 3) 前缀类缓存（如 wid:xxx）
+        try:
+            stale = [k for k in list(self._last_ring_fp.keys()) if str(k).startswith(f"{workflow_id}:")]
+            for k in stale:
+                self._last_ring_fp.pop(k, None)
+        except Exception:
+            pass
+
+        # 4) 定时器
+        t = self._cleanup_timers.pop(workflow_id, None)
+        if t:
+            try:
+                t.cancel()
+            except Exception:
+                pass
+
+        # 5) cache_time 侧表清理
+        try:
+            stale_time_keys = [ck for ck in list(self._cache_time.keys()) if str(ck[1]).startswith(f"{workflow_id}:")]
+            for ck in stale_time_keys:
+                self._cache_time.pop(ck, None)
+        except Exception:
+            pass
+
     def _trace_start(self, workflow_id, pass_node, outputs_len):
         try:
             self._trace_enabled = True
@@ -167,42 +579,255 @@ class WorkflowEngine:
             pass
 
     def _flush_history_items_to_file(self, file_path: Path, items: list):
-        """把 items 批量合并写入到指定 History 文件（内部使用 _history_lock 串行化）。"""
+        """
+        ✅ 改为 JSONL append（关键提速点）：
+        - 不再读整文件/重写整文件
+        - 保留函数名与签名，避免大范围改动调用点
+        """
         if not items:
             return
+        # file_path 参数保留兼容旧调用点（旧模式写 History/<project>/<workflow_id>.json）
         try:
-            file_path.parent.mkdir(parents=True, exist_ok=True)
+            p = _history_jsonl_path(Path(self.BASE_DIR))
+        except Exception:
+            p = _history_jsonl_path(Path(self.base_dir))
+        # 串行化 append（避免多线程写入行交错）
+        with self._history_lock:
+            try:
+                with p.open("a", encoding="utf-8") as f:
+                    for it in items:
+                        if not isinstance(it, dict):
+                            continue
+                        f.write(json.dumps(it, ensure_ascii=False) + "\n")
+                    f.flush()
+            except Exception:
+                pass
+
+    def _find_legacy_history_file_by_workflow(self, workflow_id: str):
+        """兼容旧版：查找 History/**/<workflow_id>.json（可能按项目分目录）。"""
+        try:
+            wid = str(workflow_id or "")
+            if not wid:
+                return None
+            history_root = Path(self.BASE_DIR) / "History"
+            pat = f"{wid}.json"
+            try:
+                matches = list(history_root.rglob(pat))
+                if matches:
+                    return matches[0]
+            except Exception:
+                pass
+            legacy = history_root / pat
+            return legacy if legacy.exists() else None
+        except Exception:
+            return None
+
+    def _read_history_compatible(self, workflow_id: str, days: int = 7):
+        """
+        读取：JSONL + 旧 JSON 双兼容；对外仍返回 list[list[dict]]（会话分组），前端无感。
+        """
+        wid = str(workflow_id or "")
+        if not wid:
+            return []
+
+        all_items = []
+        seen = set()
+
+        # A) 先读 JSONL（近 N 天）
+        try:
+            n_days = max(1, int(days or 7))
+        except Exception:
+            n_days = 7
+        now = datetime.utcnow()
+        for i in range(n_days):
+            dd = now - timedelta(days=i)
+            try:
+                p = _history_jsonl_path(Path(self.BASE_DIR), dd)
+            except Exception:
+                p = _history_jsonl_path(Path(self.base_dir), dd)
+            for it in _iter_jsonl_records(p):
+                if not isinstance(it, dict):
+                    continue
+                if str(it.get("workflow_id", "")) != wid:
+                    continue
+                k = _event_dedupe_key(it)
+                if k in seen:
+                    continue
+                seen.add(k)
+                all_items.append(it)
+
+        # B) 回退读旧 JSON（兼容老数据：History/**/<workflow_id>.json）
+        old_p = self._find_legacy_history_file_by_workflow(wid)
+        if old_p and old_p.exists():
+            try:
+                with old_p.open("r", encoding="utf-8") as f:
+                    old = json.load(f)
+                old_items = []
+                if isinstance(old, list):
+                    # 旧结构通常是 list[list[dict]]
+                    if old and all(isinstance(x, list) for x in old):
+                        for sess in old:
+                            for it in (sess or []):
+                                if isinstance(it, dict):
+                                    old_items.append(it)
+                    else:
+                        for it in old:
+                            if isinstance(it, dict):
+                                old_items.append(it)
+                elif isinstance(old, dict):
+                    cand = old.get("items", []) or old.get("history", []) or []
+                    if isinstance(cand, list):
+                        for it in cand:
+                            if isinstance(it, dict):
+                                old_items.append(it)
+                # 给旧条目补齐必要字段（用于排序/去重/过滤）
+                try:
+                    base_ts = float(old_p.stat().st_mtime)
+                except Exception:
+                    base_ts = time.time()
+                for idx, it in enumerate(old_items):
+                    if not isinstance(it, dict):
+                        continue
+                    it.setdefault("workflow_id", wid)
+                    it.setdefault("event_type", "legacy")
+                    it.setdefault("node_id", it.get("id") or it.get("nodeId") or "")
+                    if it.get("ts") is None:
+                        it["ts"] = base_ts + (idx * 1e-6)
+                    k = _event_dedupe_key(it)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    all_items.append(it)
+            except Exception:
+                pass
+
+        # B2) 回退读旧 JSON（兼容另一种旧路径：workflow_history/history.json）
+        try:
+            old2_p = Path(self.BASE_DIR) / "workflow_history" / "history.json"
+        except Exception:
+            old2_p = Path(self.base_dir) / "workflow_history" / "history.json"
+        if old2_p.exists():
+            try:
+                with old2_p.open("r", encoding="utf-8") as f:
+                    old2 = json.load(f)
+                if isinstance(old2, list):
+                    old2_items = old2
+                elif isinstance(old2, dict):
+                    old2_items = old2.get("items", []) or old2.get("history", []) or []
+                else:
+                    old2_items = []
+                if not isinstance(old2_items, list):
+                    old2_items = []
+                try:
+                    base_ts2 = float(old2_p.stat().st_mtime)
+                except Exception:
+                    base_ts2 = time.time()
+                for idx, it in enumerate(old2_items):
+                    if not isinstance(it, dict):
+                        continue
+                    # 若该旧 JSON 是全局混合文件，则优先按 workflow_id 过滤
+                    if it.get("workflow_id") is not None and str(it.get("workflow_id")) != wid:
+                        continue
+                    it.setdefault("workflow_id", wid)
+                    it.setdefault("event_type", "legacy")
+                    it.setdefault("node_id", it.get("node_id") or it.get("id") or it.get("nodeId") or "")
+                    if it.get("ts") is None:
+                        it["ts"] = base_ts2 + (idx * 1e-6)
+                    k = _event_dedupe_key(it)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    all_items.append(it)
+            except Exception:
+                pass
+
+        # C) 排序（ts 缺失时放后面）
+        def _ts_key(x: dict):
+            try:
+                v = x.get("ts") or x.get("time") or ""
+                if v in (None, ""):
+                    return (1, 0.0)
+                if isinstance(v, (int, float)):
+                    return (0, float(v))
+                # 字符串：尽量解析为 float，否则退化为字符串排序
+                try:
+                    return (0, float(str(v)))
+                except Exception:
+                    return (0, str(v))
+            except Exception:
+                return (1, 0.0)
+
+        all_items.sort(key=_ts_key)
+
+        # D) 组装为“会话列表”（保持旧返回结构）
+        def _is_start_record(it: dict) -> bool:
+            try:
+                et = str(it.get("event_type", "")).lower()
+                if et in ("start", "session_start"):
+                    return True
+            except Exception:
+                pass
+            # 兼容前端/旧 Start 形态
+            try:
+                name_s = str(it.get("name", "")).strip().lower()
+                msg_s = str(it.get("message", "")).strip().lower()
+                if name_s in ("new started", "start", "new conversation started"):
+                    return True
+                if msg_s.startswith("new conversation"):
+                    return True
+            except Exception:
+                pass
+            return False
+
+        sessions = []
+        cur = []
+        for it in all_items:
+            if not isinstance(it, dict):
+                continue
+            if _is_start_record(it):
+                if cur:
+                    sessions.append(cur)
+                cur = [it]
+            else:
+                if not cur:
+                    cur = []
+                cur.append(it)
+        if cur:
+            sessions.append(cur)
+        return sessions
+
+    def _is_history_enabled(self, workflow_id: str) -> bool:
+        """判断当前工作流是否允许写入 History（默认允许）。"""
+        try:
+            wf = self.workflows.get(workflow_id) or {}
+            gd = wf.get("graph_data") if isinstance(wf, dict) else None
+            if isinstance(gd, dict) and ("RecordHistory" in gd):
+                return bool(gd.get("RecordHistory"))
         except Exception:
             pass
-        with self._history_lock:
-            if file_path.exists():
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        json_data = json.load(f)
-                except (json.JSONDecodeError, Exception):
-                    json_data = []
-            else:
-                json_data = []
-            if not json_data or not isinstance(json_data[-1], list):
-                json_data.append([])
-            json_data[-1].extend(items)
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(json_data, f, ensure_ascii=False, indent=2)
+        return True
 
     def _flush_history_buffer_for_workflow(self, workflow_id: str):
         """把某个 workflow 的 History 缓冲落盘（用于结束/清理前兜底 flush）。"""
         try:
-            entry = self._history_buffer.get(workflow_id)
-            if not entry:
-                return
-            pending = entry.get("pending") or []
-            fp_str = entry.get("file_path")
-            if not pending or not fp_str:
-                return
-            items = pending[:]
-            entry["pending"] = []
-            entry["last_flush"] = time.time()
-            self._flush_history_items_to_file(Path(fp_str), items)
+            items = None
+            fp_str = None
+            now_ts = time.time()
+            # 先在锁内“拿走待写 items”，缩短共享区停留时间
+            with self._history_lock:
+                entry = self._history_buffer.get(workflow_id)
+                if not entry:
+                    return
+                pending = entry.get("pending") or []
+                fp_str = entry.get("file_path")
+                if not pending or not fp_str:
+                    return
+                items = pending[:]
+                entry["pending"] = []
+                entry["last_flush"] = now_ts
+            # I/O 在锁外执行
+            if items and fp_str:
+                self._flush_history_items_to_file(Path(fp_str), items)
         except Exception:
             pass
 
@@ -212,11 +837,18 @@ class WorkflowEngine:
             # 最小节流：100ms 内的“非关键日志”直接跳过，避免 self.lock 变成热点
             try:
                 now_ts = time.time()
-                last_ts = self._event_throttle_last_ts.get(workflow_id, 0.0)
-                is_critical = any(k in message for k in ("❌", "⚠️", "✅", "🆕", "[TRACE", "[RING", "[CHILD", "[HISTORY"))
-                if (not is_critical) and (now_ts - last_ts) < 0.1:
-                    return
-                self._event_throttle_last_ts[workflow_id] = now_ts
+                with self._event_throttle_lock:
+                    last_ts = self._event_throttle_last_ts.get(workflow_id, 0.0)
+                    is_critical = any(k in message for k in ("❌", "⚠️", "✅", "🆕", "[TRACE", "[RING", "[CHILD", "[HISTORY"))
+                    if (not is_critical) and (now_ts - last_ts) < 0.1:
+                        return
+                    self._event_throttle_last_ts[workflow_id] = now_ts
+                # cache bookkeeping (TTL + max-items)
+                try:
+                    self._mark_cache_touch("_event_throttle_last_ts", workflow_id, now_ts)
+                    self._prune_cache_if_needed()
+                except Exception:
+                    pass
             except Exception:
                 pass
             with self.lock:
@@ -243,7 +875,18 @@ class WorkflowEngine:
     def _add_history(self, workflow_id, node_data):
         """添加历史记录（与前端addHistory逻辑对齐）"""
         try:
+            # 用户可选择关闭历史记录：关闭后不再写入（减少磁盘/IO压力）
+            if not self._is_history_enabled(str(workflow_id)):
+                return
             debug = getattr(self, "DEBUG_PRINT", False)
+            # 防止单条 Context/prompt 超大撑爆文件：字符串截断
+            def _trunc(s, max_chars: int = 20000):
+                try:
+                    if isinstance(s, str) and max_chars and len(s) > max_chars:
+                        return s[:max_chars] + f"\n...[truncated {len(s) - max_chars} chars]"
+                except Exception:
+                    pass
+                return s
             # 打印调试信息（可开关）
             if debug:
                 print(f"📝 [HISTORY] 添加历史记录 - 工作流: {workflow_id}")
@@ -271,7 +914,7 @@ class WorkflowEngine:
                 for item in node_data.get('Outputs', []):
                     selected_field = {}
                     if 'String' in item.get('Kind', ''):
-                        selected_field = {'Context': item.get('Context')}
+                        selected_field = {'Context': _trunc(item.get('Context'))}
                     elif 'Boolean' in item.get('Kind', ''):
                         selected_field = {'Boolean': item.get('Boolean')}
                     elif 'Num' in item.get('Kind', ''):
@@ -287,7 +930,7 @@ class WorkflowEngine:
                 for item in node_data.get('Inputs', []):
                     selected_field = {}
                     if 'String' in item.get('Kind', ''):
-                        selected_field = {'Context': item.get('Context')}
+                        selected_field = {'Context': _trunc(item.get('Context'))}
                     elif 'Boolean' in item.get('Kind', ''):
                         selected_field = {'Boolean': item.get('Boolean')}
                     elif 'Num' in item.get('Kind', ''):
@@ -302,6 +945,26 @@ class WorkflowEngine:
                 if debug:
                     print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
             
+            # ---- JSONL 兼容字段（不影响前端；仅增加去重/排序/过滤所需元数据）----
+            try:
+                filtered_data.setdefault("ts", time.time())
+                filtered_data.setdefault("workflow_id", str(workflow_id))
+                if node_data == "Start":
+                    _etype = "start"
+                    _nid = ""
+                elif isinstance(node_data, dict):
+                    _etype = "node"
+                    _nid = node_data.get("id") or node_data.get("nodeId") or ""
+                else:
+                    _etype = "misc"
+                    _nid = ""
+                filtered_data.setdefault("event_type", _etype)
+                filtered_data.setdefault("node_id", str(_nid) if _nid is not None else "")
+                # 每条记录一个 event_id；用于 JSONL 合并去重（更稳）
+                filtered_data.setdefault("event_id", uuid.uuid4().hex)
+            except Exception:
+                pass
+
             # 过滤不需要的 array 子工作流历史
             if "__array_" in str(workflow_id):
                 try:
@@ -336,42 +999,57 @@ class WorkflowEngine:
             # ✅ 最小修改：改为缓冲 + 批量落盘，减少“读-改-写整文件”的频率与锁竞争
             now_ts = time.time()
             fp_str = str(file_path)
-            entry = self._history_buffer.get(workflow_id)
-            if (not entry) or entry.get("file_path") != fp_str:
-                # 若 path 变化，先 flush 旧缓冲
-                try:
-                    if entry and entry.get("pending") and entry.get("file_path"):
-                        self._flush_history_items_to_file(Path(entry["file_path"]), entry.get("pending") or [])
-                except Exception:
-                    pass
-                entry = {"file_path": fp_str, "pending": [], "last_flush": now_ts}
-                self._history_buffer[workflow_id] = entry
+            old_items = None
+            old_fp = None
+            items_to_flush = None
 
-            entry["pending"].append(filtered_data)
+            # 1) 锁内：更新 buffer / 决定是否需要 flush / 若路径变化则把旧 pending 取出
+            with self._history_lock:
+                entry = self._history_buffer.get(workflow_id)
+                if (not entry) or entry.get("file_path") != fp_str:
+                    # 若 path 变化，先把旧缓冲取走（锁外 I/O）
+                    try:
+                        if entry and entry.get("pending") and entry.get("file_path"):
+                            old_items = (entry.get("pending") or [])[:]
+                            old_fp = entry.get("file_path")
+                    except Exception:
+                        old_items, old_fp = None, None
+                    entry = {"file_path": fp_str, "pending": [], "last_flush": now_ts}
+                    self._history_buffer[workflow_id] = entry
 
-            should_flush = False
-            try:
-                buf_n = int(getattr(self, "HISTORY_BUFFER_SIZE", 20) or 20)
-                if len(entry["pending"]) >= buf_n:
-                    should_flush = True
-            except Exception:
-                pass
-            if not should_flush:
+                entry["pending"].append(filtered_data)
+
+                should_flush = False
                 try:
-                    last_flush = float(entry.get("last_flush", 0.0) or 0.0)
-                    interval = float(getattr(self, "HISTORY_FLUSH_INTERVAL", 0.5) or 0.5)
-                    if (now_ts - last_flush) >= interval:
+                    buf_n = int(getattr(self, "HISTORY_BUFFER_SIZE", 20) or 20)
+                    if len(entry["pending"]) >= buf_n:
                         should_flush = True
                 except Exception:
                     pass
+                if not should_flush:
+                    try:
+                        last_flush = float(entry.get("last_flush", 0.0) or 0.0)
+                        interval = float(getattr(self, "HISTORY_FLUSH_INTERVAL", 0.5) or 0.5)
+                        if (now_ts - last_flush) >= interval:
+                            should_flush = True
+                    except Exception:
+                        pass
 
-            if should_flush:
-                items = entry["pending"][:]
-                entry["pending"] = []
-                entry["last_flush"] = now_ts
-                self._flush_history_items_to_file(file_path, items)
+                if should_flush:
+                    items_to_flush = (entry.get("pending") or [])[:]
+                    entry["pending"] = []
+                    entry["last_flush"] = now_ts
+
+            # 2) 锁外：实际落盘（JSONL append）
+            try:
+                if old_items and old_fp:
+                    self._flush_history_items_to_file(Path(old_fp), old_items)
+            except Exception:
+                pass
+            if items_to_flush:
+                self._flush_history_items_to_file(file_path, items_to_flush)
                 if debug:
-                    print(f"✅ [HISTORY] 批量落盘 {len(items)} 条 -> {file_path}")
+                    print(f"✅ [HISTORY] 批量落盘 {len(items_to_flush)} 条 -> {file_path}")
             
         except Exception as e:
             debug = locals().get("debug", getattr(self, "DEBUG_PRINT", False))
@@ -389,7 +1067,14 @@ class WorkflowEngine:
         try:
             if not isinstance(graph_data, dict):
                 return
+            # 用户关闭历史记录时：不保存 run 快照（否则仍会产生大文件）
+            try:
+                if ("RecordHistory" in graph_data) and (not bool(graph_data.get("RecordHistory"))):
+                    return
+            except Exception:
+                pass
             nodes = graph_data.get("nodes", [])
+            edges = graph_data.get("edges", [])
             # 组件名（尽量简单安全）
             name_candidates = [
                 (graph_data.get("ProjectName") if isinstance(graph_data.get("ProjectName"), str) else None),
@@ -428,11 +1113,113 @@ class WorkflowEngine:
             except Exception:
                 # 兜底：仍然退化为旧命名方式
                 fp = history_dir / f"{ts}.json"
-            payload = {"nodes": nodes}
+            # 体积优化：只保存必要字段，并截断超长字符串
+            def _trunc(s, max_chars: int = 4000):
+                try:
+                    if isinstance(s, str) and max_chars and len(s) > max_chars:
+                        return s[:max_chars] + f"\n...[truncated {len(s) - max_chars} chars]"
+                except Exception:
+                    pass
+                return s
+
+            def _slim_ports(arr):
+                out = []
+                if not isinstance(arr, list):
+                    return out
+                for it in arr:
+                    if not isinstance(it, dict):
+                        continue
+                    kind = str(it.get("Kind", "") or "")
+                    d = {
+                        "name": it.get("name"),
+                        "Kind": it.get("Kind"),
+                    }
+                    if "String" in kind:
+                        d["Context"] = _trunc(it.get("Context"))
+                    elif "Boolean" in kind:
+                        d["Boolean"] = it.get("Boolean")
+                    elif "Num" in kind:
+                        d["Num"] = it.get("Num")
+                    out.append(d)
+                return out
+
+            def _slim_edges(arr):
+                out = []
+                if not isinstance(arr, list):
+                    return out
+                for e in arr:
+                    if not isinstance(e, dict):
+                        continue
+                    out.append({
+                        "id": e.get("id"),
+                        "source": e.get("source"),
+                        "target": e.get("target"),
+                        "sourceAnchor": e.get("sourceAnchor"),
+                        "targetAnchor": e.get("targetAnchor"),
+                        "sourceAnchorID": e.get("sourceAnchorID"),
+                        "targetAnchorID": e.get("targetAnchorID"),
+                        # 可选字段：用于渲染/并行边恢复（存在则保留）
+                        "type": e.get("type"),
+                        "label": e.get("label"),
+                        "curveOffset": e.get("curveOffset"),
+                        "curvePosition": e.get("curvePosition"),
+                        "minCurveOffset": e.get("minCurveOffset"),
+                    })
+                return out
+
+            slim_nodes = []
+            if isinstance(nodes, list):
+                for n in nodes:
+                    if not isinstance(n, dict):
+                        continue
+                    slim_nodes.append({
+                        "id": n.get("id"),
+                        "name": n.get("name"),
+                        "label": n.get("label"),
+                        "NodeKind": n.get("NodeKind"),
+                        "isFinish": n.get("isFinish"),
+                        "IsError": n.get("IsError"),
+                        "ErrorContext": _trunc(n.get("ErrorContext")),
+                        "Inputs": _slim_ports(n.get("Inputs", [])),
+                        "Outputs": _slim_ports(n.get("Outputs", [])),
+                    })
+
+            payload = {
+                "project": comp_safe,
+                "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "nodes": slim_nodes,
+                # 之前这里为了节省体积只存 nodes；但 edges 对回放/还原拓扑很关键，这里补回（仍为精简版）
+                "edges": _slim_edges(edges)
+            }
             with open(fp, "w", encoding="utf-8") as f:
-                json.dump(payload, f, ensure_ascii=False, indent=2)
+                # 体积优化：不缩进 + 紧凑分隔符
+                json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
             try:
                 print(f"[HISTORY:SAVE] {fp}")
+            except Exception:
+                pass
+
+            # ---------- 可选：按上限清理最老的“运行快照记录”文件 ----------
+            # 仅清理当前项目目录下形如 YYYYMMDD_HHMMSS_xxxxxx.json 的快照文件，
+            # 不影响 workflow_*.json（运行细节）或 YYYYMMDD.json（/addHistory 的按日记录）
+            try:
+                max_files = graph_data.get("HistoryMaxFiles") if isinstance(graph_data, dict) else None
+                if max_files is None:
+                    max_files = graph_data.get("history_max_files") if isinstance(graph_data, dict) else None
+                max_files = int(max_files) if max_files is not None else 0
+                if max_files and max_files > 0:
+                    try:
+                        import re as _re
+                        pat = _re.compile(r"^\\d{8}_\\d{6}_.+\\.json$", _re.I)
+                        cands = [p for p in history_dir.glob("*.json") if pat.match(p.name)]
+                        cands.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                        for old in cands[max_files:]:
+                            try:
+                                old.unlink()
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
             except Exception:
                 pass
         except Exception as _e_hist:
@@ -441,6 +1228,50 @@ class WorkflowEngine:
             except Exception:
                 pass
     
+    def _load_module(self, script_path: Path):
+        """
+        节点脚本加载：
+        - 默认：每次创建独立 module（避免多线程共享 module 全局变量导致“数据误传”）
+        - 可选：开启 WF_SHARED_NODE_MODULES=1 时，复用 module（旧缓存行为）
+        返回 module
+        """
+        p = Path(script_path).resolve()
+        try:
+            mtime = p.stat().st_mtime
+        except Exception:
+            mtime = None
+
+        key = str(p)
+
+        # 安全默认：隔离 module 全局变量（每次 new module）
+        if not WF_SHARED_NODE_MODULES:
+            mod_name = f"node_{p.stem}_{uuid.uuid4().hex}"
+            spec = importlib.util.spec_from_file_location(mod_name, p)
+            if spec is None or spec.loader is None:
+                raise RuntimeError(f"Unable to load module spec for {p}")
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[spec.name] = module
+            spec.loader.exec_module(module)
+            return module
+
+        # 兼容旧行为：同一路径 + mtime 不变 => 复用 module（注意：并发下 module 全局状态会共享）
+        with self._module_cache_lock:
+            hit = self._module_cache.get(key)
+            if hit and hit[0] == mtime and hit[1] is not None:
+                return hit[1]
+
+        mod_name = f"node_{p.stem}_{abs(hash(key))}"
+        spec = importlib.util.spec_from_file_location(mod_name, p)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Unable to load module spec for {p}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        spec.loader.exec_module(module)
+
+        with self._module_cache_lock:
+            self._module_cache[key] = (mtime, module)
+        return module
+
     def _find_script(self, node_name):
         """查找节点对应的脚本文件（与app.py保持一致）"""
         base = node_name[:-3] if node_name.lower().endswith(".py") else node_name
@@ -646,6 +1477,13 @@ class WorkflowEngine:
     
     def _process_node(self, node):
         """处理节点的输入输出，准备执行环境 - 完全按照老代码逻辑"""
+        # ✅ 并发止血：保持“纯函数风格”，不回写传入 node（入参可能被并发共享）
+        # 统一在局部副本上进行 tempfiles 解析 / 模板替换 / messages 组装
+        try:
+            node = copy.deepcopy(node)
+        except Exception:
+            # 兜底：至少浅拷贝，避免直接污染外部引用
+            node = dict(node or {})
         # ---------- 1. 先解析 @TempFiles、@Memory 等标签 ----------
         TAGS = ["TempFiles", "NoteBook", "Memory", "WorkFlow", "Nodes"]
         for tag in TAGS:
@@ -737,7 +1575,7 @@ class WorkflowEngine:
             for token in leftovers:
                 export_prompt = _replace_token(export_prompt, token, "")
 
-        # 更新节点的 ExportPrompt（保留原始 prompt，不回写覆盖）
+        # ExportPrompt 仅写回局部副本（不污染外部共享 node）
         node["ExportPrompt"] = export_prompt
         try:
             print(f"[DEBUG:PROCESS_NODE] ExportPrompt after replace → {node.get('ExportPrompt')}")
@@ -787,7 +1625,7 @@ class WorkflowEngine:
                 }]
             })
 
-        # 2.4 写回到 node，避免覆盖旧键，改用 CombinedMessages
+        # messages 仅写回局部副本（不污染外部共享 node）
         node["messages"] = msg_list
         
         return node
@@ -798,32 +1636,35 @@ class WorkflowEngine:
         with open(fp, "rb") as f:
             return base64.b64encode(f.read()).decode()
     
-    def _execute_node(self, node):
+    def _execute_node(self, node, workflow_id: str = None):
         """执行单个节点（完全从app.py迁移的逻辑）"""
-        node_name = node.get("name")
-        if getattr(self, "DEBUG_PRINT", False):
-            print(f"🔧 [EXECUTE] 开始执行节点: {node.get('label', node.get('id'))} ({node_name})")
-            print(f"🔧 [EXECUTE] 节点类型: {node.get('NodeKind')}")
-            print(f"🔧 [EXECUTE] 输入数量: {len(node.get('Inputs', []))}")
-            print(f"🔧 [EXECUTE] 输出数量: {len(node.get('Outputs', []))}")
+        # ✅ 去掉重复 deepcopy：调用方（线程提交前 / _process_node）通常已做过 deepcopy
+        # 这里直接使用入参（并尽量避免回写）。
+        node_local = node if isinstance(node, dict) else dict(node or {})
+
+        node_name = node_local.get("name")
+        self.dbg(f"🔧 [EXECUTE] 开始执行节点: {node_local.get('label', node_local.get('id'))} ({node_name})")
+        self.dbg(f"🔧 [EXECUTE] 节点类型: {node_local.get('NodeKind')}")
+        self.dbg(f"🔧 [EXECUTE] 输入数量: {len(node_local.get('Inputs', []))}")
+        self.dbg(f"🔧 [EXECUTE] 输出数量: {len(node_local.get('Outputs', []))}")
         
         # ---------- 1. 先解析 @TempFiles、@Memory 等标签 ----------
         TAGS = ["TempFiles", "NoteBook", "Memory", "WorkFlow", "Nodes"]
         for tag in TAGS:
             marker = f"@{tag}"
-            for inp in node.get("Inputs", []):
+            for inp in node_local.get("Inputs", []):
                 ctx = inp.get("Context")
                 if isinstance(ctx, str) and marker in ctx:
                     inp["Context"] = self._resolve_tempfiles(ctx)
 
-            ex_prompt = node.get("ExportPrompt")
+            ex_prompt = node_local.get("ExportPrompt")
             if isinstance(ex_prompt, str) and marker in ex_prompt:
-                node["ExportPrompt"] = self._resolve_tempfiles(ex_prompt)
+                node_local["ExportPrompt"] = self._resolve_tempfiles(ex_prompt)
 
         # ---------- 2. 构造完整对话 messages（含图片） ----------
         # 2.1 收集需要转 Base64 的图片
         temp_images_b64 = []
-        node_kind = node.get("NodeKind")
+        node_kind = node_local.get("NodeKind")
         
         # 只有当节点类型为LLm时才处理图片
         if node_kind == "LLm":
@@ -831,61 +1672,24 @@ class WorkflowEngine:
             image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp']
             temp_images_b64 = [
                 self._image_to_base64(inp.get("Context", ""))
-                for inp in node.get("Inputs", [])
+                for inp in node_local.get("Inputs", [])
                 if isinstance(inp.get("Kind"), str) and "FilePath" in inp["Kind"] 
                 and any(inp.get("Context", "").lower().endswith(ext) for ext in image_extensions)
             ]
 
-        # 2.2 在执行阶段再次进行占位符替换（兜底）
-        try:
-            template_text_exec = node.get("prompt") or node.get("ExportPrompt", "") or ""
-            export_prompt_exec = template_text_exec
-            exec_matches = retrieve_content_within_braces(template_text_exec)
-
-            def _replace_token_exec(text, token, value):
-                try:
-                    return re.sub(r'{{\s*' + re.escape(token) + r'\s*}}', value if value is not None else "", text)
-                except Exception:
-                    return text
-
-            for match in exec_matches:
-                for input_item in node.get("Inputs", []) or []:
-                    token = (str(match).strip() if match is not None else "")
-                    aliases = [
-                        (str(input_item.get("name")).strip()  if input_item.get("name")  is not None else None),
-                        (str(input_item.get("Id")).strip()    if input_item.get("Id")    is not None else None),
-                        (str(input_item.get("Alias")).strip() if input_item.get("Alias") is not None else None),
-                    ]
-                    if token and token in [a for a in aliases if a is not None]:
-                        if input_item.get("Kind") == 'Num':
-                            val = str(input_item.get("Num", ""))
-                        elif isinstance(input_item.get("Kind"), str) and ('String' in input_item.get("Kind")):
-                            val = str(input_item.get("Context", ""))
-                        elif input_item.get("Kind") == 'Boolean':
-                            val = "true" if input_item.get("Boolean", False) else "false"
-                        else:
-                            val = ""
-                        export_prompt_exec = _replace_token_exec(export_prompt_exec, token, val)
-                        break
-
-            if '{{' in export_prompt_exec and '}}' in export_prompt_exec:
-                leftovers = retrieve_content_within_braces(export_prompt_exec)
-                for token in leftovers:
-                    export_prompt_exec = _replace_token_exec(export_prompt_exec, token, "")
-            node["ExportPrompt"] = export_prompt_exec
-        except Exception:
-            pass
+        # ✅ C. 去掉“二次替换”：仅保留 _process_node 阶段的模板替换
+        export_prompt_to_send = node_local.get("ExportPrompt", "")
 
         # 2.3 system_prompt 生成
-        system_prompt = f"{node.get('SystemPrompt', '')}\n{node.get('ExprotAfterPrompt', '')}"
-        if node.get("OriginalTextSelector") == "OriginalText":
-            system_prompt = node.get("SystemPrompt", "")
+        system_prompt = f"{node_local.get('SystemPrompt', '')}\n{node_local.get('ExprotAfterPrompt', '')}"
+        if node_local.get("OriginalTextSelector") == "OriginalText":
+            system_prompt = node_local.get("SystemPrompt", "")
 
         # 2.4 拼接消息列表
         msg_list = [
             {"role": "system", "content": system_prompt},
-            {"role": "user",   "content": node.get("ExportPrompt", "")},
-            *[m for m in node.get("messages", []) if m.get("role") != "System"],
+            {"role": "user",   "content": export_prompt_to_send},
+            *[m for m in node_local.get("messages", []) if m.get("role") != "System"],
         ]
         for b64 in temp_images_b64:
             msg_list.append({
@@ -896,10 +1700,12 @@ class WorkflowEngine:
                 }]
             })
 
-        # 2.5 写回到 node，避免覆盖旧键，改用 CombinedMessages
-        node["messages"] = msg_list
+        # ✅ 不回写 node_local；仅构造本次执行的 payload
+        node_to_run = dict(node_local)
+        node_to_run["messages"] = msg_list
+        node_to_run["ExportPrompt"] = export_prompt_to_send
         try:
-            print(f"[DEBUG:EXEC_NODE] ExportPrompt before send → {node.get('ExportPrompt')}")
+            print(f"[DEBUG:EXEC_NODE] ExportPrompt before send → {export_prompt_to_send}")
             if msg_list and isinstance(msg_list, list) and len(msg_list) > 1:
                 print(f"[DEBUG:EXEC_NODE] USER content → {msg_list[1].get('content')}")
         except Exception:
@@ -929,9 +1735,9 @@ class WorkflowEngine:
             return output, debug_text
 
         # ---------- 4. 分支：ReAct / LangGraph ----------
-        node_kind = node.get("NodeKind")
-        tools = node.get("Tools")
-        is_react = node.get("IsReact")
+        node_kind = node_to_run.get("NodeKind")
+        tools = node_to_run.get("Tools")
+        is_react = node_to_run.get("IsReact")
 
         if node_kind == "LLm" and tools is not None and is_react is True:
             try:
@@ -939,24 +1745,25 @@ class WorkflowEngine:
                 if not langgraph_agent_path.is_file():
                     return {"error": f"Langgraph/Agent.py not found at {langgraph_agent_path}"}, 404
 
-                with self.lock:
-                    spec   = importlib.util.spec_from_file_location("langgraph_agent", langgraph_agent_path)
-                    module = importlib.util.module_from_spec(spec)
-                    sys.modules[spec.name] = module
-                    spec.loader.exec_module(module)
+                capture = (not bool(self.enable_debug_print)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+                with _thread_stdio_scope(console_enabled=bool(self.enable_debug_print), capture=capture) as _buf:
+                    # I/O (module load) must be outside self.lock
+                    module = self._load_module(langgraph_agent_path)
 
-                result = module.run_node(node)
-                output, debug_text = normalize_result(result)
+                    result = module.run_node(node_to_run)
+                    output, debug_text = normalize_result(result)
+                if _buf is not None:
+                    debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
                 result_data = {
                     "output":       output,
                     "debug":        debug_text,
-                    "inputs":       node.get("Inputs", []),
-                    "ExportPrompt": node.get("ExportPrompt"),
+                    "inputs":       node_to_run.get("Inputs", []),
+                    "ExportPrompt": export_prompt_to_send,
                 }
                 
                 # 打印执行结果
-                print(f"✅ [EXECUTE] LangGraph节点执行完成: {node.get('label', node.get('id'))}")
+                print(f"✅ [EXECUTE] LangGraph节点执行完成: {node_to_run.get('label', node_to_run.get('id'))}")
                 print(f"✅ [EXECUTE] 输出数量: {len(output)}")
                 print(f"✅ [EXECUTE] Debug长度: {len(debug_text)}")
                 if output:
@@ -965,7 +1772,7 @@ class WorkflowEngine:
                 # 添加指纹日志
                 try:
                     outs = result_data.get("output") if isinstance(result_data, dict) else None
-                    fp = self._calc_fp(node.get("id"), outs)
+                    fp = self._calc_fp(node_to_run.get("id"), outs)
                     print(f"[RING:FP] recv {fp}")
                 except Exception:
                     pass
@@ -981,27 +1788,48 @@ class WorkflowEngine:
             return {"error": f"Script {node_name} not found"}, 404
 
         try:
-            with self.lock:
-                spec   = importlib.util.spec_from_file_location(script_path.stem, script_path)
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[spec.name] = module
-                spec.loader.exec_module(module)
+            capture = (not bool(self.enable_debug_print)) and bool(CAPTURE_NODE_STDIO_WHEN_SILENCED)
+            with _thread_stdio_scope(console_enabled=bool(self.enable_debug_print), capture=capture) as _buf:
+                # I/O (module load) must be outside self.lock
+                module = self._load_module(script_path)
 
-            # ★ 新增：执行前解析别名，确保工具收到绝对路径
-            node = self._resolve_aliases_in_node(node)
+                # ★ 新增：执行前解析别名，确保工具收到绝对路径
+                node_to_run2 = self._resolve_aliases_in_node(copy.deepcopy(node_to_run))
 
-            result = module.run_node(node)
-            output, debug_text = normalize_result(result)
+                # ★ 关键修复：注入并持久化 node["_state"]（用于 Timer 等触发器跨轮记忆）
+                if WF_PERSIST_NODE_STATE:
+                    try:
+                        nid = node_to_run2.get("id") or node_to_run2.get("nodeId")
+                        if workflow_id and nid:
+                            st = self._get_node_state(str(workflow_id), str(nid))
+                            if st is not None:
+                                node_to_run2["_state"] = st
+                    except Exception:
+                        pass
+
+                result = module.run_node(node_to_run2)
+                output, debug_text = normalize_result(result)
+
+                # 回写持久化状态（脚本可能更新了 node_to_run2["_state"]）
+                if WF_PERSIST_NODE_STATE:
+                    try:
+                        nid = node_to_run2.get("id") or node_to_run2.get("nodeId")
+                        if workflow_id and nid:
+                            self._set_node_state(str(workflow_id), str(nid), node_to_run2.get("_state"))
+                    except Exception:
+                        pass
+            if _buf is not None:
+                debug_text = _merge_debug_with_stdio(debug_text, _buf.getvalue())
 
             result = {
                 "output":       output,
                 "debug":        debug_text,
-                "inputs":       node.get("Inputs", []),
-                "ExportPrompt": node.get("ExportPrompt"),
+                "inputs":       node_to_run2.get("Inputs", []),
+                "ExportPrompt": export_prompt_to_send,
             }
             
             # 打印执行结果
-            print(f"✅ [EXECUTE] 节点执行完成: {node.get('label', node.get('id'))}")
+            print(f"✅ [EXECUTE] 节点执行完成: {node_to_run2.get('label', node_to_run2.get('id'))}")
             print(f"✅ [EXECUTE] 输出数量: {len(output)}")
             print(f"✅ [EXECUTE] Debug长度: {len(debug_text)}")
             if output:
@@ -1010,7 +1838,7 @@ class WorkflowEngine:
                 # 添加指纹日志
                 try:
                     outs = result.get("output") if isinstance(result, dict) else None
-                    fp = self._calc_fp(node.get("id"), outs)
+                    fp = self._calc_fp(node_to_run2.get("id"), outs)
                     print(f"[RING:FP] recv {fp}")
                 except Exception:
                     pass
@@ -1036,6 +1864,7 @@ class WorkflowEngine:
     
     def _update_workflow_state(self, workflow_id, data_temp=None, local_passivity_array=None, local_array_trigger_array=None):
         """统一更新工作流状态的方法"""
+        dbg_lines = []
         with self.lock:
             # 检查工作流是否存在且不为None
             if workflow_id not in self.workflows:
@@ -1047,13 +1876,13 @@ class WorkflowEngine:
             try:
                 # 允许 data_temp 为 None：仅刷新队列长度与时间戳
                 if data_temp is None:
-                    print(f"[STATE] (partial) 仅刷新队列长度: workflow_id={workflow_id}")
+                    dbg_lines.append(f"[STATE] (partial) 仅刷新队列长度: workflow_id={workflow_id}")
                 else:
                     # 打印状态更新信息
                     nodes_count = len(data_temp.get("nodes", []))
                     edges_count = len(data_temp.get("edges", []))
-                    print(f"🔄 [STATE] 更新工作流状态: {workflow_id}")
-                    print(f"🔄 [STATE] 节点数量: {nodes_count}, 边数量: {edges_count}")
+                    dbg_lines.append(f"🔄 [STATE] 更新工作流状态: {workflow_id}")
+                    dbg_lines.append(f"🔄 [STATE] 节点数量: {nodes_count}, 边数量: {edges_count}")
                     self.workflows[workflow_id]["graph_data"] = data_temp
                 self.workflows[workflow_id]["last_update"] = time.time()
                 
@@ -1061,10 +1890,10 @@ class WorkflowEngine:
                 qlens = self.workflows[workflow_id].get("queue_lengths", {"passivity": 0, "array": 0}).copy()
                 if local_passivity_array is not None:
                     qlens["passivity"] = len(local_passivity_array)
-                    print(f"🔄 [STATE] 被动队列长度: {len(local_passivity_array)}")
+                    dbg_lines.append(f"🔄 [STATE] 被动队列长度: {len(local_passivity_array)}")
                 if local_array_trigger_array is not None:
                     qlens["array"] = len(local_array_trigger_array)
-                    print(f"🔄 [STATE] 数组队列长度: {len(local_array_trigger_array)}")
+                    dbg_lines.append(f"🔄 [STATE] 数组队列长度: {len(local_array_trigger_array)}")
                 self.workflows[workflow_id]["queue_lengths"] = qlens
                 # 同步写入固定字段 queues，方便前端直接读取
                 self.workflows[workflow_id]["queues"] = {"pending": qlens.get("passivity", 0), "array": qlens.get("array", 0)}
@@ -1074,16 +1903,19 @@ class WorkflowEngine:
                     self.workflows[workflow_id]["pending_array_count"] = len(local_array_trigger_array)
                     self._refresh_parent_array_queue(workflow_id, len(local_array_trigger_array))
                 try:
-                    print(f"[STATE:QUEUES] write queue_lengths={{P:{qlens.get('passivity',0)}, A:{qlens.get('array',0)}}} queues={{pending:{self.workflows[workflow_id]['queues'].get('pending',0)}, array:{self.workflows[workflow_id]['queues'].get('array',0)}}}")
+                    dbg_lines.append(f"[STATE:QUEUES] write queue_lengths={{P:{qlens.get('passivity',0)}, A:{qlens.get('array',0)}}} queues={{pending:{self.workflows[workflow_id]['queues'].get('pending',0)}, array:{self.workflows[workflow_id]['queues'].get('array',0)}}}")
                 except Exception:
                     pass
                 
-                print(f"✅ [STATE] 工作流状态更新完成")
+                dbg_lines.append("✅ [STATE] 工作流状态更新完成")
                     
             except Exception as e:
                 import traceback
-                print(f"❌ [ERROR] _update_workflow_state failed: {e}")
-                print(f"❌ [ERROR] Traceback: {traceback.format_exc()}")
+                dbg_lines.append(f"❌ [ERROR] _update_workflow_state failed: {e}")
+                dbg_lines.append(f"❌ [ERROR] Traceback: {traceback.format_exc()}")
+        # I/O outside lock
+        for line in dbg_lines:
+            self.dbg(line)
     
     def _extract_passivity_triggers(self, graph_data):
         """从图数据中提取passivity trigger数据"""
@@ -1389,6 +2221,8 @@ class WorkflowEngine:
         try:
             workflow_state = self.workflows[workflow_id]
             stop_event = self.stop_events[workflow_id]
+            # 状态刷新节流：避免每个 item 都刷导致锁竞争
+            last_state_flush_ts = 0.0
             # 运行期历史保存防抖标记：避免一次运行保存多份（异常、完成、兜底多处调用）
             saved_once = False
             saved_by_array = False
@@ -1522,17 +2356,33 @@ class WorkflowEngine:
                             print(f"[ARRAY-DEBUG] 队列内容预览: {[item.get('nodeId', 'unknown') for item in preview]}")
                     except Exception:
                         pass
-                    self._process_next_array_trigger(workflow_id, data_temp, local_array_trigger_array, workflow_state)
+
+                    # ✅ 每轮最多处理 ENQUEUE_BURST 个 array 项（默认 5）
+                    processed = 0
+                    while local_array_trigger_array and processed < ENQUEUE_BURST:
+                        len_before_one = len(local_array_trigger_array)
+                        self._process_next_array_trigger(workflow_id, data_temp, local_array_trigger_array, workflow_state)
+                        processed += 1
+                        len_after_one = len(local_array_trigger_array)
+
+                        # 状态刷新节流（默认 300ms）
+                        now = time.time()
+                        if (now - last_state_flush_ts) >= STATE_FLUSH_INTERVAL:
+                            self._update_workflow_state(workflow_id, data_temp, local_array_trigger_array=local_array_trigger_array)
+                            last_state_flush_ts = now
+
+                        # 如果本次调用没有消耗队列（例如并行满负荷导致直接 return），避免同一轮内空转多次
+                        if len_after_one == len_before_one:
+                            break
+
                     after_len = len(local_array_trigger_array)
                     if getattr(self, "DEBUG_PRINT", False):
                         print(f"[ARRAY-DEBUG] 处理后 ArrayTrigger 队列长度: {after_len} (处理了 {before_len - after_len} 个)")
-                    
-                    # 立即更新状态，确保前端能及时看到队列变化
-                    self._update_workflow_state(workflow_id, None, local_array_trigger_array=local_array_trigger_array)
-                    if getattr(self, "DEBUG_PRINT", False):
-                        print(f"🔴 [ARRAY-DEBUG] 状态已更新，当前数组队列长度: {len(local_array_trigger_array)}")
-                        print(f"🔴 [ARRAY-DEBUG] 更新时间: {time.strftime('%H:%M:%S')}")
-                    
+
+                    # 本轮结束强制刷一次，避免节流导致前端长时间看不到变化
+                    self._update_workflow_state(workflow_id, data_temp, local_array_trigger_array=local_array_trigger_array)
+                    last_state_flush_ts = time.time()
+
                     did_work = True
                     had_non_empty_since_last_preheat = True
 
@@ -1553,18 +2403,31 @@ class WorkflowEngine:
                     else:
                         passivity_node = next((n for n in nodes if "passivityTrigger" in n.get("NodeKind", "")), None)
                     
-                    # 修复：按照前端逻辑，只有当 passivityData.outputData 存在时才处理
-                    if passivity_node and passivity_data.get("outputData"):
+                    # ✅ 支持 tick-only passivityTrigger（无 Outputs）
+                    # - tick=True：只触发 ArrayTrigger 链路（不走“无 ArrayTrigger → run normal nodes”兜底）
+                    # - 旧行为保持：仍然仅当 outputData truthy 时才进行路由
+                    is_tick = isinstance(passivity_data, dict) and passivity_data.get("tick") is True
+                    if passivity_node and (is_tick or passivity_data.get("outputData")):
                         # 使用克隆图在本地处理，避免污染全局
                         local_data_for_pass = copy.deepcopy(data_temp)
                         self._log_event(workflow_id, "🎯 [PASS] 使用克隆图处理当前队列项")
-                        # 处理节点连接（等同于前端的 processNodeConnections）
-                        processed_data = self._process_node_connections(local_data_for_pass, passivity_node, passivity_data.get("outputData"), workflow_id)
-                        # 加载 ArrayTriggerArray（等同于前端的 loadArrayTriggerArray）
-                        self._load_array_trigger_array(workflow_id, processed_data, local_array_trigger_array)
-                        self._log_event(workflow_id, f"   └─ loadArrayTriggerArray → Aq={len(local_array_trigger_array)}")
-                        # 即时更新数组队列长度（不覆盖 graph_data，仅更新队列长度时间戳）
-                        self._update_workflow_state(workflow_id, None, local_array_trigger_array=local_array_trigger_array)
+                        if is_tick:
+                            # tick-only：不做节点路由（无 outputData），但仍按“标准逻辑”触发：
+                            # - 有 ArrayTrigger：入队遍历项
+                            # - 无 ArrayTrigger：入队 graph_data 占位项，后续会触发普通节点执行
+                            self._log_event(workflow_id, "⏰ [PASS:TICK] trigger workflow (ArrayTrigger if exists, else normal nodes)")
+                            self._load_array_trigger_array(workflow_id, local_data_for_pass, local_array_trigger_array)
+                            self._log_event(workflow_id, f"   └─ after loadArrayTriggerArray(tick) → Aq={len(local_array_trigger_array)}")
+                            # 即时更新数组队列长度（不覆盖 graph_data，仅更新队列长度时间戳）
+                            self._update_workflow_state(workflow_id, None, local_array_trigger_array=local_array_trigger_array)
+                        else:
+                            # 处理节点连接（等同于前端的 processNodeConnections）
+                            processed_data = self._process_node_connections(local_data_for_pass, passivity_node, passivity_data.get("outputData"), workflow_id)
+                            # 加载 ArrayTriggerArray（等同于前端的 loadArrayTriggerArray）
+                            self._load_array_trigger_array(workflow_id, processed_data, local_array_trigger_array)
+                            self._log_event(workflow_id, f"   └─ loadArrayTriggerArray → Aq={len(local_array_trigger_array)}")
+                            # 即时更新数组队列长度（不覆盖 graph_data，仅更新队列长度时间戳）
+                            self._update_workflow_state(workflow_id, None, local_array_trigger_array=local_array_trigger_array)
                         # 最小改动：移除“立刻处理一次”加速，保证一轮只消耗一个项，便于前端采样
                         # if local_array_trigger_array:
                         #     self._process_next_array_trigger(workflow_id, data_temp, local_array_trigger_array, workflow_state)
@@ -1704,6 +2567,15 @@ class WorkflowEngine:
                     status_for_cleanup = self.workflows[workflow_id].get("status")
             if status_for_cleanup in (WorkflowStatus.COMPLETED, WorkflowStatus.ERROR, WorkflowStatus.STOPPED):
                 self._schedule_workflow_cleanup(workflow_id, delay=5.0)
+            # runtime cleanup (must)
+            try:
+                self._flush_history_buffer_for_workflow(workflow_id)
+            except Exception:
+                pass
+            try:
+                self._runtime_cleanup(workflow_id)
+            except Exception:
+                pass
     
     def _run_passivity_trigger_nodes(self, workflow_id, data_temp, passivity_trigger_array):
         """运行 passivityTrigger 节点（模拟前端 runPassivityTriggerNodes）"""
@@ -1731,7 +2603,7 @@ class WorkflowEngine:
                 self._log_event(workflow_id, f"   └─ node={processed_node.get('name')} kind={processed_node.get('NodeKind')}")
                 # 启用仅 TRACE 打印
                 self._install_trace_filter()
-                result = self._execute_node(processed_node)
+                result = self._execute_node(processed_node, workflow_id=str(workflow_id))
                 
                 self._log_event(workflow_id, f"   └─ result.count={(len(result.get('output')) if isinstance(result, dict) and isinstance(result.get('output'), list) else ('1' if isinstance(result, dict) and result.get('output') is not None else 0))}")
                 
@@ -1765,6 +2637,43 @@ class WorkflowEngine:
                 print(f"📝 [PASSIVITY-COMPLETE] 被动触发节点完成: {node.get('label', node.get('id'))}")
                 print(f"📝 [PASSIVITY-COMPLETE] 输出数量: {len(result.get('output', [])) if isinstance(result, dict) else 0}")
                 self._add_history(workflow_id, node)
+
+                # ✅ 支持“无 Output 的定时触发型 passivityTrigger”
+                # 语义：该节点本身只负责“tick”，不携带 outputData；
+                # 后续在主循环中识别 tick 并仅触发 ArrayTrigger 链路。
+                try:
+                    if isinstance(node.get("Outputs", []), list) and len(node.get("Outputs", [])) == 0:
+                        # 仅当节点脚本明确返回 tick=True 时才入队，避免轮询时每秒强制触发
+                        fired = False
+                        try:
+                            outs = result.get("output") if isinstance(result, dict) else None
+                            if isinstance(outs, dict):
+                                fired = outs.get("tick") is True
+                            elif isinstance(outs, list):
+                                for it in outs:
+                                    if isinstance(it, dict) and it.get("tick") is True:
+                                        fired = True
+                                        break
+                        except Exception:
+                            fired = False
+
+                        if not fired:
+                            self._log_event(workflow_id, f"⏳ [TICK] passivityTrigger(no-outputs) not due → skip enqueue node={node.get('label', node.get('id'))}")
+                            continue
+
+                        item = {
+                            "outputData": None,
+                            "nodeId": node.get("id"),
+                            "tick": True,
+                            "ts": time.time(),
+                        }
+                        passivity_trigger_array.append(item)
+                        self._log_event(workflow_id, f"⏰ [TICK] passivityTrigger(no-outputs) enqueue → Pq={len(passivity_trigger_array)} node={node.get('label', node.get('id'))}")
+                        # 刷新队列长度，前端可见
+                        self._update_workflow_state(workflow_id, data_temp, local_passivity_array=passivity_trigger_array)
+                        continue
+                except Exception:
+                    pass
 
                 # 修复：正确处理 None 输出和空输出
                 outputs = result.get("output") if isinstance(result, dict) else None
@@ -1878,6 +2787,12 @@ class WorkflowEngine:
             else:
                 passivity_trigger_array.append(item)
                 self._last_ring_fp[key] = fp
+                # cache bookkeeping
+                try:
+                    self._mark_cache_touch("_last_ring_fp", key)
+                    self._prune_cache_if_needed()
+                except Exception:
+                    pass
                 if getattr(self, "DEBUG_PRINT", False):
                     print(f"✅ [RING:PUSH] Passivity 入队消息组 {idx+1}/{len(filtered_outputs)}")
             enqueued += 1
@@ -1978,7 +2893,7 @@ class WorkflowEngine:
                 
                 # 执行节点
                 processed_node = self._process_node(node)
-                result = self._execute_node(processed_node)
+                result = self._execute_node(processed_node, workflow_id=str(workflow_id))
                 self._log_event(workflow_id, f"🔴 [DEBUG] 上游节点结果: {result}")
                 # 检查是否有有效输出用于传递给下游
                 if isinstance(result, dict) and result.get("output") and result["output"] != [None]:
@@ -2082,7 +2997,7 @@ class WorkflowEngine:
                 # 执行节点
                 processed_node = self._process_node(node)
                 self._log_event(workflow_id, f"🔴 [DEBUG] processed_node name: {processed_node.get('name')}")
-                result = self._execute_node(processed_node)
+                result = self._execute_node(processed_node, workflow_id=str(workflow_id))
                 self._log_event(workflow_id, f"🔴 [DEBUG] execute_node result: {result}")
                 
                 # 写回 debug
@@ -2146,21 +3061,25 @@ class WorkflowEngine:
                         original_outputs = [original_outputs]
                         if getattr(self, "DEBUG_PRINT", False):
                             print("[ARRAY-DEBUG] 归一化：检测到单行的 Outputs，被包裹为 1 个数组元素")
-                    # 归一化后再输出一遍统计信息
-                    try:
-                        self._log_event(workflow_id, f"🔴 [ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
-                        for gi, g in enumerate(original_outputs):
-                            if isinstance(g, list):
-                                ids = []
-                                for it in g:
-                                    if isinstance(it, dict):
-                                        ids.append(it.get('Id') or it.get('name'))
-                                self._log_event(workflow_id, f"   └─ group[{gi}] size={len(g)} ids={ids}")
-                            else:
-                                self._log_event(workflow_id, f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
-                    except Exception:
-                        pass
-                    self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
+                    # 归一化后再输出一遍统计信息（仅在 DEBUG_PRINT 时输出，避免入队阶段被事件日志拖慢）
+                    if getattr(self, "DEBUG_PRINT", False):
+                        try:
+                            self._log_event(workflow_id, f"🔴 [ARRAY-TRACE] 标准化后组数(original_outputs.len) = {len(original_outputs)}")
+                            for gi, g in enumerate(original_outputs):
+                                if isinstance(g, list):
+                                    ids = []
+                                    for it in g:
+                                        if isinstance(it, dict):
+                                            ids.append(it.get('Id') or it.get('name'))
+                                    self._log_event(workflow_id, f"   └─ group[{gi}] size={len(g)} ids={ids}")
+                                else:
+                                    self._log_event(workflow_id, f"   └─ group[{gi}] type={type(g)} value_preview={str(g)[:80]}")
+                        except Exception:
+                            pass
+                        try:
+                            self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
+                        except Exception:
+                            pass
                     
                     # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
                     try:
@@ -2170,6 +3089,11 @@ class WorkflowEngine:
                     
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
                     # 每个子数组代表一个完整的输出组，应该作为一个队列项
+                    # 入队统计（减少每条入队都写 events 抢锁）
+                    enq_push = 0
+                    enq_overwrite = 0
+                    enq_empty_push = 0
+                    enq_t0 = time.time()
                     for idx, array_group in enumerate(original_outputs):
                         if array_group is None:
                             continue
@@ -2184,16 +3108,11 @@ class WorkflowEngine:
                         item = {"outputData": group, "nodeId": node_id, "graph_data": shared_graph_snapshot}
 
                         # 性能优化：使用索引字典快速定位最后一个相同 nodeId 的项
-                        # 注意：deque 不支持索引赋值，所以我们需要特殊处理
+                        # 注意：deque 支持 index 访问与赋值（O(n)），但仍远比 list(tmp)+clear+extend 省内存/更快
                         queue_index = self._array_queue_last_index.setdefault(workflow_id, {})
                         last_index = queue_index.get(node_id)
                         
                         if last_fp == fp and last_index is not None:
-                            # 深度调试：指纹重复情况
-                            try:
-                                self._log_event(workflow_id, f"🌀 [ARRAY-FP] group[{idx}] fp={fp} 与上次相同 → 覆盖队列中该节点最后一条")
-                            except Exception:
-                                pass
                             # 性能优化：从 last_index 开始向前查找（限制查找范围）
                             found = False
                             if last_index < len(array_trigger_array):
@@ -2202,26 +3121,33 @@ class WorkflowEngine:
                                 for j in range(start_idx, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
                                         # ✅ 真正覆盖：命中时原位替换（队列长度不变）
-                                        tmp = list(array_trigger_array)
-                                        tmp[j] = item
-                                        array_trigger_array.clear()
-                                        array_trigger_array.extend(tmp)
+                                        try:
+                                            array_trigger_array[j] = item
+                                        except Exception:
+                                            # 兜底：无法索引赋值时退化为重建（极少发生）
+                                            tmp = list(array_trigger_array)
+                                            tmp[j] = item
+                                            array_trigger_array.clear()
+                                            array_trigger_array.extend(tmp)
                                         queue_index[node_id] = j
                                         found = True
-                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点最后一条记录（相同指纹）")
+                                        enq_overwrite += 1
                                         break
                             if not found:
                                 # 索引失效或未找到，从末尾重新查找
                                 for j in range(len(array_trigger_array)-1, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
                                         # ✅ 真正覆盖：命中时原位替换（队列长度不变）
-                                        tmp = list(array_trigger_array)
-                                        tmp[j] = item
-                                        array_trigger_array.clear()
-                                        array_trigger_array.extend(tmp)
+                                        try:
+                                            array_trigger_array[j] = item
+                                        except Exception:
+                                            tmp = list(array_trigger_array)
+                                            tmp[j] = item
+                                            array_trigger_array.clear()
+                                            array_trigger_array.extend(tmp)
                                         queue_index[node_id] = j
                                         found = True
-                                        self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 覆盖队列中该节点记录（重新查找命中）")
+                                        enq_overwrite += 1
                                         break
                             if not found:
                                 # 完全未找到：指纹相同视为“覆盖不涨”
@@ -2232,27 +3158,42 @@ class WorkflowEngine:
                                     j = len(array_trigger_array) - 1
                                 if len(array_trigger_array) > 0:
                                     j = max(0, min(j, len(array_trigger_array) - 1))
-                                    tmp = list(array_trigger_array)
-                                    tmp[j] = item                 # ✅原地覆盖，不涨长度
-                                    array_trigger_array.clear()
-                                    array_trigger_array.extend(tmp)
+                                    try:
+                                        array_trigger_array[j] = item  # ✅原地覆盖，不涨长度
+                                    except Exception:
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item                 # ✅原地覆盖，不涨长度
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
                                     queue_index[node_id] = j      # ✅索引指向被覆盖的位置
-                                    self._log_event(workflow_id, "🌀 [RING:OVERWRITE] ArrayTrigger 未命中旧项，按索引兜底覆盖（相同指纹）")
+                                    enq_overwrite += 1
                                 else:
                                     # 空队列时仍需入队一个元素（否则无处可覆盖）
                                     array_trigger_array.append(item)
                                     queue_index[node_id] = 0
-                                    self._log_event(workflow_id, "✅ [RING:PUSH] ArrayTrigger 队列为空，新增记录到环")
+                                    enq_empty_push += 1
                         else:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp
                             queue_index[node_id] = len(array_trigger_array) - 1  # 更新索引
+                            # cache bookkeeping
                             try:
-                                self._log_event(workflow_id, f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp}")
+                                self._mark_cache_touch("_last_ring_fp", key)
+                                self._mark_cache_touch("_array_queue_last_index", workflow_id)
+                                self._prune_cache_if_needed()
                             except Exception:
                                 pass
+                            enq_push += 1
                     
-                    self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 总共入队 {len([x for x in original_outputs if x is not None])} 个数组组")
+                    # 汇总一次（避免每条入队都写 events 抢锁，显著提速）
+                    try:
+                        enq_ms = (time.time() - enq_t0) * 1000.0
+                        self._log_event(
+                            workflow_id,
+                            f"🔴 [DEBUG] ArrayTrigger enqueue groups={len([x for x in original_outputs if x is not None])} push={enq_push} overwrite={enq_overwrite} emptyPush={enq_empty_push} costMs={enq_ms:.1f}"
+                        )
+                    except Exception:
+                        pass
                 else:
                     self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger 无输出: result={result}")
             except Exception as e:
@@ -2344,7 +3285,7 @@ class WorkflowEngine:
                     
                     # 处理节点
                     processed_node = self._process_node(node)
-                    result = self._execute_node(processed_node)
+                    result = self._execute_node(processed_node, workflow_id=str(workflow_id))
                     
                     # 写回 debug
                     if isinstance(result, dict):
@@ -2477,7 +3418,7 @@ class WorkflowEngine:
                 
                 # 执行节点
                 processed_node = self._process_node(node)
-                result = self._execute_node(processed_node)
+                result = self._execute_node(processed_node, workflow_id=str(workflow_id))
                 
                 # 写回 debug
                 if isinstance(result, dict):
@@ -2602,10 +3543,13 @@ class WorkflowEngine:
                                 for j in range(start_idx, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
                                         # ✅ 真正覆盖：命中时原位替换（队列长度不变）
-                                        tmp = list(array_trigger_array)
-                                        tmp[j] = item
-                                        array_trigger_array.clear()
-                                        array_trigger_array.extend(tmp)
+                                        try:
+                                            array_trigger_array[j] = item
+                                        except Exception:
+                                            tmp = list(array_trigger_array)
+                                            tmp[j] = item
+                                            array_trigger_array.clear()
+                                            array_trigger_array.extend(tmp)
                                         queue_index[node_id] = j
                                         found = True
                                         if getattr(self, "DEBUG_PRINT", False):
@@ -2616,10 +3560,13 @@ class WorkflowEngine:
                                 for j in range(len(array_trigger_array)-1, -1, -1):
                                     if array_trigger_array[j].get("nodeId") == node_id:
                                         # ✅ 真正覆盖：命中时原位替换（队列长度不变）
-                                        tmp = list(array_trigger_array)
-                                        tmp[j] = item
-                                        array_trigger_array.clear()
-                                        array_trigger_array.extend(tmp)
+                                        try:
+                                            array_trigger_array[j] = item
+                                        except Exception:
+                                            tmp = list(array_trigger_array)
+                                            tmp[j] = item
+                                            array_trigger_array.clear()
+                                            array_trigger_array.extend(tmp)
                                         queue_index[node_id] = j
                                         found = True
                                         if getattr(self, "DEBUG_PRINT", False):
@@ -2633,10 +3580,13 @@ class WorkflowEngine:
                                     j = len(array_trigger_array) - 1
                                 if len(array_trigger_array) > 0:
                                     j = max(0, min(j, len(array_trigger_array) - 1))
-                                    tmp = list(array_trigger_array)
-                                    tmp[j] = item                 # ✅原地覆盖，不涨长度（兼容 deque）
-                                    array_trigger_array.clear()
-                                    array_trigger_array.extend(tmp)
+                                    try:
+                                        array_trigger_array[j] = item  # ✅原地覆盖，不涨长度
+                                    except Exception:
+                                        tmp = list(array_trigger_array)
+                                        tmp[j] = item                 # ✅原地覆盖，不涨长度（兼容 deque）
+                                        array_trigger_array.clear()
+                                        array_trigger_array.extend(tmp)
                                     queue_index[node_id] = j      # ✅索引指向被覆盖的位置
                                 else:
                                     array_trigger_array.append(item)
@@ -2647,6 +3597,13 @@ class WorkflowEngine:
                             array_trigger_array.append(item)
                             self._last_ring_fp[key] = fp
                             queue_index[node_id] = len(array_trigger_array) - 1
+                            # cache bookkeeping
+                            try:
+                                self._mark_cache_touch("_last_ring_fp", key)
+                                self._mark_cache_touch("_array_queue_last_index", workflow_id)
+                                self._prune_cache_if_needed()
+                            except Exception:
+                                pass
                             if getattr(self, "DEBUG_PRINT", False):
                                 print(f"✅ [RING:PUSH] ArrayTrigger 入队数组组 {idx+1}/{len(original_outputs)} fp={fp} group_idx={idx}")
                         
@@ -3284,7 +4241,7 @@ class WorkflowEngine:
                         else:
                             # 执行节点
                             processed_node = self._process_node(node)
-                            result = self._execute_node(processed_node)
+                            result = self._execute_node(processed_node, workflow_id=str(workflow_id) if workflow_id is not None else None)
                         
                         # 处理输出
                         if isinstance(result, tuple) and len(result) == 2 and isinstance(result[0], dict) and "error" in result[0]:
@@ -3324,9 +4281,17 @@ class WorkflowEngine:
                 return None
         
         # 使用线程池并发执行所有节点（类似JS的Promise.all）
-        with ThreadPoolExecutor(max_workers=min(len(nodes_to_execute), 5)) as executor:
+        workers = min(len(nodes_to_execute), self.max_workers)
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             # 提交所有任务
-            futures = [executor.submit(execute_single_node, node) for node in nodes_to_execute]
+            # ✅ A. 进入线程前做深拷贝隔离（最关键）：禁止并发共享 node 引用
+            futures = []
+            for node in nodes_to_execute:
+                try:
+                    safe_node = copy.deepcopy(node)
+                except Exception:
+                    safe_node = dict(node or {})
+                futures.append(executor.submit(execute_single_node, safe_node))
             
             # 等待所有任务完成
             executed_results = [future.result() for future in futures]
@@ -3362,10 +4327,10 @@ class WorkflowEngine:
                 
                 # 更新节点输出
                 output_list = result.get("output", []) or []
-                print(f"🔍 [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出数量: {len(output_list)}")
+                self.dbg(f"🔍 [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出数量: {len(output_list)}")
                 for idx, output in enumerate(output_list):
                     if not isinstance(output, dict):
-                        print(f"⚠️ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出 {idx} 不是字典，跳过: {type(output)}")
+                        self.dbg(f"⚠️ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出 {idx} 不是字典，跳过: {type(output)}")
                         continue
                     if idx < len(node.get("Outputs", [])):
                         # 打印更新前的状态
@@ -3373,12 +4338,12 @@ class WorkflowEngine:
                         node["Outputs"][idx].update(output)
                         # 打印更新后的状态
                         new_output = node["Outputs"][idx]
-                        print(f"✅ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出 {idx} 已更新:")
-                        print(f"   更新前: Context={bool(old_output.get('Context'))}, Num={old_output.get('Num')}, Boolean={old_output.get('Boolean')}")
-                        print(f"   更新后: Context={bool(new_output.get('Context'))}, Num={new_output.get('Num')}, Boolean={new_output.get('Boolean')}")
-                        print(f"   更新数据: {output}")
+                        self.dbg(f"✅ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出 {idx} 已更新:")
+                        self.dbg(f"   更新前: Context={bool(old_output.get('Context'))}, Num={old_output.get('Num')}, Boolean={old_output.get('Boolean')}")
+                        self.dbg(f"   更新后: Context={bool(new_output.get('Context'))}, Num={new_output.get('Num')}, Boolean={new_output.get('Boolean')}")
+                        self.dbg(f"   更新数据: {output}")
                     else:
-                        print(f"⚠️ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出索引 {idx} 超出范围 (共有 {len(node.get('Outputs', []))} 个输出)")
+                        self.dbg(f"⚠️ [OUTPUT-UPDATE] 节点 {node.get('label', node.get('id'))} 的输出索引 {idx} 超出范围 (共有 {len(node.get('Outputs', []))} 个输出)")
                 
                 # 更新第一条输出的 token 信息（与前端保持一致）
                 if result.get("output") and len(result["output"]) > 0 and len(node.get("Outputs", [])) > 0:
@@ -3398,9 +4363,9 @@ class WorkflowEngine:
                 # 添加历史记录（与前端executeNode中的addHistory调用对齐）
                 workflow_id = workflow_state.get("id") if isinstance(workflow_state, dict) else None
                 if workflow_id:
-                    print(f"📝 [NODE-COMPLETE] 节点执行完成: {node.get('label', node.get('id'))}")
-                    print(f"📝 [NODE-COMPLETE] 输出数量: {len(result.get('output', []))}")
-                    print(f"📝 [NODE-COMPLETE] Debug长度: {len(str(result.get('debug', '')))}")
+                    self.dbg(f"📝 [NODE-COMPLETE] 节点执行完成: {node.get('label', node.get('id'))}")
+                    self.dbg(f"📝 [NODE-COMPLETE] 输出数量: {len(result.get('output', []))}")
+                    self.dbg(f"📝 [NODE-COMPLETE] Debug长度: {len(str(result.get('debug', '')))}")
                     self._add_history(workflow_id, node)
                 
                 # 🔥 关键：传播输出到连接的子节点
@@ -3488,21 +4453,21 @@ class WorkflowEngine:
                                 has_num = out.get("Num") is not None
                                 has_bool = out.get("Boolean") is not None
                                 outputs_info.append(f"Context={has_context}, Num={has_num}, Boolean={has_bool}")
-                            print(f"✅ [SYNC] 节点 {node.get('label', node.get('id'))} 的 Outputs 已同步到全局状态: {outputs_info}")
+                            self.dbg(f"✅ [SYNC] 节点 {node.get('label', node.get('id'))} 的 Outputs 已同步到全局状态: {outputs_info}")
         
         return child_nodes_to_execute
     
     def _process_node_connections(self, data_temp, trigger_node, output_data, workflow_id=None):
         """处理节点连接，传递输出数据（模拟前端 processNodeConnections）"""
         if trigger_node is None:
-            print("[DEBUG] _process_node_connections: trigger_node is None, skip updating outputs")
+            self.dbg("[DEBUG] _process_node_connections: trigger_node is None, skip updating outputs")
             return data_temp
         
         # 🎯🎯🎯 数据传递调试 🎯🎯🎯
-        print(f"🎯🎯🎯 [DATA-TRANSFER] _process_node_connections 被调用")
-        print(f"🎯🎯🎯 [DATA-TRANSFER] trigger_node: {trigger_node.get('label', trigger_node.get('id'))}")
-        print(f"🎯🎯🎯 [DATA-TRANSFER] output_data type: {type(output_data)}")
-        print(f"🎯🎯🎯 [DATA-TRANSFER] output_data: {output_data}")
+        self.dbg(f"🎯🎯🎯 [DATA-TRANSFER] _process_node_connections 被调用")
+        self.dbg(f"🎯🎯🎯 [DATA-TRANSFER] trigger_node: {trigger_node.get('label', trigger_node.get('id'))}")
+        self.dbg(f"🎯🎯🎯 [DATA-TRANSFER] output_data type: {type(output_data)}")
+        self.dbg(f"🎯🎯🎯 [DATA-TRANSFER] output_data: {output_data}")
         if workflow_id is not None:
             self._log_event(workflow_id, f"🎯 [ROUTE] from={trigger_node.get('label', trigger_node.get('id'))} outputs={len(output_data) if isinstance(output_data, list) else 1}")
         
@@ -3533,11 +4498,11 @@ class WorkflowEngine:
                 for edge in relevant_edges:
                     # 与老版JS一致：offset=sourceAnchor-Inputs.length
                     offset = edge["sourceAnchor"] - len(trigger_node.get("Inputs", []))
-                    print(f"🎯🎯🎯 [ROUTE] sourceAnchor: {edge['sourceAnchor']} → offset: {offset}")
+                    self.dbg(f"🎯🎯🎯 [ROUTE] sourceAnchor: {edge['sourceAnchor']} → offset: {offset}")
                     if workflow_id is not None:
                         self._log_event(workflow_id, f"🎯 [ROUTE] edge {trigger_node.get('label','?')}[{offset}] → {node.get('label','?')}.{edge['targetAnchor']}")
                     if offset < 0 or offset >= len(trigger_node.get("Outputs", [])):
-                        print(f"🎯🎯🎯 [ROUTE] offset 越界，跳过该边")
+                        self.dbg(f"🎯🎯🎯 [ROUTE] offset 越界，跳过该边")
                         if workflow_id is not None:
                             self._log_event(workflow_id, f"⚠️ [ROUTE] 跳过(越界) offset={offset}")
                         continue
@@ -3553,7 +4518,7 @@ class WorkflowEngine:
                         if 0 <= offset < len(output_data):
                             item = output_data[offset]
                         else:
-                            print(f"🎯🎯🎯 [ROUTE] output_data 为 list 但无该 offset，跳过")
+                            self.dbg(f"🎯🎯🎯 [ROUTE] output_data 为 list 但无该 offset，跳过")
                             if workflow_id is not None:
                                 self._log_event(workflow_id, f"⚠️ [ROUTE] 跳过(无该offset) offset={offset}")
                             continue
@@ -3567,7 +4532,7 @@ class WorkflowEngine:
                         id_ok = (not got_id) or (got_id in equiv_ids)
                         name_ok = (not got_name) or (got_name == expected_name)
                         if not (id_ok or name_ok):
-                            print(f"🎯🎯🎯 [ROUTE] 端口Id不匹配，跳过。expected={expected_id} got={got_id}")
+                            self.dbg(f"🎯🎯🎯 [ROUTE] 端口Id不匹配，跳过。expected={expected_id} got={got_id}")
                             if workflow_id is not None:
                                 self._log_event(workflow_id, f"⚠️ [ROUTE] 跳过(Id不匹配) expected={expected_id} got={got_id}")
                             continue
@@ -3575,7 +4540,7 @@ class WorkflowEngine:
                         item["Id"] = expected_id
                         item["name"] = expected_name
                     else:
-                        print(f"🎯🎯🎯 [ROUTE] output_data 非法类型，跳过")
+                        self.dbg(f"🎯🎯🎯 [ROUTE] output_data 非法类型，跳过")
                         if workflow_id is not None:
                             self._log_event(workflow_id, f"⚠️ [ROUTE] 跳过(非法类型) type={type(output_data)}")
                         continue
@@ -3588,7 +4553,7 @@ class WorkflowEngine:
 
                     item_dict = _coerce_dict(item)
                     if not isinstance(item_dict, dict):
-                        print(f"🎯🎯🎯 [ROUTE] 本次端口数据不是字典，跳过")
+                        self.dbg(f"🎯🎯🎯 [ROUTE] 本次端口数据不是字典，跳过")
                         if workflow_id is not None:
                             self._log_event(workflow_id, f"⚠️ [ROUTE] 跳过(非字典) offset={offset}")
                         continue
@@ -3602,7 +4567,7 @@ class WorkflowEngine:
                         out_port["Boolean"] = conv.get("Boolean")
                     elif "String" in kind:
                         out_port["Context"] = conv.get("Context")
-                    print(f"🎯🎯🎯 [WRITE] 输出端口{offset}({out_port.get('name','')}) ← {item_dict}")
+                    self.dbg(f"🎯🎯🎯 [WRITE] 输出端口{offset}({out_port.get('name','')}) ← {item_dict}")
                     if workflow_id is not None:
                         self._log_event(workflow_id, f"✅ [WRITE:OUT] {trigger_node.get('label','?')}.{out_port.get('name','?')} ← offset={offset}")
                     
@@ -3627,7 +4592,7 @@ class WorkflowEngine:
                                 input_item["Context"] = conv_in.get("Context")
                                 wrote = True
                         if wrote:
-                            print(f"🎯🎯🎯 [WRITE] 输入端口{target_idx}({input_item.get('name','')}) ← {item_dict}")
+                            self.dbg(f"🎯🎯🎯 [WRITE] 输入端口{target_idx}({input_item.get('name','')}) ← {item_dict}")
                             if "inputStatus" not in node:
                                 node["inputStatus"] = [False] * len(node.get("Inputs", []))
                             node["inputStatus"][target_idx] = True
@@ -3653,20 +4618,20 @@ class WorkflowEngine:
     def _update_node_outputs(self, node, output_data):
         """更新节点的 Outputs（模拟前端 UpdateNodeOutputs）"""
         # 🎯🎯🎯 输出更新调试 🎯🎯🎯
-        print(f"🎯🎯🎯 [OUTPUT-UPDATE] _update_node_outputs 被调用")
-        print(f"🎯🎯🎯 [OUTPUT-UPDATE] node: {node.get('label', node.get('id'))}")
-        print(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data type: {type(output_data)}")
-        print(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data: {output_data}")
+        self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] _update_node_outputs 被调用")
+        self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] node: {node.get('label', node.get('id'))}")
+        self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data type: {type(output_data)}")
+        self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data: {output_data}")
         
         # 兼容空输出：直接跳过
         if output_data is None:
-            print(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data 为 None，跳过")
+            self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] output_data 为 None，跳过")
             return
         
         # 老JS语义：若是数组取第一个，否则用自身，写回所有Outputs
         d = output_data[0] if isinstance(output_data, list) and output_data else output_data
         if not isinstance(d, dict):
-            print(f"🎯🎯🎯 [OUTPUT-UPDATE] 非字典输出，跳过写回")
+            self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] 非字典输出，跳过写回")
             return
         
         for idx, output in enumerate(node.get("Outputs", [])):
@@ -3677,7 +4642,7 @@ class WorkflowEngine:
                 output["Boolean"] = d.get("Boolean")
             elif "String" in kind:
                 output["Context"] = d.get("Context")
-            print(f"🎯🎯🎯 [OUTPUT-UPDATE] 输出{idx}({output.get('name','')}) <- {d}")
+            self.dbg(f"🎯🎯🎯 [OUTPUT-UPDATE] 输出{idx}({output.get('name','')}) <- {d}")
     
     def start_workflow(self, workflow_id, graph_data, passivity_trigger_array=None, array_trigger_array=None):
         """启动工作流执行"""
@@ -3697,6 +4662,11 @@ class WorkflowEngine:
         
         # 初始化工作流状态
         # 在启动前清理节点的临时对话历史和状态，确保每轮运行从干净状态开始
+        # 同时清理持久化的 node["_state"]（否则 Timer 等触发器会沿用上一轮时间戳）
+        try:
+            self._clear_workflow_node_states(str(workflow_id))
+        except Exception:
+            pass
         cleaned_graph = copy.deepcopy(graph_data)
         try:
             for n in cleaned_graph.get("nodes", []):

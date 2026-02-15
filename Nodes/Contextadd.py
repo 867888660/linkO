@@ -19,6 +19,26 @@ PUNCT = string.punctuation + '，。！？；：…“”‘’（）《》【�
 def remove_punctuation(s: str) -> str:
     return s.translate(str.maketrans('', '', PUNCT))
 
+# 更稳的“裁掉结尾 JSON 输出指令”规则：优先匹配完整短语；兜底匹配同一行同时包含 Please + JSON
+JSON_INSTRUCTION_LINE_RE = re.compile(
+    r'(?im)^\s*Please\s+ensure\s+the\s+output\s+is\s+in\s+JSON\s+format\b.*$'
+)
+PLEASE_JSON_LINE_RE = re.compile(r'(?im)^\s*Please\b.*\bJSON\b.*$')
+
+def strip_trailing_json_instruction(text: str) -> str:
+    """
+    从 ExportPrompt 里裁掉末尾的“请以 JSON 输出”的指令行，避免用裸 'Please' 误裁切正文。
+    - 先找最后一条：Please ensure the output is in JSON format ...
+    - 找不到则兜底找最后一条：同一行同时包含 Please 和 JSON
+    """
+    matches = list(JSON_INSTRUCTION_LINE_RE.finditer(text))
+    if not matches:
+        matches = list(PLEASE_JSON_LINE_RE.finditer(text))
+    if not matches:
+        return text.rstrip('\n')
+    last = matches[-1]
+    return text[: last.start()].rstrip('\n')
+
 # 支持两种形式：<@WordsNum"foo"> 或 <@WordsNum>
 PAT = r'<@WordsNum(?:"(.*?)")?>'
 #**Assign properties to Inputs
@@ -42,17 +62,7 @@ def run_node(node):
         Outputs.append(node['Outputs'][i])
     
     # Process Outputs[0] as before
-    Outputs[0]['Context'] = node['ExportPrompt']
-    last_please_index = Outputs[0]['Context'].rfind('Please')
-
-    if last_please_index != -1:
-        previous_newline_index = Outputs[0]['Context'][:last_please_index].rfind('\n')
-        if previous_newline_index != -1:
-            Outputs[0]['Context'] = Outputs[0]['Context'][:previous_newline_index]
-        else:
-            Outputs[0]['Context'] = Outputs[0]['Context'][:last_please_index]
-
-    Outputs[0]['Context'] = Outputs[0]['Context'].rstrip('\n')
+    Outputs[0]['Context'] = strip_trailing_json_instruction(node['ExportPrompt'])
 
 
     # Process Outputs[1-n] with new logic
@@ -81,7 +91,7 @@ def run_node(node):
             full = node['ExportPrompt']
             print('Test 2', full)
             # 去标点
-            full = re.split(r'Please ensure the output is in JSON format', full)[0]
+            full = strip_trailing_json_instruction(full)
             cleaned = remove_punctuation(full)
 
             # 统计字数

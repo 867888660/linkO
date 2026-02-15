@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Any, Set
 
 # **节点输入输出定义**
 OutPutNum = 1
-InPutNum = 1
+InPutNum = 4
 NodeKind = 'Normal'
 
 # **Initialize Outputs and Inputs arrays and assign names directly**
@@ -26,6 +26,13 @@ Inputs[0]['Kind'] = 'String_FilePath'
 Inputs[0]['name'] = 'FilePath'
 Inputs[0]['Isnecessary'] = True
 Inputs[0]['IsLabel'] = False
+
+# 额外数据库来源（可选）：当主库数据不全时，从这些库中查找同 token 的最新记录来补齐
+for i in range(1, InPutNum):
+    Inputs[i]['Kind'] = 'String_FilePath'
+    Inputs[i]['name'] = f'FilePath{i + 1}'
+    Inputs[i]['Isnecessary'] = False
+    Inputs[i]['IsLabel'] = False
 
 # Outputs 配置
 Outputs[0]['Kind'] = 'String'
@@ -152,6 +159,7 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
     debug_lines = []
     summary = []
     conn = None
+    extra_conns: List[sqlite3.Connection] = []
     
     try:
         # 获取输入文件路径
@@ -164,20 +172,54 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
             raise FileNotFoundError(f"数据库文件不存在: {file_path}")
         
         debug_lines.append(f"[start] 数据库路径: {file_path}")
+
+        # 收集额外数据库路径（可选）
+        db_paths: List[str] = [file_path]
+        try:
+            for i in range(1, InPutNum):
+                p = (node['Inputs'][i].get('Context') or "").strip()
+                if not p:
+                    continue
+                if not os.path.exists(p):
+                    debug_lines.append(f"[extra] 跳过不存在的数据库: {p}")
+                    continue
+                # 避免重复
+                if os.path.abspath(p) == os.path.abspath(file_path):
+                    continue
+                db_paths.append(p)
+        except Exception:
+            # 输入结构异常时，不影响主流程
+            pass
         
         # 连接数据库
         conn = sqlite3.connect(file_path, timeout=10.0)
         conn.execute("PRAGMA journal_mode=WAL;")
         conn.execute("PRAGMA synchronous=NORMAL;")
         conn.execute("PRAGMA busy_timeout=5000;")
+
+        # 连接额外数据库（只读来源，不写入）
+        for p in db_paths[1:]:
+            try:
+                c = sqlite3.connect(p, timeout=10.0)
+                c.execute("PRAGMA busy_timeout=5000;")
+                extra_conns.append(c)
+                debug_lines.append(f"[extra] 加载额外来源库: {p}")
+            except Exception as e:
+                debug_lines.append(f"[extra] 打开额外来源库失败: {p} ({e})")
         
         # 获取所有表名
-        all_tables = [
-            r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            ).fetchall()
-        ]
-        debug_lines.append(f"[tables] 数据库中共有 {len(all_tables)} 个表")
+        def _list_tables(c: sqlite3.Connection) -> List[str]:
+            try:
+                return [
+                    r[0] for r in c.execute(
+                        "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+                    ).fetchall()
+                ]
+            except Exception:
+                return []
+
+        all_tables = _list_tables(conn)
+        debug_lines.append(f"[tables] 主库表数: {len(all_tables)}")
         
         # 检查 polyMarket_Wallet 表是否存在
         if 'polyMarket_Wallet' not in all_tables:
@@ -195,48 +237,61 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
             Outputs[0]['Context'] = '\n'.join(summary + ['', '---- DEBUG DETAILS ----'] + debug_lines)
             if conn:
                 conn.close()
+            for c in extra_conns:
+                try:
+                    c.close()
+                except Exception:
+                    pass
             return Outputs
         
         wallet_cols = list(wallet_df.columns)
         wallet_cols_set = set(wallet_cols)
         debug_lines.append(f"[wallet] polyMarket_Wallet 表列数: {len(wallet_cols)}")
         
-        # 筛选源表：必须包含 token 和 query_time_beijing 字段
-        source_tables = []
-        for table_name in all_tables:
-            if table_name in ('polyMarket_Wallet', 'polyMarket_Sell'):
-                continue  # 跳过目标表和将要创建的表
-            
-            cols_set = _get_table_columns_set(conn, table_name)
-            if 'token' in cols_set and 'query_time_beijing' in cols_set:
-                source_tables.append(table_name)
-                debug_lines.append(f"[source] 发现源表: {table_name} (列数: {len(cols_set)})")
-        
-        if not source_tables:
-            debug_lines.append("[source] 未找到包含 token 和 query_time_beijing 的源表")
+        # 筛选源表：必须包含 token 和 query_time_beijing 字段（主库 + 额外来源库）
+        # source_refs: List[Tuple[conn, table_name, db_path]]
+        source_refs = []
+
+        def _collect_sources(c: sqlite3.Connection, tables: List[str], db_tag: str):
+            for table_name in tables:
+                if table_name in ('polyMarket_Wallet', 'polyMarket_Sell'):
+                    continue
+                cols_set = _get_table_columns_set(c, table_name)
+                if 'token' in cols_set and 'query_time_beijing' in cols_set:
+                    source_refs.append((c, table_name, db_tag))
+                    if len(debug_lines) < 200:
+                        debug_lines.append(f"[source] 发现源表: {table_name} ({db_tag})")
+
+        _collect_sources(conn, all_tables, "main")
+        for idx, c in enumerate(extra_conns):
+            t = _list_tables(c)
+            _collect_sources(c, t, f"extra{idx + 1}")
+
+        if not source_refs:
+            debug_lines.append("[source] 未找到包含 token 和 query_time_beijing 的源表（含额外库）")
         else:
-            debug_lines.append(f"[source] 共找到 {len(source_tables)} 个源表")
+            debug_lines.append(f"[source] 共找到 {len(source_refs)} 个源表（含额外库）")
         
         # 统计变量
         total_updated_rows = 0
         total_updated_fields = 0
         
         # 为每行钱包记录查找并补齐信息（仅在存在源表时执行）
-        if source_tables:
+        if source_refs:
             for wallet_idx, wallet_row in wallet_df.iterrows():
                 token_val = wallet_row.get('token')
                 if _is_empty_value(token_val):
                     continue  # 跳过 token 为空的行
                 
                 token_str = str(token_val).strip()
-                best_match = None  # {table: str, row: dict, query_time: datetime}
+                best_match = None  # {table: str, row: dict, query_time: datetime, db: str}
                 
                 # 在所有源表中查找匹配的 token
-                for source_table in source_tables:
+                for source_conn, source_table, db_tag in source_refs:
                     try:
                         # 查询匹配的记录
                         query = f'SELECT * FROM {_quote_ident(source_table)} WHERE "token" = ?'
-                        matches = pd.read_sql_query(query, conn, params=[token_str])
+                        matches = pd.read_sql_query(query, source_conn, params=[token_str])
                         
                         if matches.empty:
                             continue
@@ -255,7 +310,8 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
                             best_match = {
                                 'table': source_table,
                                 'row': latest_match,
-                                'query_time': match_time
+                                'query_time': match_time,
+                                'db': db_tag
                             }
                     
                     except Exception as e:
@@ -284,7 +340,7 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
                         if len(debug_lines) < 100:  # 限制调试日志数量，避免输出过长
                             debug_lines.append(
                                 f"[update] 行 {wallet_idx}: token={token_str}, "
-                                f"源表={best_match['table']}, 更新 {field_count} 个字段"
+                                f"源表={best_match['table']}({best_match.get('db','')}), 更新 {field_count} 个字段"
                             )
         
         # 写回数据库（如果有更新）
@@ -324,6 +380,11 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         
         if conn:
             conn.close()
+        for c in extra_conns:
+            try:
+                c.close()
+            except Exception:
+                pass
         return Outputs
     
     except Exception as e:
@@ -333,6 +394,11 @@ def run_node(node: Dict[str, Any]) -> List[Dict[str, Any]]:
         if conn:
             try:
                 conn.close()
+            except Exception:
+                pass
+        for c in extra_conns:
+            try:
+                c.close()
             except Exception:
                 pass
         return Outputs
