@@ -1651,11 +1651,14 @@ def _find_script(node_name: str) -> Optional[Path]:
 def read_data():
     try:
         # 获取文件路径
-        data = request.get_json()
+        data = request.get_json() or {}
         if 'file_path' not in data:
             return jsonify({'status': 'fail', 'message': 'No file path provided in the request'})
 
         file_path = _resolve_tempfiles(data['file_path'])
+        include_rows = int(data.get('include_rows', 0) or 0)  # 0 = 仅返回表名/列名；>0 = 每个表/Sheet 额外返回前 N 行预览
+        max_json_records = int(data.get('max_json_records', 5000) or 5000)  # schema-only 时 JSON/JSONL 最多扫描多少条记录来推断列名
+        schema_only = include_rows <= 0
         
         # 检查文件是否存在
         if not os.path.exists(file_path):
@@ -1671,34 +1674,22 @@ def read_data():
             try:
                 excel_data = pd.ExcelFile(file_path)
                 for sheet_name in excel_data.sheet_names:
-                    df = excel_data.parse(sheet_name)
+                    # 只读列名：nrows=0 避免把整页数据读进来（速度/内存提升巨大）
+                    df_head = excel_data.parse(sheet_name, nrows=0)
 
-                    # 替换未命名的列，添加序号和列标签
-                    df.columns = [
+                    # 替换未命名的列，添加序号和列标签（保持前端既有格式）
+                    formatted_cols = [
                         f"{i+1}/{get_excel_column_label(i)}/{col if 'Unnamed' not in str(col) else 'Unnamed'}"
-                        for i, col in enumerate(df.columns)
+                        for i, col in enumerate(df_head.columns)
                     ]
+                    columns_data[sheet_name] = formatted_cols
 
-                    # 自定义排序规则
-                    def sort_key(col_name):
-                        parts = col_name.split('/')
-                        num_part = int(parts[0])  # 序号作为整数
-                        letter_part = parts[1]  # Excel 样式的列标
-                        name_part = parts[2]  # 原始名称或 'Unnamed'
-                        return num_part, letter_part, name_part
-
-                    # 对列进行排序
-                    sorted_columns = sorted(df.columns, key=sort_key)
-                    df = df[sorted_columns]
-
-                    # 将 DataFrame 中的 NaN 值替换为 "Empty" 字符串，以避免 JSON 转换问题
-                    df = df.fillna("Empty")
-
-                    # 将 DataFrame 转换为字典格式
-                    response_data[sheet_name] = df.to_dict(orient='records')
-                    
-                    # 存储列名
-                    columns_data[sheet_name] = df.columns.tolist()
+                    # 可选：仅返回每个 sheet 的前 N 行预览
+                    if not schema_only:
+                        df = excel_data.parse(sheet_name, nrows=include_rows)
+                        df.columns = formatted_cols
+                        df = df.fillna("Empty")
+                        response_data[sheet_name] = df.to_dict(orient='records')
 
             except Exception as e:
                 return jsonify({'status': 'fail', 'message': f'Error processing Excel file: {str(e)}'})
@@ -1706,42 +1697,71 @@ def read_data():
         elif file_ext in ['.json', '.jsonl']:
             # 处理 JSON/JSONL 文件
             try:
+                sheet_name = 'default'
+                all_columns = set()
+
+                # schema-only 时，尽量不要把整个大文件读入内存：
+                # - JSONL：流式扫描前 max_json_records 行
+                # - JSON：优先尝试 ijson 流式；若不可用则回退 json.load（小文件没问题）
                 json_data = []
-                
-                if file_ext == '.json':
-                    # 处理标准JSON文件
-                    with open(file_path, 'r', encoding='utf-8') as json_file:
-                        data_content = json.load(json_file)
-                        if isinstance(data_content, list):
-                            json_data = data_content
-                        else:
-                            json_data = [data_content]
-                
-                elif file_ext == '.jsonl':
-                    # 处理JSONL文件（每行一个JSON对象）
+
+                if file_ext == '.jsonl':
+                    limit = include_rows if not schema_only else max_json_records
                     with open(file_path, 'r', encoding='utf-8') as jsonl_file:
                         for line in jsonl_file:
+                            if limit <= 0:
+                                break
                             line = line.strip()
-                            if line:
-                                try:
-                                    json_data.append(json.loads(line))
-                                except json.JSONDecodeError as line_error:
-                                    # 跳过无效的JSON行，但记录错误
-                                    logging.warning(f'Skipping invalid JSON line: {line}, Error: {str(line_error)}')
-                                    continue
-                
-                # 统一使用'default'作为sheet名，忽略sheet参数
-                sheet_name = 'default'
-                response_data[sheet_name] = json_data
-                
-                # 获取所有可能的列名（合并所有对象的键）
-                all_columns = set()
-                for item in json_data:
-                    if isinstance(item, dict):
-                        all_columns.update(item.keys())
-                
-                # 将列名转换为列表并排序，保持一致性
+                            if not line:
+                                continue
+                            try:
+                                obj = json.loads(line)
+                            except json.JSONDecodeError as line_error:
+                                logging.warning(f'Skipping invalid JSON line: {line}, Error: {str(line_error)}')
+                                continue
+                            if isinstance(obj, dict):
+                                all_columns.update(obj.keys())
+                            if not schema_only:
+                                json_data.append(obj)
+                            limit -= 1
+
+                else:  # .json
+                    streamed = False
+                    if schema_only:
+                        try:
+                            import ijson  # type: ignore
+                            with open(file_path, 'rb') as f:
+                                # 兼容两种结构：数组或单对象；这里只抽取前 max_json_records 个对象的 keys
+                                seen_any = False
+                                count = 0
+                                for obj in ijson.items(f, 'item'):
+                                    seen_any = True
+                                    if isinstance(obj, dict):
+                                        all_columns.update(obj.keys())
+                                    count += 1
+                                    if count >= max_json_records:
+                                        break
+                            # 如果顶层不是数组（例如是单对象），ijson.items('item') 会拿不到任何元素
+                            streamed = seen_any
+                        except Exception:
+                            streamed = False
+
+                    if not streamed:
+                        with open(file_path, 'r', encoding='utf-8') as json_file:
+                            data_content = json.load(json_file)
+                        if isinstance(data_content, list):
+                            iterable = data_content[:include_rows] if not schema_only else data_content[:max_json_records]
+                        else:
+                            iterable = [data_content]
+                        for item in iterable:
+                            if isinstance(item, dict):
+                                all_columns.update(item.keys())
+                            if not schema_only:
+                                json_data.append(item)
+
                 columns_data[sheet_name] = sorted(list(all_columns))
+                if not schema_only:
+                    response_data[sheet_name] = json_data
                 
             except json.JSONDecodeError as json_error:
                 return jsonify({'status': 'fail', 'message': f'Invalid JSON format: {str(json_error)}'})
@@ -1789,26 +1809,41 @@ def read_data():
                     # quick_check 在严重损坏时也可能抛异常，交给后续统一异常处理
                     pass
 
-                # 获取所有表名
-                table_names = pd.read_sql_query(
-                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
-                    conn
-                )['name'].tolist()
+                def _quote_ident(name: str) -> str:
+                    # SQLite 标识符双引号转义： " 变成 ""
+                    return '"' + str(name).replace('"', '""') + '"'
+
+                # 获取所有表名（不再用 pandas 读，减少开销）
+                table_rows = cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+                table_names = [r[0] for r in table_rows]
 
                 for table_name in table_names:
-                    # 读取整表（与 Excel 行为一致），可按需改为 LIMIT 预览
-                    q = f'SELECT * FROM "{table_name}"'
                     try:
-                        df = pd.read_sql_query(q, conn)
-                        df = df.fillna("Empty")
+                        # 只取列名：PRAGMA table_info 是 O(列数)，远快于 SELECT * 读全表
+                        pragma_sql = f"PRAGMA table_info({_quote_ident(table_name)})"
+                        info_rows = cur.execute(pragma_sql).fetchall()
+                        columns_data[table_name] = [r[1] for r in info_rows]  # r[1] = name
 
-                        response_data[table_name] = df.to_dict(orient='records')
-                        columns_data[table_name] = df.columns.tolist()
+                        # 可选：仅返回每个表前 N 行预览
+                        if not schema_only:
+                            q = f"SELECT * FROM {_quote_ident(table_name)} LIMIT ?"
+                            cur2 = conn.cursor()
+                            cur2.execute(q, (include_rows,))
+                            col_names = [d[0] for d in cur2.description] if cur2.description else []
+                            rows = cur2.fetchall()
+                            # 统一成 dict 列表，且把 None 变成 'Empty' 以兼容前端
+                            response_data[table_name] = [
+                                {col_names[i]: ("Empty" if v is None else v) for i, v in enumerate(row)}
+                                for row in rows
+                            ]
                     except Exception as table_e:
                         # 单表坏了也别拖垮整个库；给前端返回可见提示
-                        response_data[table_name] = []
+                        if not schema_only:
+                            response_data[table_name] = []
                         columns_data[table_name] = []
-                        logging.warning(f"SQLite table read failed: {table_name}: {table_e}")
+                        logging.warning(f"SQLite table schema/read failed: {table_name}: {table_e}")
 
                 conn.close()
             except Exception as e:
@@ -1837,7 +1872,14 @@ def read_data():
         else:
             return jsonify({'status': 'fail', 'message': 'Invalid file type. Only .xlsx, .json, .jsonl, .db and .sqlite are allowed.'})
 
-        return jsonify({'status': 'success', 'data': response_data, 'columns': columns_data})
+        return jsonify({
+            'status': 'success',
+            'resolved_path': file_path,
+            'tables': list(columns_data.keys()),
+            'columns': columns_data,
+            # 为兼容旧逻辑：只有 include_rows>0 时才会带预览数据；否则保持空 dict
+            'data': response_data,
+        })
 
     except Exception as e:
         return jsonify({'status': 'fail', 'message': str(e)})
@@ -2880,7 +2922,11 @@ def get_current_workflow_status():
             # 当前实例在 /load-project 中解析出的项目名（可能为空）
             "project_name": project_name or "",
             # 来自本次工作流图数据的 ProjectName/name，用于前端展示“当前监控的 workflow”
-            "graph_project_name": graph_project_name
+            "graph_project_name": graph_project_name,
+            # --- short system monitor metrics (pass-through) ---
+            "ConnNow": status_data.get("ConnNow"),
+            "TWNow": status_data.get("TWNow"),
+            "PortUse": status_data.get("PortUse"),
         })
     except Exception as e:
         print(f"[DEBUG:STATUS] 异常: {e}")

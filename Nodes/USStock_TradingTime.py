@@ -52,7 +52,8 @@ FunctionIntroduction = (
     "用于下游跳过网络检索。\n\n"
     "说明：\n"
     "- 交易时段按“常规交易时段”计算：美东时间 周一~周五 09:30:00 <= t < 16:00:00\n"
-    "- “非交易日”目前按周末判断（不含美股节假日与提前收盘；如需精确交易日历可再扩展）\n"
+    "- “非交易日”包含：周末 + 常见美股休市日（如 Presidents’ Day、MLK、Good Friday、感恩节等；不含提前收盘与罕见一次性停市）\n"
+    "- 新增“是否最新”判定：若能从 `__meta_cols` 读取 `RealTime_Data/__table_updated_time`，且其与 NowTime 之间经历过任意常规交易时段，则视为缓存过期，强制 IsTradingTime=True 触发更新\n"
     "- 若提供 SavePath + SaveName 且 SQLite 内有 `__meta_cols` 表，会尝试读取："
     "table_name='RealTime_Data' AND col_name='data_price' 的 last_value\n\n"
     "- 判定策略（用于节省检索资源）：\n"
@@ -159,6 +160,114 @@ def _nth_weekday_of_month(year: int, month: int, weekday: int, n: int) -> date:
     return date(year, month, day)
 
 
+def _last_weekday_of_month(year: int, month: int, weekday: int) -> date:
+    """
+    返回某年某月最后一个 weekday 的日期。
+    weekday: Monday=0 ... Sunday=6
+    """
+    # 从下月 1 号往回推
+    if month == 12:
+        first_next = date(year + 1, 1, 1)
+    else:
+        first_next = date(year, month + 1, 1)
+    cur = first_next - timedelta(days=1)
+    while cur.weekday() != weekday:
+        cur = cur - timedelta(days=1)
+    return cur
+
+
+def _easter_sunday_gregorian(year: int) -> date:
+    """
+    计算公历复活节（Easter Sunday）日期（Meeus/Jones/Butcher 算法）。
+    """
+    a = year % 19
+    b = year // 100
+    c = year % 100
+    d = b // 4
+    e = b % 4
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i = c // 4
+    k = c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    day = ((h + l - 7 * m + 114) % 31) + 1
+    return date(year, month, day)
+
+
+def _observed_date_for_fixed_holiday(local_d: date) -> date:
+    """
+    固定日期假期的“观察日”(Observed)：
+    - 落在周六：提前到周五
+    - 落在周日：顺延到周一
+    - 否则：当天
+    """
+    wd = local_d.weekday()
+    if wd == 5:  # Saturday
+        return local_d - timedelta(days=1)
+    if wd == 6:  # Sunday
+        return local_d + timedelta(days=1)
+    return local_d
+
+
+def _us_market_holidays_et(year: int) -> set:
+    """
+    NYSE/Nasdaq 常见全日休市（按美东“本地日期”）。
+    说明：这里覆盖常规每年固定/规则假期；未覆盖历史性一次性停市（如国家哀悼日）与极少见特殊情况。
+    """
+    hol = set()
+
+    # New Year's Day (Jan 1) observed
+    hol.add(_observed_date_for_fixed_holiday(date(year, 1, 1)))
+
+    # Martin Luther King Jr. Day: third Monday in January
+    hol.add(_nth_weekday_of_month(year, 1, 0, 3))
+
+    # Presidents’ Day (Washington’s Birthday): third Monday in February
+    hol.add(_nth_weekday_of_month(year, 2, 0, 3))
+
+    # Good Friday: Friday before Easter Sunday
+    easter = _easter_sunday_gregorian(year)
+    hol.add(easter - timedelta(days=2))
+
+    # Memorial Day: last Monday in May
+    hol.add(_last_weekday_of_month(year, 5, 0))
+
+    # Juneteenth: June 19 observed (NYSE started in 2022)
+    if year >= 2022:
+        hol.add(_observed_date_for_fixed_holiday(date(year, 6, 19)))
+
+    # Independence Day: July 4 observed
+    hol.add(_observed_date_for_fixed_holiday(date(year, 7, 4)))
+
+    # Labor Day: first Monday in September
+    hol.add(_nth_weekday_of_month(year, 9, 0, 1))
+
+    # Thanksgiving Day: fourth Thursday in November
+    hol.add(_nth_weekday_of_month(year, 11, 3, 4))  # Thursday=3
+
+    # Christmas Day: Dec 25 observed
+    hol.add(_observed_date_for_fixed_holiday(date(year, 12, 25)))
+
+    # 过滤：只保留落在 year 内的 observed 日期（避免 1/1 周六导致 observed 变成上一年 12/31）
+    return {d for d in hol if d.year == year}
+
+
+def _is_us_market_holiday_et(local_d: date) -> bool:
+    """
+    判断某个“美东本地日期”是否为休市日（含 observed）。
+    为处理跨年 observed（如 1/1 落周六 => 12/31 前一年 observed），这里会同时检查前后年份集合。
+    """
+    y = local_d.year
+    hol = set()
+    hol |= _us_market_holidays_et(y - 1)
+    hol |= _us_market_holidays_et(y)
+    hol |= _us_market_holidays_et(y + 1)
+    return local_d in hol
+
+
 def _us_dst_window_utc(year: int):
     """
     计算美国东部时区（New York）DST 窗口的 UTC 边界：
@@ -186,6 +295,28 @@ def _us_eastern_offset_hours(dt_utc: datetime) -> int:
     return -4 if (start_utc <= dt_utc < end_utc) else -5
 
 
+def _us_dst_window_local_dates(year: int):
+    """
+    计算纽约时区 DST 窗口的“本地日期”边界：
+    - 开始日：3 月第二个周日
+    - 结束日：11 月第一个周日
+    注意：交易时段发生在白天（09:30-16:00），对周一~周五来说，同一“本地日期”内偏移不会跨 DST 边界。
+    """
+    dst_start_local = _nth_weekday_of_month(year, 3, 6, 2)  # second Sunday of March
+    dst_end_local = _nth_weekday_of_month(year, 11, 6, 1)   # first Sunday of Nov
+    return dst_start_local, dst_end_local
+
+
+def _us_eastern_offset_hours_for_local_date(local_d: date) -> int:
+    """
+    给定“美东本地日期”，返回该日期白天交易时段使用的偏移（EDT=-4, EST=-5）。
+    这里按日期判断足够准确：DST 切换发生在周日凌晨 02:00，本函数主要服务于周一~周五交易窗计算。
+    """
+    start_d, end_d = _us_dst_window_local_dates(local_d.year)
+    # DST 生效区间：start_d(周日)之后，到 end_d(周日)之前
+    return -4 if (start_d < local_d < end_d) else -5
+
+
 def _is_us_regular_trading_time(dt_utc: datetime) -> bool:
     """
     美股常规交易时间（不含盘前/盘后）：
@@ -199,8 +330,57 @@ def _is_us_regular_trading_time(dt_utc: datetime) -> bool:
     wd = dt_et.weekday()  # Mon=0 ... Sun=6
     if wd >= 5:
         return False
+    # 休市日（按美东本地日期）
+    if _is_us_market_holiday_et(dt_et.date()):
+        return False
     t = dt_et.time()
     return (t.hour > 9 or (t.hour == 9 and t.minute >= 30)) and (t.hour < 16)
+
+
+def _has_us_regular_trading_between(dt_updated_utc: datetime, dt_now_utc: datetime) -> bool:
+    """
+    判定在 (dt_updated_utc, dt_now_utc] 区间内，是否“经历过任意一段”美股常规交易时间窗口。
+    若经历过，说明缓存数据不是“最新一轮交易后”的结果，应触发更新。
+    """
+    if dt_updated_utc is None or dt_now_utc is None:
+        return False
+    if dt_updated_utc.tzinfo is None:
+        dt_updated_utc = dt_updated_utc.replace(tzinfo=timezone.utc)
+    else:
+        dt_updated_utc = dt_updated_utc.astimezone(timezone.utc)
+    if dt_now_utc.tzinfo is None:
+        dt_now_utc = dt_now_utc.replace(tzinfo=timezone.utc)
+    else:
+        dt_now_utc = dt_now_utc.astimezone(timezone.utc)
+
+    if dt_now_utc <= dt_updated_utc:
+        return False
+
+    # 粗略映射到“本地日期”范围（加前后各 1 天防止边界误差）
+    start_et = dt_updated_utc + timedelta(hours=_us_eastern_offset_hours(dt_updated_utc))
+    end_et = dt_now_utc + timedelta(hours=_us_eastern_offset_hours(dt_now_utc))
+    d0 = start_et.date() - timedelta(days=1)
+    d1 = end_et.date() + timedelta(days=1)
+
+    cur = d0
+    while cur <= d1:
+        # 周末无常规交易
+        if cur.weekday() < 5:
+            # 休市日无常规交易
+            if _is_us_market_holiday_et(cur):
+                cur = cur + timedelta(days=1)
+                continue
+            offset_h = _us_eastern_offset_hours_for_local_date(cur)
+            # 交易窗：本地 09:30-16:00 => UTC = local - offset
+            open_utc = datetime(cur.year, cur.month, cur.day, 9, 30, 0, tzinfo=timezone.utc) - timedelta(hours=offset_h)
+            close_utc = datetime(cur.year, cur.month, cur.day, 16, 0, 0, tzinfo=timezone.utc) - timedelta(hours=offset_h)
+
+            # 窗口与 (updated, now] 有交集即算“经历过交易时段”
+            if max(open_utc, dt_updated_utc) < min(close_utc, dt_now_utc):
+                return True
+
+        cur = cur + timedelta(days=1)
+    return False
 
 
 def _table_exists(conn: sqlite3.Connection, table_name: str) -> bool:
@@ -225,7 +405,7 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
     - `__meta_cols`(table_name='RealTime_Data', col_name='data_price') 的 last_value 作为 Save_Price
     - `data_json` 优先从 `__meta_cols`(table_name='RealTime_Data', col_name='data_json') 的 last_value 读取（与 data_price 同逻辑）
       若未命中，再回退到 `RealTime_Data` 最新一条的 `data_json`（若存在该列），否则尝试 value_text 兜底
-    返回：(save_price_float, save_price_str, data_json, db_used)
+    返回：(save_price_float, save_price_str, data_json, table_updated_time_utc, db_used)
     """
     if dbg is None:
         dbg = []
@@ -234,7 +414,7 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
     save_name = _safe_str(save_name).strip().replace("\n", "").replace("\r", "")
     if not save_dir or not save_name:
         dbg.append("[cache] 未提供 SavePath/SaveName，跳过本地缓存读取")
-        return None, "", "", ""
+        return None, "", "", None, ""
 
     if not (save_name.lower().endswith(".db") or save_name.lower().endswith(".sqlite")):
         save_name += ".db"
@@ -242,7 +422,7 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
     full_path = os.path.join(save_dir, save_name)
     if not os.path.exists(full_path):
         dbg.append(f"[cache] DB 不存在：{full_path}")
-        return None, "", "", full_path
+        return None, "", "", None, full_path
 
     conn = None
     try:
@@ -253,7 +433,29 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
         save_price_s = ""
         save_price_f = None
         data_json = ""
+        table_updated_time_utc = None
         if _table_exists(conn, "__meta_cols"):
+            # 0) 读取“表更新时间” __table_updated_time（用于判断缓存是否最新）
+            try:
+                rowt = conn.execute(
+                    'SELECT last_value FROM "__meta_cols" WHERE table_name=? AND col_name=? ORDER BY updated_at_utc DESC LIMIT 1',
+                    ("RealTime_Data", "__table_updated_time"),
+                ).fetchone()
+            except Exception:
+                rowt = conn.execute(
+                    'SELECT last_value FROM "__meta_cols" WHERE table_name=? AND col_name=? LIMIT 1',
+                    ("RealTime_Data", "__table_updated_time"),
+                ).fetchone()
+            if rowt and rowt[0] is not None:
+                try:
+                    table_updated_time_utc = _clean_and_parse_time(rowt[0]).astimezone(timezone.utc)
+                    dbg.append(f"[cache] __meta_cols 命中 __table_updated_time：{table_updated_time_utc.isoformat().replace('+00:00','Z')}")
+                except Exception as _e:
+                    table_updated_time_utc = None
+                    dbg.append(f"[cache] __meta_cols 命中 __table_updated_time 但解析失败：{_safe_str(rowt[0])}")
+            else:
+                dbg.append("[cache] __meta_cols 未命中 (RealTime_Data, __table_updated_time)")
+
             try:
                 row = conn.execute(
                     # __meta_cols 现在可能带 symbol 维度；不传 symbol 时应按更新时间取最新一条
@@ -297,7 +499,7 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
 
         # 2) 若 __meta_cols 未命中 data_json，则回退读取 RealTime_Data 最新一条 data_json / value_text
         if data_json is not None and _safe_str(data_json).strip():
-            return save_price_f, save_price_s, data_json, db_used
+            return save_price_f, save_price_s, data_json, table_updated_time_utc, db_used
 
         if _table_exists(conn, "RealTime_Data"):
             cols = _get_table_columns(conn, "RealTime_Data")
@@ -327,10 +529,10 @@ def _try_read_saved_cache(save_dir: str, save_name: str, dbg=None):
         else:
             dbg.append("[cache] DB 中不存在 RealTime_Data 表")
 
-        return save_price_f, save_price_s, data_json, db_used
+        return save_price_f, save_price_s, data_json, table_updated_time_utc, db_used
     except Exception as e:
         dbg.append(f"[cache][error] {type(e).__name__}: {_safe_str(e)}")
-        return None, "", "", full_path
+        return None, "", "", None, full_path
     finally:
         try:
             if conn is not None:
@@ -363,16 +565,17 @@ def run_node(node):
             raw = None
 
         dt = _clean_and_parse_time(raw)
-        dt_utc = dt.astimezone(timezone.utc)
-        is_trading_time_raw = bool(_is_us_regular_trading_time(dt_utc))
+        dt_now_utc = dt.astimezone(timezone.utc)
+        is_trading_time_raw = bool(_is_us_regular_trading_time(dt_now_utc))
 
         # 不在交易时段：尝试读取 Save_Price（用于下游跳过检索）
         save_price_f = None
         save_price_s = ""
         data_json = ""
+        table_updated_time_utc = None
         db_used = ""
         if not is_trading_time_raw:
-            save_price_f, save_price_s, data_json, db_used = _try_read_saved_cache(str(save_dir), str(save_name), dbg=dbg)
+            save_price_f, save_price_s, data_json, table_updated_time_utc, db_used = _try_read_saved_cache(str(save_dir), str(save_name), dbg=dbg)
         else:
             dbg.append("[cache] IsTradingTime=True（交易时段），按策略不读本地缓存")
 
@@ -385,16 +588,38 @@ def run_node(node):
         has_cache_data_json = bool(_safe_str(data_json).strip())
         has_cache = bool(has_cache_price or has_cache_data_json)
 
-        is_trading_time_final = bool(is_trading_time_raw or (not has_cache))
+        # 新增：缓存“是否最新”判定——若 (table_updated_time, now] 中经历过任意常规交易时段，则强制更新
+        stale_due_to_trading = False
+        freshness_checked = False
+        freshness_error = False
+        if (not is_trading_time_raw) and has_cache and (table_updated_time_utc is not None):
+            try:
+                stale_due_to_trading = bool(_has_us_regular_trading_between(table_updated_time_utc, dt_now_utc))
+                freshness_checked = True
+            except Exception as _e:
+                stale_due_to_trading = False
+                freshness_error = True
+                dbg.append(f"[freshness][error] {type(_e).__name__}: {_safe_str(_e)}")
+
+        if stale_due_to_trading:
+            dbg.append(
+                "[freshness] __table_updated_time 与 NowTime 之间经历过常规交易时段：缓存不是最新，强制 IsTradingTime=True 触发更新"
+            )
+        elif freshness_checked and (not freshness_error):
+            dbg.append("[freshness] __table_updated_time 与 NowTime 之间未经历常规交易时段：缓存可视为最新")
+
+        is_trading_time_final = bool(is_trading_time_raw or (not has_cache) or stale_due_to_trading)
         if (not is_trading_time_raw) and (not has_cache):
             dbg.append("[policy] 非交易时段但未读到缓存（既无 Save_Price 也无 data_json）：按策略强制 IsTradingTime=True 以继续检索")
-        elif (not is_trading_time_raw) and has_cache:
+        elif (not is_trading_time_raw) and has_cache and (not stale_due_to_trading):
             if has_cache_price and has_cache_data_json:
                 dbg.append("[policy] 非交易时段且已读到缓存（Save_Price + data_json）：IsTradingTime=False 以节省检索")
             elif has_cache_price:
                 dbg.append("[policy] 非交易时段且已读到缓存（Save_Price）：IsTradingTime=False 以节省检索")
             else:
                 dbg.append("[policy] 非交易时段且已读到缓存（data_json）：IsTradingTime=False 以节省检索")
+        elif (not is_trading_time_raw) and has_cache and stale_due_to_trading:
+            dbg.append("[policy] 非交易时段但缓存已过期（经历过交易时段）：IsTradingTime=True 以继续检索更新")
 
         Outputs[0]["Boolean"] = is_trading_time_final
         Outputs[0]["Context"] = "True" if is_trading_time_final else "False"

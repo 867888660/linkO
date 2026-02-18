@@ -37,6 +37,8 @@ let recordAnnotateToken = 0;
 const RECORD_ANNOTATE_CONCURRENCY = 2;        // 并发过高会把 /history/run 与 UI 都拖慢
 const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标注，避免“越多越卡”
 const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+// 深度搜索文本索引版本：当构建策略变化时递增，强制重建缓存，避免“修了但不生效”
+const RECORD_SEARCH_TEXT_VERSION = 2;
 let recordSearchRefilterTimer = null;
 
 // ==================== 历史记录开关（本地设置） ====================
@@ -1861,11 +1863,166 @@ const initGraph = async (id = null) => {
       return tip;
     })();
 
+    /* ========= Ctrl + A：悬停聚焦（其它全部半透明） ========= */
+    // 需求：同时按住 Ctrl+A 时，鼠标悬停的 node/edge 保持正常，其它 node/edge 全部半透明；松开按键或移出则恢复。
+    // 这里做最小实现：只控制 opacity，不动你现有的 linkBlue/linkRed 等状态逻辑。
+    const DIM_OPACITY = 0.15;
+    const RELATED_OPACITY = 0.55; // 第三种状态：与悬浮对象“相关”的 node/edge（介于半透明与实体之间）
+    const mountNodeEl = document.getElementById('mountNode');
+    const focusState = (window.__linkO_focusState = window.__linkO_focusState || { ctrlAActive: false, inited: false });
+    // 每次 initGraph 都更新当前 graph 引用，避免键盘监听引用旧 graph 导致无法恢复
+    focusState.graph = graph;
+    if (typeof focusState.isMouseInCanvas !== 'boolean') focusState.isMouseInCanvas = false;
+    // 记录当前悬停对象（用于：先悬停，再按 Ctrl+A 的场景）
+    focusState.hoveredItem = focusState.hoveredItem || null; // G6 item
+    focusState.hoveredKind = focusState.hoveredKind || null; // 'node' | 'edge'
+
+    const isEditableTarget = (t) => {
+      if (!t) return false;
+      const tag = (t.tagName || '').toUpperCase();
+      return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable === true;
+    };
+
+    const getFocusGraph = () => focusState.graph;
+
+    const setItemOpacity = (item, opacity) => {
+      if (!item || item.destroyed) return;
+      const container = item.getContainer && item.getContainer();
+      if (container && container.getChildren) {
+        container.getChildren().forEach((shape) => {
+          if (shape && shape.attr) shape.attr('opacity', opacity);
+        });
+      }
+      const keyShape = item.getKeyShape && item.getKeyShape();
+      if (keyShape && keyShape.attr) keyShape.attr('opacity', opacity);
+    };
+
+    const clearCtrlAFocus = () => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      console.warn('[CtrlA] clear focus');
+      g.getNodes().forEach((n) => setItemOpacity(n, 1));
+      g.getEdges().forEach((e) => setItemOpacity(e, 1));
+    };
+
+    const applyCtrlAFocusForNode = (nodeItem) => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      const nodeId = nodeItem.getID();
+      console.warn('[CtrlA] focus node', nodeId);
+      // 先全部压暗
+      g.getNodes().forEach((n) => setItemOpacity(n, DIM_OPACITY));
+      g.getEdges().forEach((e) => setItemOpacity(e, DIM_OPACITY));
+      // 悬停节点：实体
+      setItemOpacity(nodeItem, 1);
+      // 相关边/相关节点：第三种状态（更优雅地区分层次）
+      g.getEdges().forEach((edgeItem) => {
+        const { source, target } = edgeItem.getModel();
+        if (source === nodeId || target === nodeId) {
+          setItemOpacity(edgeItem, RELATED_OPACITY);
+          const otherId = source === nodeId ? target : source;
+          const otherNode = g.findById(otherId);
+          if (otherNode) setItemOpacity(otherNode, RELATED_OPACITY);
+        }
+      });
+    };
+
+    const applyCtrlAFocusForEdge = (edgeItem) => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      const m = edgeItem.getModel();
+      console.warn('[CtrlA] focus edge', { id: edgeItem.getID && edgeItem.getID(), source: m.source, target: m.target });
+      // 先全部压暗
+      g.getNodes().forEach((n) => setItemOpacity(n, DIM_OPACITY));
+      g.getEdges().forEach((e) => setItemOpacity(e, DIM_OPACITY));
+      // 悬停边：实体
+      setItemOpacity(edgeItem, 1);
+      // 两端节点：第三种状态
+      const s = g.findById(m.source);
+      const t = g.findById(m.target);
+      if (s) setItemOpacity(s, RELATED_OPACITY);
+      if (t) setItemOpacity(t, RELATED_OPACITY);
+    };
+
+    // 只初始化一次（initGraph 可能会被多次调用）
+    if (!focusState.inited) {
+      focusState.inited = true;
+      if (mountNodeEl) {
+        mountNodeEl.addEventListener('mouseenter', () => {
+          focusState.isMouseInCanvas = true;
+          console.warn('[CtrlA] mouse enter canvas');
+        });
+        mountNodeEl.addEventListener('mouseleave', () => {
+          focusState.isMouseInCanvas = false;
+          console.warn('[CtrlA] mouse leave canvas');
+          if (focusState.ctrlAActive) clearCtrlAFocus();
+        });
+      } else {
+        console.warn('[CtrlA] mountNode not found');
+      }
+      document.addEventListener(
+        'keydown',
+        (evt) => {
+          // 只在画布区域内生效，避免影响其它输入框
+          console.warn('[CtrlA] keydown', {
+            key: evt.key,
+            ctrlKey: evt.ctrlKey,
+            target: evt.target && evt.target.tagName,
+            isMouseInCanvas: focusState.isMouseInCanvas
+          });
+          if (isEditableTarget(evt.target)) {
+            console.warn('[CtrlA] ignore: editable target');
+            return;
+          }
+          if (!focusState.isMouseInCanvas) {
+            console.warn('[CtrlA] ignore: mouse not in canvas');
+            return;
+          }
+          if ((evt.key === 'a' || evt.key === 'A') && evt.ctrlKey) {
+            focusState.ctrlAActive = true;
+            console.warn('[CtrlA] active = true');
+            evt.preventDefault(); // 避免浏览器 Ctrl+A 全选页面文字
+            // 关键修复：如果已经悬停在 node/edge 上，再按 Ctrl+A 时立刻对当前悬停对象应用聚焦
+            if (!isRunning() && focusState.hoveredItem && !focusState.hoveredItem.destroyed) {
+              console.warn('[CtrlA] apply focus immediately (already hovering)', focusState.hoveredKind);
+              if (focusState.hoveredKind === 'node') applyCtrlAFocusForNode(focusState.hoveredItem);
+              else if (focusState.hoveredKind === 'edge') applyCtrlAFocusForEdge(focusState.hoveredItem);
+            }
+          }
+        },
+        true
+      );
+      document.addEventListener(
+        'keyup',
+        (evt) => {
+          console.warn('[CtrlA] keyup', { key: evt.key, ctrlKey: evt.ctrlKey, active: focusState.ctrlAActive });
+          if (evt.key === 'a' || evt.key === 'A' || evt.key === 'Control') {
+            if (focusState.ctrlAActive) {
+              focusState.ctrlAActive = false;
+              console.warn('[CtrlA] active = false');
+              clearCtrlAFocus();
+            }
+          }
+        },
+        true
+      );
+      window.addEventListener('blur', () => {
+        if (focusState.ctrlAActive) {
+          focusState.ctrlAActive = false;
+          console.warn('[CtrlA] window blur -> active = false');
+          clearCtrlAFocus();
+        }
+      });
+    }
+
     /* ========= 节点悬停 ========= */
     graph.on('node:mouseenter', e => {
       /* ——— tooltip 逻辑（保持你原有判断） ——— */
       const node = e.item;
       node.update({ IsHovor:true });
+      // 记录当前悬停对象
+      focusState.hoveredItem = node;
+      focusState.hoveredKind = 'node';
       const m = node.getModel();
       tooltip.style.display = 'block';
       tooltip.style.fontColor = 'RED';
@@ -1902,6 +2059,10 @@ const initGraph = async (id = null) => {
         }
       });
 
+      // Ctrl+A 聚焦：除悬停 node 与其关联边外，其它全部半透明
+      if (focusState.ctrlAActive) {
+        applyCtrlAFocusForNode(node);
+      }
       
     });
 
@@ -1913,6 +2074,11 @@ const initGraph = async (id = null) => {
     
       const node = e.item;
       node.update({ IsHovor:false });
+      // 清掉悬停记录（仅当离开的正是当前记录的对象）
+      if (focusState.hoveredItem === node) {
+        focusState.hoveredItem = null;
+        focusState.hoveredKind = null;
+      }
     
       /* ——— 取消关联边高亮 ——— */
       const nodeId = node.getID();
@@ -1937,6 +2103,10 @@ const initGraph = async (id = null) => {
         }
       });
     
+      // 离开悬停对象就恢复（聚焦只在“悬停时”生效）
+      if (focusState.ctrlAActive) {
+        clearCtrlAFocus();
+      }
       
     });
     
@@ -1949,6 +2119,9 @@ const initGraph = async (id = null) => {
     
       const edge = e.item;
       edge._prevStates = edge.getStates();   // 记录原状态
+      // 记录当前悬停对象
+      focusState.hoveredItem = edge;
+      focusState.hoveredKind = 'edge';
     
       // ==== ★ 如果本身是橘 / 紫 / 绿，不改变 stroke，只加光晕 ====
       if (edge.hasState('linkOrange') || edge.hasState('linkPurple') || edge.hasState('linkGreen')) {
@@ -1956,12 +2129,22 @@ const initGraph = async (id = null) => {
       } else {
         edge.setState('linkRed', true);      // 普通边 ➜ 红高亮
       }
+
+      // Ctrl+A 聚焦：除悬停 edge 与其两端节点外，其它全部半透明
+      if (focusState.ctrlAActive) {
+        applyCtrlAFocusForEdge(edge);
+      }
     });
     
     graph.on('edge:mouseleave', e => {
       if (isRunning()) return;
     
       const edge = e.item;
+      // 清掉悬停记录（仅当离开的正是当前记录的对象）
+      if (focusState.hoveredItem === edge) {
+        focusState.hoveredItem = null;
+        focusState.hoveredKind = null;
+      }
     
       // ==== 恢复所有状态 + 去掉阴影 ====
       edge.setState('linkRed', false);
@@ -1979,6 +2162,11 @@ const initGraph = async (id = null) => {
           lineWidth:3,
           opacity:1
         });
+      }
+
+      // 离开悬停对象就恢复（聚焦只在“悬停时”生效）
+      if (focusState.ctrlAActive) {
+        clearCtrlAFocus();
       }
     });
     
@@ -3666,7 +3854,10 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
   const pendingItemsAll = items.filter(item => {
     if (!item || !item.filename) return false;
     if (typeof item.__hasError === 'undefined') return true;
-    if (forceDeepSearch && typeof item.__searchText === 'undefined') return true;
+    if (forceDeepSearch) {
+      if (typeof item.__searchText === 'undefined') return true;
+      if (item.__searchTextVersion !== RECORD_SEARCH_TEXT_VERSION) return true;
+    }
     return false;
   });
   if (!pendingItemsAll.length) return;
@@ -3716,42 +3907,75 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
       }
 
       // 构建可搜索文本（可选：只在记录少时启用，且做截断，避免卡顿/内存爆炸）
-      if (enableDeepSearch && typeof item.__searchText === 'undefined') {
+      if (enableDeepSearch && (typeof item.__searchText === 'undefined' || item.__searchTextVersion !== RECORD_SEARCH_TEXT_VERSION)) {
         try {
           const collectFields = [];
-          const maxNodesForIndex = 30;
-          const maxChars = 12000;
+          const maxChars = 20000; // 上限保护：避免卡顿/内存爆炸（但要比旧值更能覆盖真实文本）
+          const maxNodesForIndex = 260; // 旧值 30 容易漏掉后面的 LLM 输出节点
+          let curLen = 0;
+
+          const pushVal = (v, slice = 240) => {
+            if (v === undefined || v === null) return;
+            let s = '';
+            try { s = String(v); } catch (_) { return; }
+            if (!s) return;
+            if (slice && s.length > slice) s = s.slice(0, slice);
+            collectFields.push(s);
+            curLen += s.length + 1;
+          };
+
+          const pushPort = (p) => {
+            if (!p || typeof p !== 'object') return;
+            pushVal(p.name, 140);
+            pushVal(p.Kind, 80);
+            // Context 字段有大小写差异：Context / context
+            pushVal(p.Context, 1200);
+            pushVal(p.context, 1200);
+            // 其他常见字段（不同节点实现可能写不同 key）
+            pushVal(p.Value, 1200);
+            pushVal(p.value, 1200);
+            if (typeof p.Num !== 'undefined' && p.Num !== null) pushVal(p.Num, 80);
+            if (typeof p.Boolean === 'boolean') pushVal(p.Boolean, 20);
+          };
+
+          const pushNode = (n) => {
+            if (!n || typeof n !== 'object') return;
+            // 常见文本字段（中英都可能出现在这里）
+            [
+              'label','name','NodeKind','Kind',
+              'prompt','Prompt','ExportPrompt','SystemPrompt',
+              'text','Text','content','Content',
+              'result','Result','output','Output',
+              'ErrorContext','Debug','debug'
+            ].forEach(k => pushVal(n[k], 2400));
+
+            // 兜底：把节点对象里所有“短字符串字段”也纳入索引，避免漏掉未列举的 key
+            try {
+              for (const k in n) {
+                if (!Object.prototype.hasOwnProperty.call(n, k)) continue;
+                const v = n[k];
+                if (typeof v === 'string' && v) pushVal(v, 1200);
+                if (curLen > maxChars) break;
+              }
+            } catch (_) {}
+
+            // Inputs/Outputs：保留 name + Context/数值（截断），保证“按关键字搜索”可用
+            if (Array.isArray(n.Inputs)) n.Inputs.forEach(pushPort);
+            if (Array.isArray(n.outputs)) n.outputs.forEach(pushPort);
+            if (Array.isArray(n.Outputs)) n.Outputs.forEach(pushPort);
+            if (Array.isArray(n.Output)) n.Output.forEach(pushPort);
+          };
+
           for (let i = 0; i < (Array.isArray(nodes) ? nodes.length : 0) && i < maxNodesForIndex; i++) {
-            const n = nodes[i];
-            if (!n || typeof n !== 'object') continue;
-            ['label', 'name', 'prompt', 'ExportPrompt', 'SystemPrompt'].forEach(k => {
-              if (n[k]) collectFields.push(String(n[k]));
-            });
-            // Inputs/Outputs：保留 name + 少量 Context/数值（截断），保证“按关键字搜索”可用
-            if (Array.isArray(n.Inputs)) {
-              n.Inputs.forEach(inp => {
-                if (!inp) return;
-                if (inp.name) collectFields.push(String(inp.name));
-                if (inp.Context) collectFields.push(String(inp.Context).slice(0, 240));
-                if (typeof inp.Num !== 'undefined' && inp.Num !== null) collectFields.push(String(inp.Num));
-                if (typeof inp.Boolean === 'boolean') collectFields.push(String(inp.Boolean));
-              });
-            }
-            if (Array.isArray(n.Outputs)) {
-              n.Outputs.forEach(out => {
-                if (!out) return;
-                if (out.name) collectFields.push(String(out.name));
-                if (out.Context) collectFields.push(String(out.Context).slice(0, 240));
-                if (typeof out.Num !== 'undefined' && out.Num !== null) collectFields.push(String(out.Num));
-                if (typeof out.Boolean === 'boolean') collectFields.push(String(out.Boolean));
-              });
-            }
-            if (collectFields.join(' ').length > maxChars) break;
+            pushNode(nodes[i]);
+            if (curLen > maxChars) break;
           }
+
           const baseText = `${formatRecordLabel(item)} ${item.time_label || ''}`;
           let st = `${baseText} ${collectFields.join(' ')}`.toLowerCase();
           if (st.length > maxChars) st = st.slice(0, maxChars);
           item.__searchText = st;
+          item.__searchTextVersion = RECORD_SEARCH_TEXT_VERSION;
         } catch (e) {
           console.warn('[RECORD] build search text failed', e);
         }
@@ -3827,7 +4051,7 @@ function renderRecordPanel(items) {
     <input
       id="record-panel-search"
       type="text"
-      placeholder="搜索关键字..."
+      placeholder="搜索关键字（中文/英文/数字）..."
       autocomplete="off"
       style="width:100%;height:28px;line-height:28px;padding:0 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#0f172a;color:#fff;outline:none;margin:8px 0;"
     />
@@ -3849,8 +4073,9 @@ function renderRecordPanel(items) {
     btn.type = 'button';
     btn.className = 'record-panel-item';
     btn.dataset.filename = item.filename;
-    // 预置搜索文本（先用已有信息，后续异步补齐 Inputs/Outputs）
-    btn.dataset.searchText = (item.__searchText || formatRecordLabel(item)).toLowerCase();
+    // 预置搜索文本（先用已有信息，后续异步补齐深度索引）
+    const stOk = item && item.__searchText && item.__searchTextVersion === RECORD_SEARCH_TEXT_VERSION;
+    btn.dataset.searchText = ((stOk ? item.__searchText : null) || formatRecordLabel(item)).toLowerCase();
     // 如果已经提前标记了是否有错误，则在渲染阶段直接加上对应样式
     if (item && item.__hasError) {
       btn.classList.add('record-panel-item-error');
@@ -3877,16 +4102,66 @@ function renderRecordPanel(items) {
   // 绑定搜索过滤
   const inputEl = document.getElementById('record-panel-search');
   if (inputEl) {
+    let isComposing = false;    // 中文输入法合成态
+    let buildTimer = null;      // debounce 深度索引构建
+    let lastScheduledQuery = '';
+
+    const normalizeQuery = (s) => (s || '').trim().toLowerCase();
+    const matchQuery = (text, q) => {
+      const qq = normalizeQuery(q);
+      if (!qq) return true;
+      // 允许用空格做“多个关键词同时命中”
+      const tokens = qq.split(/\s+/).filter(Boolean);
+      if (!tokens.length) return true;
+      const t = (text || '').toLowerCase();
+      for (let i = 0; i < tokens.length; i++) {
+        if (!t.includes(tokens[i])) return false;
+      }
+      return true;
+    };
+
     const doFilter = () => {
-      const q = (inputEl.value || '').trim().toLowerCase();
+      const q = normalizeQuery(inputEl.value);
       const itemsEls = list.querySelectorAll('.record-panel-item');
       itemsEls.forEach(el => {
         const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
-        el.style.display = q ? (text.includes(q) ? '' : 'none') : '';
+        el.style.display = q ? (matchQuery(text, q) ? '' : 'none') : '';
       });
     };
-    inputEl.addEventListener('input', doFilter);
-    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doFilter(); });
+
+    const scheduleDeepBuild = () => {
+      const q = normalizeQuery(inputEl.value);
+      if (!q) return;
+      // 包含非数字字符时，认为用户在搜中文/英文关键词：触发深度索引构建
+      const looksLikeTextQuery = /[^\d]/.test(q);
+      if (!looksLikeTextQuery) return;
+      if (q === lastScheduledQuery) return;
+      lastScheduledQuery = q;
+      try {
+        if (buildTimer) clearTimeout(buildTimer);
+        buildTimer = setTimeout(() => {
+          try { scheduleRecordSearchIndexBuild(q, doFilter); } catch (_) {}
+        }, 220);
+      } catch (_) {}
+    };
+
+    inputEl.addEventListener('compositionstart', () => { isComposing = true; });
+    inputEl.addEventListener('compositionend', () => {
+      isComposing = false;
+      doFilter();
+      scheduleDeepBuild();
+    });
+    inputEl.addEventListener('input', () => {
+      if (isComposing) return;
+      doFilter();
+      scheduleDeepBuild();
+    });
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        doFilter();
+        scheduleDeepBuild();
+      }
+    });
     try { inputEl.focus(); } catch(_) {}
   }
 }
@@ -5035,6 +5310,23 @@ function adjustHeight(textarea) {
   textarea.style.height = 'auto'; // 重置高度以获得正确的滚动高度
   textarea.style.height = `${textarea.scrollHeight}px`;
 }
+
+// 详情窗口初次加载高度：
+// - 最大视窗高度：maxRatio * window.innerHeight
+// - 所需视窗高度：domElement.scrollHeight
+// 初次创建时设置 height = min(所需, 最大)；之后用户可自由拖拽调整高度，不再覆盖
+function applyInitialDetailHeight(domElement, maxRatio = 0.8) {
+  if (!domElement || domElement.dataset.initialAutoSize === '1') return;
+  domElement.dataset.initialAutoSize = '1';
+  requestAnimationFrame(() => {
+    // 让浏览器先完成布局计算
+    domElement.style.height = 'auto';
+    const maxH = Math.max(120, Math.floor(window.innerHeight * maxRatio));
+    const needH = domElement.scrollHeight;
+    const targetH = Math.min(needH, maxH);
+    domElement.style.height = `${targetH}px`;
+  });
+}
 function CreatDetaile(Item)
   {
     // 确保 item.model 中包含 x, y 位置和 id
@@ -5042,27 +5334,66 @@ function CreatDetaile(Item)
     // 创建 DOM 元素或者更新现有元素
     console.log('Inputs',InputIsAdd,OutputsIsAdd,Outputs);
     let domElement = document.getElementById(`dom-${id}`);
+
+    // 详情面板启用 node-detail 样式（用于可拖拽调高/统一外观等）
+    // NameId 已放进 sticky 的 drag-bar 顶栏，因此不会随内容滚动上下移动
+    if (domElement) {
+      domElement.classList.add('node-detail');
+      // 兼容旧结构：把顶栏输入框移入 drag-bar，避免随内容滚动
+      const dragBarExist = domElement.querySelector('.drag-bar');
+      if (dragBarExist) {
+        let titleInput = domElement.querySelector('input[data-role="node-title"]');
+        if (!titleInput) {
+          // 旧节点：NameId 可能是 domElement 的直接子元素
+          const directChildInput = Array.from(domElement.children).find(
+            (c) => c && c.tagName === 'INPUT'
+          );
+          if (directChildInput) {
+            directChildInput.dataset.role = 'node-title';
+            titleInput = directChildInput;
+          }
+        }
+        if (titleInput && titleInput.parentElement !== dragBarExist) {
+          // 覆盖旧的 absolute 定位，改为放进 sticky 顶栏
+          titleInput.style.position = 'relative';
+          titleInput.style.left = '';
+          titleInput.style.top = '';
+          titleInput.style.zIndex = '';
+          titleInput.style.marginLeft = '30px';
+          if (!titleInput.dataset.dragStopBound) {
+            titleInput.addEventListener('mousedown', (e) => e.stopPropagation());
+            titleInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+            titleInput.dataset.dragStopBound = '1';
+          }
+          dragBarExist.insertBefore(titleInput, dragBarExist.firstChild);
+        }
+      }
+    }
   if (!domElement) {
     domElement = document.createElement('div');
     domElement.id = `dom-${id}`;
-    document.className = 'Nodes';
+    domElement.className = 'Nodes node-detail';
     domElement.style.cssText = `
       position: absolute;
       left: ${500}px;
       top: ${500}px;
-      width: ${600}px;
-      height: ${400}px;
+      width: ${650}px;
+      height: auto;
       border-radius: 10px;
     `;
-    const NameId = document.createElement('input'); // 创建 input 元素而不是 div
-    NameId.value = label; // 设置输入框的初始值为 id
+    const dragBar = document.createElement('div');
+    dragBar.className = 'drag-bar';
+    domElement.appendChild(dragBar);
+
+    // 顶栏标题输入框：放进 drag-bar（drag-bar 是 sticky 的），这样不会随详情滚动
+    const NameId = document.createElement('input');
+    NameId.dataset.role = 'node-title';
+    NameId.value = label;
     NameId.style.cssText = `
-        position: absolute;
-        left: 30px;
-        top: 3px;
+        position: relative;
+        margin-left: 30px;
         width: 200px;
         height: 26px;
-        z-index: 100;
         background: #505050; /* 黑灰色高质感背景 */
         border: 1px solid rgba(255, 255, 255, 0.08); /* 极细微边框 */
         border-left: 3px solid #00d4ff; /* 科技蓝侧边条 */
@@ -5076,7 +5407,6 @@ function CreatDetaile(Item)
         outline: none;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         backdrop-filter: blur(12px); /* 强毛玻璃 */
-        
     `;
     NameId.addEventListener('focus', function() {
         this.style.background = '#505050';
@@ -5088,15 +5418,13 @@ function CreatDetaile(Item)
         this.style.borderLeftColor = '#00d4ff';
         this.style.color = '#e0e0e0';
     });
-
-    // 当输入框失去焦点时触发
     NameId.addEventListener('input', function() {
         ChangeNodeLabel(id,NameId.value,-1);
     });
-    domElement.appendChild(NameId);
-    const dragBar = document.createElement('div');
-    dragBar.className = 'drag-bar';
-    domElement.appendChild(dragBar);
+    // 编辑标题时不要触发 drag-bar 的拖拽
+    NameId.addEventListener('mousedown', (e) => e.stopPropagation());
+    NameId.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dragBar.appendChild(NameId);
 
     // 添加图标到 .drag-bar
     const icons = ['w-out'];
@@ -5144,9 +5472,8 @@ function CreatDetaile(Item)
     // 添加灰色背景和宽度自适应样式
     ResetColumn.style.cssText = `
         background:rgb(238, 238, 238) !important;  /* 灰色背景 */
-        width: fit-content !important;   /* 宽度自适应内容 */
-        min-width: 580px;               /* 最小宽度 */
-        max-width: 580px;               /* 最大宽度（可选） */
+        width: 100% !important;         /* 跟随窗口宽度 */
+        box-sizing: border-box;
 `;
 
 
@@ -10171,6 +10498,8 @@ const database = graph.save();
         vessel.appendChild(promptColumn);
         const SystemPromptInput = document.createElement('textarea');
         SystemPromptInput.className = 'prompt-textarea editable-div';
+        const PROMPT_TEXTAREA_WIDTH = '95%';
+        SystemPromptInput.style.width = PROMPT_TEXTAREA_WIDTH;
         SystemPromptInput.spellcheck = false;
         SystemPromptInput.textContent = SystemPrompt;
         promptColumn.querySelector('.prompt-container').appendChild(SystemPromptInput);
@@ -10182,6 +10511,7 @@ const database = graph.save();
         vessel.appendChild(userPromptColumn);
         const UserPromptInput = document.createElement('textarea');
         UserPromptInput.className = 'prompt-textarea editable-div';
+        UserPromptInput.style.width = PROMPT_TEXTAREA_WIDTH;
         UserPromptInput.spellcheck = false;
         UserPromptInput.textContent = prompt;
         userPromptColumn.querySelector('.prompt-container').appendChild(UserPromptInput);
@@ -12326,6 +12656,7 @@ const database = graph.save();
     }
 
     document.getElementById('graph-container').appendChild(domElement);
+    applyInitialDetailHeight(domElement, 0.8);
     domBlocks.push({ id: `dom-${id}`, element: domElement, Item });
   }
   initializeDragAndResize(domElement,300,400);
@@ -14513,6 +14844,24 @@ function updateUIFromBackendStatus(statusData) {
     const wfId     = statusData?.workflow_id || monitoredWorkflowId || currentWorkflowId || null;
     const projName = statusData?.graph_project_name || statusData?.project_name || '';
     const childSummaryText = formatChildSummaryText(statusData?.childSummary);
+
+    // --- short system monitor metrics (from backend) ---
+    const connNow = statusData?.ConnNow;
+    const twNow = statusData?.TWNow;
+    const portUse = statusData?.PortUse;
+    const hasSysMon = (connNow !== null && connNow !== undefined)
+                   || (twNow !== null && twNow !== undefined)
+                   || (portUse !== null && portUse !== undefined);
+    const fmtVal = (v) => {
+      if (v === 0) return '0';
+      if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '-';
+      if (typeof v === 'string') return v.trim() ? v.trim() : '-';
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      return '-';
+    };
+    const sysMonText = hasSysMon
+      ? ` · ConnNow=${fmtVal(connNow)} · TWNow=${fmtVal(twNow)} · PortUse=${fmtVal(portUse)}%`
+      : '';
     
     // 记录最后的状态和项目名称，用于错误恢复
     if (status && status !== 'idle') {
@@ -14643,17 +14992,23 @@ function updateUIFromBackendStatus(statusData) {
       
       if (mode === 'edit') {
         infoEl.textContent = '当前工作流：无';
+        try { infoEl.title = ''; } catch (_) {}
       } else if (mode === 'monitor_completed') {
         // monitor_completed 模式：显示已完成状态
         if (!wfId) {
           infoEl.textContent = '当前工作流：无';
+          try { infoEl.title = ''; } catch (_) {}
         } else {
           const name = projName || wfId;
-          infoEl.textContent = `当前工作流：${name}（已完成）${childSummaryText}`;
+          infoEl.textContent = `当前工作流：${name}（已完成）${childSummaryText}${sysMonText}`;
+          try {
+            infoEl.title = 'ConnNow=本进程TCP连接数；TWNow=系统TIME_WAIT数量；PortUse=系统临时端口占用率(%)';
+          } catch (_) {}
         }
       } else {
         if (!wfId || status === 'idle') {
           infoEl.textContent = '当前工作流：无';
+          try { infoEl.title = ''; } catch (_) {}
         } else {
           let statusLabel = '未知';
           if (status === 'running')  statusLabel = '运行中';
@@ -14662,7 +15017,10 @@ function updateUIFromBackendStatus(statusData) {
           else if (status === 'error')     statusLabel = '错误';
           else if (status === 'stopped')   statusLabel = '已停止';
           const name = projName || wfId;
-          infoEl.textContent = `当前工作流：${name}（${statusLabel}）${childSummaryText}`;
+          infoEl.textContent = `当前工作流：${name}（${statusLabel}）${childSummaryText}${sysMonText}`;
+          try {
+            infoEl.title = 'ConnNow=本进程TCP连接数；TWNow=系统TIME_WAIT数量；PortUse=系统临时端口占用率(%)';
+          } catch (_) {}
         }
       }
     }
@@ -18196,7 +18554,7 @@ function LoadWorkFlow(dates, fileName, HostPost, Callsign) {
   }
   if (Callsign !== '') {
     Tempdata.nodes.forEach((n) => {
-      if (n.NodeKind.includes('passivityTrigger')) {
+      if (n.NodeKind.includes('passivityTrigger') && n.Inputs[1] !== undefined) {//升级代码加入if条件证明n.Inputs[1]存在
         n.Inputs[1].Context = Callsign;
         n.Inputs[1].IsLabel = true;
       }

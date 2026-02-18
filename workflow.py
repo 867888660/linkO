@@ -19,6 +19,7 @@ import uuid
 from datetime import datetime, timedelta
 from contextlib import contextmanager
 import importlib.abc
+import subprocess
 
 
 # =========================
@@ -343,6 +344,15 @@ class WorkflowEngine:
         self._module_cache_lock = threading.Lock()
 
         self._event_throttle_lock = threading.Lock()
+
+        # ---- System monitor cache (for UI metrics) ----
+        # Frontend polls /workflow/status frequently (300ms in running mode).
+        # System-wide queries like net_connections/netstat are expensive, so we cache results.
+        self._sysmon_lock = threading.Lock()
+        self._sysmon_cache_ts = 0.0
+        self._sysmon_cache_interval_s = float(os.getenv("WF_SYSMON_INTERVAL_S", "2.0") or 2.0)
+        self._sysmon_cache = {"ConnNow": None, "TWNow": None, "PortUse": None}
+        self._dyn_port_range_cache = None  # (start_port:int, num_ports:int)
 
         # ---- Persisted per-node state (for triggers like Timer) ----
         # Many node scripts store runtime state in node["_state"] (e.g. last_fire_ts).
@@ -1250,8 +1260,24 @@ class WorkflowEngine:
             if spec is None or spec.loader is None:
                 raise RuntimeError(f"Unable to load module spec for {p}")
             module = importlib.util.module_from_spec(spec)
+            # IMPORTANT:
+            # - We must register in sys.modules during exec_module for correct import semantics
+            #   (e.g. circular imports inside node scripts).
+            # - But with WF_SHARED_NODE_MODULES=0 we intentionally create a fresh module per run.
+            #   Keeping those unique module names in sys.modules causes an unbounded memory/resource leak:
+            #   many node scripts allocate global resources at import time (e.g. requests.Session / thread pools).
+            #   If the module stays in sys.modules forever, those globals never get GC'd, and on Windows this can
+            #   eventually exhaust sockets/ephemeral ports, making "all webpages fail" until the process exits.
             sys.modules[spec.name] = module
-            spec.loader.exec_module(module)
+            try:
+                spec.loader.exec_module(module)
+            finally:
+                # Remove ephemeral module entry to avoid leaking thousands of modules over long-running workflows.
+                # The returned `module` object is still referenced by the caller for this execution.
+                try:
+                    sys.modules.pop(spec.name, None)
+                except Exception:
+                    pass
             return module
 
         # 兼容旧行为：同一路径 + mtime 不变 => 复用 module（注意：并发下 module 全局状态会共享）
@@ -1271,6 +1297,177 @@ class WorkflowEngine:
         with self._module_cache_lock:
             self._module_cache[key] = (mtime, module)
         return module
+
+    # -------------------------
+    # System monitor helpers (for UI metrics)
+    # -------------------------
+    def _get_windows_dynamic_tcp_port_range(self):
+        """
+        Return (start_port, num_ports) for Windows TCP dynamic port range.
+        Cached because calling netsh repeatedly is expensive.
+        Fallback to the common default: start=49152, num=16384.
+        """
+        if self._dyn_port_range_cache:
+            return self._dyn_port_range_cache
+
+        start_port = 49152
+        num_ports = 16384
+        try:
+            # netsh output example:
+            #   Start Port      : 49152
+            #   Number of Ports : 16384
+            out = subprocess.check_output(
+                ["netsh", "int", "ipv4", "show", "dynamicport", "tcp"],
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2.0,
+                encoding="utf-8",
+                errors="ignore",
+            )
+            m1 = re.search(r"Start\s+Port\s*:\s*(\d+)", out, re.I)
+            m2 = re.search(r"Number\s+of\s+Ports\s*:\s*(\d+)", out, re.I)
+            if m1 and m2:
+                sp = int(m1.group(1))
+                np = int(m2.group(1))
+                if 0 < sp < 65536 and 0 < np <= 65536:
+                    start_port, num_ports = sp, np
+        except Exception:
+            pass
+
+        self._dyn_port_range_cache = (start_port, num_ports)
+        return self._dyn_port_range_cache
+
+    def _compute_sysmon_metrics(self):
+        """
+        Compute 3 short metrics for frontend:
+        - ConnNow: current TCP connection count for this process
+        - TWNow: system-wide TCP TIME_WAIT count
+        - PortUse: system-wide TCP dynamic(ephemeral) port utilization %, based on unique local ports in range
+        Returns dict with keys: ConnNow, TWNow, PortUse
+        """
+        if str(os.getenv("WF_SYSMON_ENABLED", "1")).strip() in ("0", "false", "False", "no", "NO"):
+            return {"ConnNow": None, "TWNow": None, "PortUse": None}
+
+        # Prefer psutil (fast/portable). Fallback to netstat (Windows) if missing.
+        try:
+            import psutil  # type: ignore
+
+            pid = os.getpid()
+            proc = psutil.Process(pid)
+            try:
+                proc_conns = proc.net_connections(kind="tcp")
+            except Exception:
+                # Some psutil versions use connections()
+                proc_conns = proc.connections(kind="tcp")  # type: ignore
+            conn_now = len(proc_conns) if proc_conns is not None else None
+
+            try:
+                sys_conns = psutil.net_connections(kind="tcp")
+            except Exception:
+                sys_conns = []
+
+            # TIME_WAIT count (system)
+            tw = 0
+            try:
+                for c in (sys_conns or []):
+                    st = getattr(c, "status", None)
+                    if st == "TIME_WAIT" or st == getattr(psutil, "CONN_TIME_WAIT", "TIME_WAIT"):
+                        tw += 1
+            except Exception:
+                tw = None
+
+            # Dynamic port utilization (system)
+            port_use = None
+            try:
+                sp, np = self._get_windows_dynamic_tcp_port_range()
+                ep_start = int(sp)
+                ep_end = int(sp + np - 1)
+                used_ports = set()
+                for c in (sys_conns or []):
+                    la = getattr(c, "laddr", None)
+                    lp = None
+                    # psutil uses addr objects with (ip, port)
+                    try:
+                        lp = int(getattr(la, "port", None))
+                    except Exception:
+                        try:
+                            lp = int(la[1]) if la and len(la) >= 2 else None
+                        except Exception:
+                            lp = None
+                    if lp is None:
+                        continue
+                    if ep_start <= lp <= ep_end:
+                        used_ports.add(lp)
+                if np > 0:
+                    port_use = round((len(used_ports) / float(np)) * 100.0, 1)
+            except Exception:
+                port_use = None
+
+            return {"ConnNow": conn_now, "TWNow": tw, "PortUse": port_use}
+        except Exception:
+            pass
+
+        # Fallback (Windows): netstat parsing (best-effort, may be slower)
+        try:
+            pid = str(os.getpid())
+            out = subprocess.check_output(
+                ["netstat", "-ano", "-p", "tcp"],
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=2.0,
+                encoding="utf-8",
+                errors="ignore",
+            )
+            conn_now = 0
+            tw = 0
+            sp, np = self._get_windows_dynamic_tcp_port_range()
+            ep_start = int(sp)
+            ep_end = int(sp + np - 1)
+            used_ports = set()
+            for line in (out or "").splitlines():
+                s = line.strip()
+                if not s.startswith("TCP"):
+                    continue
+                parts = re.split(r"\s+", s)
+                # TCP local foreign state pid
+                if len(parts) < 5:
+                    continue
+                local = parts[1]
+                state = parts[3].upper()
+                lpid = parts[4]
+                if lpid == pid:
+                    conn_now += 1
+                if state == "TIME_WAIT":
+                    tw += 1
+                # local port
+                try:
+                    lp = int(local.rsplit(":", 1)[-1])
+                except Exception:
+                    lp = None
+                if lp is not None and ep_start <= lp <= ep_end:
+                    used_ports.add(lp)
+            port_use = round((len(used_ports) / float(np)) * 100.0, 1) if np else None
+            return {"ConnNow": conn_now, "TWNow": tw, "PortUse": port_use}
+        except Exception:
+            return {"ConnNow": None, "TWNow": None, "PortUse": None}
+
+    def _get_sysmon_metrics_cached(self):
+        now = time.time()
+        try:
+            with self._sysmon_lock:
+                if (now - float(self._sysmon_cache_ts or 0.0)) < float(self._sysmon_cache_interval_s or 2.0):
+                    return dict(self._sysmon_cache or {})
+        except Exception:
+            pass
+
+        metrics = self._compute_sysmon_metrics()
+        try:
+            with self._sysmon_lock:
+                self._sysmon_cache = dict(metrics or {})
+                self._sysmon_cache_ts = now
+        except Exception:
+            pass
+        return dict(metrics or {})
 
     def _find_script(self, node_name):
         """查找节点对应的脚本文件（与app.py保持一致）"""
@@ -4893,6 +5090,18 @@ class WorkflowEngine:
                 "isChild": workflow.get("is_child", False),
                 "parentId": workflow.get("parent_id"),
             }
+            # --- UI system monitor metrics (short names) ---
+            try:
+                sysmon = self._get_sysmon_metrics_cached()
+                if isinstance(sysmon, dict):
+                    result["ConnNow"] = sysmon.get("ConnNow")
+                    result["TWNow"] = sysmon.get("TWNow")
+                    result["PortUse"] = sysmon.get("PortUse")
+            except Exception:
+                # keep status endpoint resilient
+                result["ConnNow"] = None
+                result["TWNow"] = None
+                result["PortUse"] = None
             if workflow.get("child_summary"):
                 result["childSummary"] = workflow.get("child_summary")
             return result
@@ -4902,35 +5111,79 @@ class WorkflowEngine:
     
     def cleanup_workflow(self, workflow_id):
         """清理工作流资源（包含其批次工作流）"""
+        # 重要：
+        # - 旧逻辑只删除 self.workflows/stop_events/timer 等“核心运行态”
+        # - 但 workflow.py 里还有大量“伴生缓存/侧表”（history buffer、throttle、array index、node state 等）
+        #   这些如果不清理，特别是在 ArrayTrigger 启动大量 child workflow 时，会导致内存持续增长。
+        # 这里统一走 _runtime_cleanup，确保每个 workflow_id 都能彻底释放关联缓存。
+        try:
+            wid0 = str(workflow_id or "")
+        except Exception:
+            wid0 = workflow_id
+
+        ids_to_clean = set()
+        # A) 在锁内计算需要清理的 workflow_id 集合，并清理父子引用关系
         with self.lock:
-            related_ids = self._collect_related_workflow_ids(workflow_id)
-            child_ids = self.child_workflows.pop(workflow_id, set())
-            for cid in child_ids:
-                related_ids.add(cid)
+            related_ids = self._collect_related_workflow_ids(wid0)
+            ids_to_clean.update(related_ids or set())
+
+            # 若 workflow_id 是父：把它的 child 一并纳入清理集合
+            child_ids = self.child_workflows.pop(wid0, set())
+            for cid in (child_ids or set()):
+                ids_to_clean.add(cid)
                 self.parent_map.pop(cid, None)
-            parent_id = self.parent_map.pop(workflow_id, None)
+
+            # 若 workflow_id 是子：从父的 children 集合中移除（兜底）
+            parent_id = self.parent_map.pop(wid0, None)
             if parent_id:
                 siblings = self.child_workflows.get(parent_id)
-                if siblings and workflow_id in siblings:
-                    siblings.discard(workflow_id)
-                if siblings and len(siblings) == 0:
+                if siblings and wid0 in siblings:
+                    siblings.discard(wid0)
+                if siblings is not None and len(siblings) == 0:
                     self.child_workflows.pop(parent_id, None)
-            for wid in related_ids:
-                timer = self._cleanup_timers.pop(wid, None)
-                if timer:
+
+            # 尽量先发出 stop 信号（避免清理过程中仍有线程写入状态）
+            for wid in list(ids_to_clean):
+                try:
+                    ev = self.stop_events.get(wid)
+                    if ev:
+                        ev.set()
+                except Exception:
+                    pass
+
+        # B) I/O（history flush）放在锁外，避免阻塞其它请求
+        for wid in list(ids_to_clean):
+            try:
+                self._flush_history_buffer_for_workflow(wid)
+            except Exception:
+                pass
+
+        # C) 真正清理：取消 timer + 删除运行态 + 清理侧表/缓存
+        with self.lock:
+            for wid in list(ids_to_clean):
+                try:
+                    t = self._cleanup_timers.pop(wid, None)
+                    if t:
+                        try:
+                            t.cancel()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+                try:
+                    self._runtime_cleanup(wid)
+                except Exception:
+                    # 兜底：至少保证核心字典被移除
                     try:
-                        timer.cancel()
+                        self.workflows.pop(wid, None)
                     except Exception:
                         pass
-                if wid in self.stop_events:
                     try:
-                        self.stop_events[wid].set()
+                        self.stop_events.pop(wid, None)
                     except Exception:
                         pass
-                    del self.stop_events[wid]
-                if wid in self.workflows:
-                    del self.workflows[wid]
-        return {"status": "cleaned", "workflow_id": workflow_id}
+
+        return {"status": "cleaned", "workflow_id": wid0}
 
 # 创建全局工作流引擎实例
 workflow_engine = None
