@@ -14,6 +14,7 @@ WorkTeam/
 History/*
 !History/.gitkeep
 !History/.gitignore
+Nodes/AliOcr.py
 
 TempFiles/*
 !TempFiles/.gitkeep
