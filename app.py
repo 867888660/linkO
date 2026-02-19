@@ -2112,9 +2112,10 @@ def safe_write_json(file_path, data, max_retries=3, compact: bool = True):
     return False
 
 # 历史记录限额（防止文件无限增大）
-HISTORY_MAX_SESSIONS_PER_FILE = 30          # 每个历史文件最多保留多少个“会话/轮次”
-HISTORY_MAX_ITEMS_PER_SESSION = 500        # 每个会话最多保留多少条记录（超出会裁剪保留最新）
-HISTORY_MAX_STRING_CHARS = 20000           # 单字段字符串最大长度（超出会截断，防止 prompt/debug 爆炸）
+# 历史记录限额（0 表示关闭限制，恢复老版本“尽量完整保留”行为）
+HISTORY_MAX_SESSIONS_PER_FILE = 0
+HISTORY_MAX_ITEMS_PER_SESSION = 0
+HISTORY_MAX_STRING_CHARS = 0
 
 def _parse_bool_param(v, default: bool = True) -> bool:
     """把查询参数/字符串解析成 bool。"""
@@ -2167,8 +2168,9 @@ def add_history():
     # 验证收到的数据是否为字典（JSON对象）
     if not isinstance(data, dict):
         return jsonify({'error': 'Invalid data format. Expected a JSON object.'}), 400
-    # 防止 prompt/debug 超大：先做字符串截断再落盘
-    data = _truncate_history_strings(data)
+    # 可选截断（默认关闭，恢复老版本完整记录）
+    if HISTORY_MAX_STRING_CHARS and HISTORY_MAX_STRING_CHARS > 0:
+        data = _truncate_history_strings(data)
 
     # 按日期切分，避免单文件过大导致读取卡顿
     today_label = datetime.now().strftime('%Y%m%d')
@@ -2233,19 +2235,21 @@ def add_history():
         json_data[-1].append(data)
 
         # 强制裁剪：限制会话条数 & 单会话条数，防止历史文件无限增大
-        try:
-            if isinstance(json_data[-1], list) and len(json_data[-1]) > HISTORY_MAX_ITEMS_PER_SESSION:
-                json_data[-1] = json_data[-1][-HISTORY_MAX_ITEMS_PER_SESSION:]
-        except Exception:
-            pass
-        try:
-            if isinstance(json_data, list) and len(json_data) > HISTORY_MAX_SESSIONS_PER_FILE:
-                json_data = json_data[-HISTORY_MAX_SESSIONS_PER_FILE:]
-        except Exception:
-            pass
+        if HISTORY_MAX_ITEMS_PER_SESSION and HISTORY_MAX_ITEMS_PER_SESSION > 0:
+            try:
+                if isinstance(json_data[-1], list) and len(json_data[-1]) > HISTORY_MAX_ITEMS_PER_SESSION:
+                    json_data[-1] = json_data[-1][-HISTORY_MAX_ITEMS_PER_SESSION:]
+            except Exception:
+                pass
+        if HISTORY_MAX_SESSIONS_PER_FILE and HISTORY_MAX_SESSIONS_PER_FILE > 0:
+            try:
+                if isinstance(json_data, list) and len(json_data) > HISTORY_MAX_SESSIONS_PER_FILE:
+                    json_data = json_data[-HISTORY_MAX_SESSIONS_PER_FILE:]
+            except Exception:
+                pass
 
         # 使用安全写入函数保存数据
-        if safe_write_json(file_path, json_data, compact=True):
+        if safe_write_json(file_path, json_data, compact=False):
             print("✅ Data added successfully.")
             return jsonify({'message': 'Data added successfully'}), 200
         else:

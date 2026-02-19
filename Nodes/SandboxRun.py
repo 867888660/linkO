@@ -3,6 +3,7 @@ import json
 import keyword
 import difflib
 import re
+from datetime import datetime
 
 # **Define the number of outputs and inputs** 输入节点与输出节点的数量
 OutPutNum = 2
@@ -51,7 +52,33 @@ FunctionIntroduction = (
     "  - name: code\n"
     "    type: string\n"
     "    required: true\n"
-    "    description: 条件单脚本（禁止 import/def/class/for/while；允许调用 SetPos/AwakeAi/Print，以及安全内置函数 str/int/float/bool/len/abs/min/max/round；pct 为 0~1 仓位）\n"
+    "    description: 条件单脚本（仅支持受控语法与白名单函数，详见 syntax_rules）\n"
+    "syntax_rules:\n"
+    "  allow_calls:\n"
+    "    - SetPos(side, pct)\n"
+    "    - AwakeAi(reason)\n"
+    "    - Print(text)\n"
+    "    - str/int/float/bool/len/abs/min/max/round/sum\n"
+    "    - clamp(x, lo, hi)\n"
+    "    - coalesce(a, b, ...)\n"
+    "    - has(name)\n"
+    "    - get(name, default)\n"
+    "    - parse_ts(x)\n"
+    "    - seconds_between(a, b)\n"
+    "  allow_syntax:\n"
+    "    - 赋值/比较/逻辑表达式\n"
+    "    - if/elif/else\n"
+    "    - 下标访问 x[i] / d['k']\n"
+    "    - 列表/字典/元组字面量\n"
+    "  disallow_syntax:\n"
+    "    - import/from import\n"
+    "    - def/class/lambda\n"
+    "    - for/while\n"
+    "    - with/try/except\n"
+    "    - 属性访问（obj.attr / obj.method()）\n"
+    "  notes:\n"
+    "    - SetPos 的 pct 支持 0~1（也兼容 0~100 百分比）\n"
+    "    - 变量必须来自 UseData 或脚本内临时变量\n"
     "outputs:\n"
     "  - name: FunctionJson\n"
     "    type: string\n"
@@ -85,6 +112,7 @@ Outputs[1]["Kind"] = "Boolean"
 _ALLOWED_CALLS = {"SetPos", "AwakeAi", "Print"}
 _DEPRECATED_CALLS = {"Buy", "Sell"}
 _ALLOWED_TEMP_VARS = {"gate_status", "reason"}
+_SAFE_HELPER_FUNC_NAMES = {"clamp", "coalesce", "has", "get", "parse_ts", "seconds_between"}
 
 # 允许的“安全内置函数”（用于类型转换/数值处理等）
 # 注意：运行沙箱里 __builtins__ 为空，因此必须同时：
@@ -100,6 +128,7 @@ _SAFE_BUILTIN_FUNCS = {
     "min": min,
     "max": max,
     "round": round,
+    "sum": sum,
 }
 _DISALLOWED_NODES = (
     ast.Import,
@@ -141,6 +170,33 @@ _FULLWIDTH_PUNCT_MAP = {
     "‘": "'",
     "’": "'",
 }
+
+
+def _is_obvious_placeholder_or_noise(line: str) -> bool:
+    """
+    识别明显的“占位/噪声”行（如 ...[truncated 123 chars]），
+    这类内容常来自聊天窗口复制或日志截断，不应参与 Python 语法解析。
+    """
+    if not isinstance(line, str):
+        return False
+    s = line.strip()
+    if not s:
+        return False
+    low = s.lower()
+
+    # 常见截断占位符
+    if re.match(r"^\.\.\.\s*\[truncated[^\]]*\]\s*$", low):
+        return True
+    if re.match(r"^\[truncated[^\]]*\]\s*$", low):
+        return True
+    if re.match(r"^\.\.\.\s*\(truncated[^)]*\)\s*$", low):
+        return True
+
+    # 仅由分隔符组成的“装饰行”
+    if re.match(r"^[=\-_*~]{5,}$", s):
+        return True
+
+    return False
 
 
 def _normalize_name(s: str) -> str:
@@ -250,6 +306,8 @@ def _looks_like_python_code_line(line: str) -> bool:
         return True
     if s.startswith("#"):
         return True
+    if _is_obvious_placeholder_or_noise(s):
+        return False
     # 常见语句开头
     if re.match(r"^(if|elif|else|return|pass|break|continue|try|except|finally|with)\b", s):
         return True
@@ -268,8 +326,15 @@ def _looks_like_python_code_line(line: str) -> bool:
     # 注意：Buy/Sell 已废弃，但仍视为“代码行”，以便在静态检查阶段给出更明确的迁移报错
     if re.match(r"^(Buy|Sell|SetPos|AwakeAi|Print)\s*\(", s):
         return True
-    # 简单赋值/比较/逻辑/括号等
-    if any(tok in s for tok in ("=", "==", ">=", "<=", ">", "<", " and ", " or ", " not ", "(", ")", "[", "]")):
+    # 简单赋值/比较/逻辑
+    if any(tok in s for tok in ("=", "==", ">=", "<=", ">", "<", " and ", " or ", " not ")):
+        return True
+    # 常见表达式形式（收紧：避免把 "...[truncated...]" 这类噪声误判成代码）
+    if re.match(r"^[A-Za-z_]\w*\s*\(", s):
+        return True
+    if re.match(r"^[A-Za-z_]\w*\s*\[", s):
+        return True
+    if re.match(r"^[\[\(\{].*[\]\)\}]$", s) and re.search(r"[A-Za-z_]\w*", s):
         return True
     return False
 
@@ -664,13 +729,19 @@ def _static_check_and_fix(code, usedata_keys):
             if isinstance(node.id, str) and node.id and ("__" not in node.id) and node.id.isidentifier():
                 assigned_names.add(node.id)
 
-    reserved_names = set(_ALLOWED_CALLS) | set(_SAFE_BUILTIN_FUNCS.keys()) | set(_DEPRECATED_CALLS)
+    reserved_names = (
+        set(_ALLOWED_CALLS)
+        | set(_SAFE_BUILTIN_FUNCS.keys())
+        | set(_SAFE_HELPER_FUNC_NAMES)
+        | set(_DEPRECATED_CALLS)
+    )
     allowed_names = (
         usedata_keys
         | set(_ALLOWED_TEMP_VARS)
         | assigned_names
         | set(_ALLOWED_CALLS)
         | set(_SAFE_BUILTIN_FUNCS.keys())
+        | set(_SAFE_HELPER_FUNC_NAMES)
         | set(_DEPRECATED_CALLS)
         | {"True", "False", "None"}
     )
@@ -705,8 +776,8 @@ def _static_check_and_fix(code, usedata_keys):
                 fn = node.func.id
                 if fn in _DEPRECATED_CALLS:
                     errors.append(f"函数已废弃：{fn}（请改用 SetPos(side, pct)，pct 为 0~1 仓位）")
-                elif (fn not in _ALLOWED_CALLS) and (fn not in _SAFE_BUILTIN_FUNCS):
-                    allow_list = sorted(_ALLOWED_CALLS | set(_SAFE_BUILTIN_FUNCS.keys()))
+                elif (fn not in _ALLOWED_CALLS) and (fn not in _SAFE_BUILTIN_FUNCS) and (fn not in _SAFE_HELPER_FUNC_NAMES):
+                    allow_list = sorted(_ALLOWED_CALLS | set(_SAFE_BUILTIN_FUNCS.keys()) | set(_SAFE_HELPER_FUNC_NAMES))
                     errors.append(f"禁止调用函数：{fn}（只允许：{allow_list}）")
 
     # 变量纠错（仅对 Load 的未知变量尝试替换）
@@ -822,13 +893,76 @@ def _sandbox_run(code, usedata):
         side, pct = _parse_side_pct(args, kwargs)
         actions.append({"type": "SETPOS", "side": side, "pct": pct})
 
+    def clamp(x, lo, hi):
+        x_f = float(x)
+        lo_f = float(lo)
+        hi_f = float(hi)
+        if lo_f > hi_f:
+            lo_f, hi_f = hi_f, lo_f
+        if x_f < lo_f:
+            return lo_f
+        if x_f > hi_f:
+            return hi_f
+        return x_f
+
+    def coalesce(*vals):
+        for v in vals:
+            if v is not None and v != "":
+                return v
+        return None
+
+    def has(name):
+        if not isinstance(name, str):
+            return False
+        return name in (usedata or {})
+
+    def get(name, default=None):
+        if not isinstance(name, str):
+            return default
+        if name in (usedata or {}):
+            return (usedata or {}).get(name)
+        return default
+
+    def parse_ts(value):
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        s = str(value).strip()
+        if not s:
+            raise ValueError("parse_ts 输入为空")
+        normalized = s.replace("T", " ")
+        if normalized.endswith("Z"):
+            normalized = normalized[:-1] + "+00:00"
+        try:
+            return float(datetime.fromisoformat(normalized).timestamp())
+        except Exception:
+            pass
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                return float(datetime.strptime(normalized, fmt).timestamp())
+            except Exception:
+                pass
+        raise ValueError(f"parse_ts 无法解析时间：{value}")
+
+    def seconds_between(a, b):
+        return float(parse_ts(b) - parse_ts(a))
+
     # 仅注入可作为变量名的 UseData key
     env = {"__builtins__": {}}
     for k, v in (usedata or {}).items():
         if isinstance(k, str) and re.match(r"^[A-Za-z_]\w*$", k) and (not keyword.iskeyword(k)):
             env[k] = v
 
-    env.update({"Print": Print, "AwakeAi": AwakeAi, "SetPos": SetPos})
+    env.update({
+        "Print": Print,
+        "AwakeAi": AwakeAi,
+        "SetPos": SetPos,
+        "clamp": clamp,
+        "coalesce": coalesce,
+        "has": has,
+        "get": get,
+        "parse_ts": parse_ts,
+        "seconds_between": seconds_between,
+    })
     # 注入安全内置函数（沙箱内 __builtins__ 为空，必须显式提供）
     env.update(_SAFE_BUILTIN_FUNCS)
 

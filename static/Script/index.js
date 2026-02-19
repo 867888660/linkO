@@ -11,6 +11,8 @@ let isDragging = false;
 let fileList;
 let FilePath='WorkFlow'
 let CopyNodeTemp;
+// Ctrl+C 复制的“输入入边”（target 为该节点、且 targetAnchorID 对应 Inputs）
+let CopyInputEdgesTemp = [];
 let FileName='';
 let Callsign='';
 let HostPost='localhost:8000';//默认的主机地址
@@ -553,7 +555,20 @@ const addcombo = (item,x,y) => {
   }
   graph.addItem('combo', combo);
 }
-const copyNode = (node, x, y) => {
+
+// 生成一个不与当前图中任何 edge id 冲突的新 id
+function genUniqueEdgeId(existingIds, prefix = 'edge') {
+  const exists = (id) => existingIds && typeof existingIds.has === 'function' && existingIds.has(String(id));
+  let id = '';
+  for (let i = 0; i < 50; i++) {
+    id = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e9)}_${i}`;
+    if (!exists(id)) return id;
+  }
+  return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e12)}`;
+}
+
+const copyNode = (node, x, y, options = {}) => {
+  const { cloneInputEdges = false, inputEdges = [] } = options || {};
   const n = node.name.split('.py')[0];
 
   requestNodeInfo(n).then((nodeInfo) => {
@@ -617,6 +632,30 @@ const copyNode = (node, x, y) => {
     };
 
       graph.addItem('node', TempNode);
+
+      // ✅ 全面复制：把原节点 Inputs 的入边也一并复制到新节点（edge.id 必须重新命名避免撞名）
+      try {
+        if (cloneInputEdges && Array.isArray(inputEdges) && inputEdges.length) {
+          const g = graph.save();
+          const existingIds = new Set((g.edges || []).map(e => String(e.id)));
+          inputEdges.forEach((edgeModel) => {
+            if (!edgeModel) return;
+            const newEdge = structuredClone(edgeModel);
+            // 重新命名 edge id，避免与现有边撞名
+            newEdge.id = genUniqueEdgeId(existingIds, 'edgeCopy');
+            existingIds.add(String(newEdge.id));
+            // 把该入边“接入”到新节点相同的 Inputs 端口
+            newEdge.target = TempId1;
+            // 保留 sourceAnchorID / targetAnchorID，交给 RefreshEdge 统一回算 sourceAnchor/targetAnchor
+            graph.addItem('edge', newEdge);
+          });
+          setTimeout(() => {
+            try { RefreshEdge(); } catch (_) {}
+          }, 10);
+        }
+      } catch (e) {
+        console.warn('[CopyFull] clone input edges failed:', e);
+      }
 
   });
 
@@ -4245,24 +4284,95 @@ async function applyRecordSnapshot(filename) {
       throw new Error('记录文件不存在或无法读取');
     }
     const payload = await response.json();
-    const nodes = Array.isArray(payload?.nodes) ? payload.nodes : payload?.nodes?.nodes || [];
-    if (!nodes || !Array.isArray(nodes)) {
+    const isNodeLike = (n) => {
+      if (!n || typeof n !== 'object') return false;
+      return !!(
+        n.id ||
+        n.label ||
+        n.name ||
+        n.NodeKind ||
+        Array.isArray(n.Inputs) ||
+        Array.isArray(n.Outputs) ||
+        Array.isArray(n.outputs) ||
+        Array.isArray(n.Output) ||
+        Array.isArray(n.output)
+      );
+    };
+
+    // 兼容新旧记录格式：
+    // 1) 快照：{ nodes:[...], edges:[...] } 或 { nodes:{nodes:[...],edges:[...]} }
+    // 2) 历史会话：[[{...node event...}], ...] / [{...node event...}]
+    let nodes = [];
+    let edges = null;
+    if (Array.isArray(payload)) {
+      if (payload.length && Array.isArray(payload[payload.length - 1])) {
+        const latestSession = payload[payload.length - 1];
+        nodes = latestSession.filter(isNodeLike);
+      } else if (payload.length && payload.every(isNodeLike)) {
+        nodes = payload.filter(isNodeLike);
+      } else {
+        for (const it of payload) {
+          if (!it || typeof it !== 'object') continue;
+          if (Array.isArray(it.nodes)) { nodes = it.nodes; break; }
+          if (it.nodes && Array.isArray(it.nodes.nodes)) { nodes = it.nodes.nodes; break; }
+        }
+      }
+    } else if (payload && typeof payload === 'object') {
+      nodes = Array.isArray(payload.nodes) ? payload.nodes : (payload.nodes && Array.isArray(payload.nodes.nodes) ? payload.nodes.nodes : []);
+      if (!nodes.length && Array.isArray(payload.items)) nodes = payload.items.filter(isNodeLike);
+      edges = Array.isArray(payload.edges)
+        ? payload.edges
+        : (payload.nodes && Array.isArray(payload.nodes.edges) ? payload.nodes.edges : null);
+    }
+    if (!Array.isArray(nodes) || !nodes.length) {
       throw new Error('记录文件缺少节点数据');
     }
-    // 记录文件可能包含 edges（用于还原连线）；旧记录可能没有，回退到 baseGraph.edges
-    const edges = Array.isArray(payload?.edges)
-      ? payload.edges
-      : (payload?.nodes && Array.isArray(payload.nodes.edges) ? payload.nodes.edges : null);
+
     const nextGraph = structuredClone(recordModeBaseGraph);
     if (Array.isArray(edges) && edges.length) {
       nextGraph.edges = structuredClone(edges);
     }
-    const nodeMap = {};
+
+    // 兼容无 id 的会话格式：按 id 优先，失败则按 NodeKind+label+name 兜底匹配
+    const nodeMapById = new Map();
+    const nodeMapByKey = new Map();
+    const makeNodeKey = (n) => {
+      const kind = String((n && n.NodeKind) || '').trim().toLowerCase();
+      const label = String((n && n.label) || '').trim().toLowerCase();
+      const name = String((n && n.name) || '').trim().toLowerCase();
+      return `${kind}::${label}::${name}`;
+    };
     nextGraph.nodes.forEach(node => {
-      nodeMap[node.id] = node;
+      if (node && typeof node.id !== 'undefined' && node.id !== null) {
+        nodeMapById.set(String(node.id), node);
+      }
+      const key = makeNodeKey(node);
+      if (!nodeMapByKey.has(key)) nodeMapByKey.set(key, node);
     });
+
     nodes.forEach(recordNode => {
-      const target = nodeMap[recordNode.id];
+      let target = null;
+      if (recordNode && typeof recordNode.id !== 'undefined' && recordNode.id !== null) {
+        target = nodeMapById.get(String(recordNode.id)) || null;
+      }
+      if (!target) {
+        const key = makeNodeKey(recordNode);
+        if (key !== '::::' && nodeMapByKey.has(key)) {
+          target = nodeMapByKey.get(key);
+        }
+      }
+      if (!target && recordNode && recordNode.label) {
+        target = nextGraph.nodes.find(n =>
+          n && n.label === recordNode.label &&
+          (!recordNode.NodeKind || n.NodeKind === recordNode.NodeKind)
+        ) || null;
+      }
+      if (!target && recordNode && recordNode.name) {
+        target = nextGraph.nodes.find(n =>
+          n && n.name === recordNode.name &&
+          (!recordNode.NodeKind || n.NodeKind === recordNode.NodeKind)
+        ) || null;
+      }
       if (target) {
         mergeRecordNode(target, recordNode);
       }
@@ -4345,8 +4455,46 @@ function mergeRecordNode(target, source) {
   if (source.Inputs) {
     target.Inputs = structuredClone(source.Inputs);
   }
-  if (source.Outputs) {
-    target.Outputs = structuredClone(source.Outputs);
+  // 记录文件在不同版本里可能使用 Outputs / outputs / Output / output
+  // 这里统一兼容，避免“记录有值但侧窗看不到输出”。
+  const normalizeOutputs = (raw) => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const out = structuredClone(item);
+        if (typeof out.Context === 'undefined' && typeof item.context !== 'undefined') out.Context = item.context;
+        if (typeof out.Num === 'undefined' && typeof item.num !== 'undefined') out.Num = item.num;
+        if (typeof out.Boolean === 'undefined' && typeof item.boolean !== 'undefined') out.Boolean = item.boolean;
+        if (typeof out.name === 'undefined') out.name = item.name || `Output${idx + 1}`;
+        if (typeof out.Kind === 'undefined') out.Kind = item.Kind || item.kind || 'String';
+        if (
+          typeof out.Context === 'undefined' &&
+          typeof out.Num === 'undefined' &&
+          typeof out.Boolean === 'undefined'
+        ) {
+          const v = (typeof item.value !== 'undefined') ? item.value : item.Value;
+          if (typeof v === 'string') out.Context = v;
+          else if (typeof v === 'number') out.Num = v;
+          else if (typeof v === 'boolean') out.Boolean = v;
+          else if (v !== null && typeof v !== 'undefined') {
+            try { out.Context = JSON.stringify(v, null, 2); } catch (_) { out.Context = String(v); }
+          }
+        }
+        return out;
+      }
+      if (typeof item === 'string') return { name: `Output${idx + 1}`, Kind: 'String', Context: item };
+      if (typeof item === 'number') return { name: `Output${idx + 1}`, Kind: 'Num', Num: item };
+      if (typeof item === 'boolean') return { name: `Output${idx + 1}`, Kind: 'Boolean', Boolean: item };
+      return { name: `Output${idx + 1}`, Kind: 'String', Context: '' };
+    });
+  };
+  if (Array.isArray(source.Outputs)) {
+    target.Outputs = normalizeOutputs(source.Outputs);
+  } else {
+    const fallbackOutputs = normalizeOutputs(source.outputs || source.Output || source.output);
+    if (fallbackOutputs.length > 0) {
+      target.Outputs = fallbackOutputs;
+    }
   }
   
   // 🔥 关键修复：如果节点处于关键状态（完成/运行/错误/逻辑触发），确保 IsBlock=true（即使记录中没有）
@@ -13088,10 +13236,59 @@ function createSideWindow(item, isCheckMode = false) {
   if (!contentArea) { console.warn('[SIDEWIN:DOM] 缺少 #content-area，放弃渲染'); return; }
   contentArea.innerHTML = '';
 
+  // Error / Output 文本需要进入 textarea innerHTML，必须做转义（避免 </textarea> 破坏 DOM）
+  function escapeForTextarea(val) {
+    const s = (val === null || val === undefined) ? '' : String(val);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/<\/textarea/gi, '&lt;/textarea');
+  }
+
+  // 兼容 Outputs / outputs / Output / output，并统一成可展示结构
+  function normalizeSideWindowOutputs(nodeLike) {
+    if (!nodeLike || typeof nodeLike !== 'object') return [];
+    const raw = nodeLike.Outputs || nodeLike.outputs || nodeLike.Output || nodeLike.output || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const out = structuredClone(item);
+        if (typeof out.Context === 'undefined' && typeof item.context !== 'undefined') out.Context = item.context;
+        if (typeof out.Num === 'undefined' && typeof item.num !== 'undefined') out.Num = item.num;
+        if (typeof out.Boolean === 'undefined' && typeof item.boolean !== 'undefined') out.Boolean = item.boolean;
+        if (typeof out.name === 'undefined') out.name = item.name || `Output${idx + 1}`;
+        if (typeof out.Kind === 'undefined') out.Kind = item.Kind || item.kind || 'String';
+        if (
+          typeof out.Context === 'undefined' &&
+          typeof out.Num === 'undefined' &&
+          typeof out.Boolean === 'undefined'
+        ) {
+          const v = (typeof item.value !== 'undefined') ? item.value : item.Value;
+          if (typeof v === 'string') out.Context = v;
+          else if (typeof v === 'number') out.Num = v;
+          else if (typeof v === 'boolean') out.Boolean = v;
+          else if (v !== null && typeof v !== 'undefined') {
+            try { out.Context = JSON.stringify(v, null, 2); } catch (_) { out.Context = String(v); }
+          }
+        }
+        return out;
+      }
+      if (typeof item === 'string') return { name: `Output${idx + 1}`, Kind: 'String', Context: item };
+      if (typeof item === 'number') return { name: `Output${idx + 1}`, Kind: 'Num', Num: item };
+      if (typeof item === 'boolean') return { name: `Output${idx + 1}`, Kind: 'Boolean', Boolean: item };
+      return { name: `Output${idx + 1}`, Kind: 'String', Context: '' };
+    });
+  }
+
+  const tempNodeOutputs = normalizeSideWindowOutputs(tempNode);
+
   // 生成 Token 信息（如果有）
   let tokenInfo = '';
-  if (tempNode && tempNode.Outputs?.[0]) {
-      const output = tempNode.Outputs[0];
+  if (tempNodeOutputs[0]) {
+      const output = tempNodeOutputs[0];
       if (
           typeof output.prompt_tokens !== 'undefined' &&
           typeof output.completion_tokens !== 'undefined' &&
@@ -13121,8 +13318,8 @@ function createSideWindow(item, isCheckMode = false) {
   console.log('  - node.prompt:', node?.prompt);
   console.log('  - node.SystemPrompt:', node?.SystemPrompt);
   console.log('[SIDEWIN:HTML] tempNode 用于输出:');
-  console.log('  - tempNode.Outputs 数量:', tempNode?.Outputs?.length || 0);
-  console.log('  - tempNode.Outputs 详情:', tempNode?.Outputs);
+  console.log('  - outputs 数量:', tempNodeOutputs?.length || 0);
+  console.log('  - outputs 详情:', tempNodeOutputs);
 
   // 生成输入区域 HTML
   // Inputs/Outputs 的值字段在不同节点/版本里可能不一致（Context/Num/Boolean/Parameters/value...）
@@ -13236,33 +13433,32 @@ function createSideWindow(item, isCheckMode = false) {
       <div class="section-container">
           <h3>Outputs</h3>
   `;
-  if (tempNode?.Outputs && Array.isArray(tempNode.Outputs)) {
-  tempNode.Outputs.forEach((output, index) => {
+  if (tempNodeOutputs.length > 0) {
+  tempNodeOutputs.forEach((output, index) => {
       const value = getIOValue(output);
+      const valueSafe = escapeForTextarea(value);
+      const nameSafe = escapeForTextarea(output.name || `Output${index + 1}`);
 
       outputsHtml += `
           <div class="output-item">
-              <label><strong>${output.name}:</strong></label>
-              <textarea class="side-window-textarea" readonly>${value}</textarea>
+              <label><strong>${nameSafe}:</strong></label>
+              <textarea class="side-window-textarea" readonly>${valueSafe}</textarea>
           </div>
       `;
   });
   } else {
-    console.warn('[SIDEWIN:HTML] tempNode.Outputs 不存在或不是数组:', tempNode?.Outputs);
+    console.warn('[SIDEWIN:HTML] 未找到可用 outputs 字段:', tempNode);
+    const fallbackText = (node?.ExportPrompt || node?.prompt || '').trim();
+    if (fallbackText) {
+      outputsHtml += `
+          <div class="output-item">
+              <label><strong>Output</strong></label>
+              <textarea class="side-window-textarea" readonly>${escapeForTextarea(fallbackText)}</textarea>
+          </div>
+      `;
+    }
   }
   outputsHtml += '</div>';
-
-  // Error / Debug 文本需要进入 textarea innerHTML，必须做转义（避免 </textarea> 破坏 DOM）
-  function escapeForTextarea(val) {
-    const s = (val === null || val === undefined) ? '' : String(val);
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/<\/textarea/gi, '&lt;/textarea');
-  }
 
   //创建一个debug区域（优先使用快照中的 debug；若为空则回退到 tempNode.debug）
   let debugTextRaw = '';
@@ -13363,7 +13559,7 @@ function createSideWindow(item, isCheckMode = false) {
   } catch(_) {}
   try {
     const inputsCount  = Array.isArray(node && node.Inputs) ? node.Inputs.length : 0;
-    const outputsCount = Array.isArray(tempNode && tempNode.Outputs) ? tempNode.Outputs.length : 0;
+    const outputsCount = Array.isArray(tempNodeOutputs) ? tempNodeOutputs.length : 0;
     console.log(`[SIDEWIN:DATA] inputs=${inputsCount} outputs=${outputsCount} debugLen=${debugText.length}`);
   } catch(_) {}
 
@@ -13438,7 +13634,8 @@ function createSideWindow(item, isCheckMode = false) {
           // 重新构建 token html（若有 tokens）
           let tokenHtml = '';
           try {
-            const out0 = (pickNode.Outputs && pickNode.Outputs[0]) || null;
+            const pickOutputs = normalizeSideWindowOutputs(pickNode);
+            const out0 = (pickOutputs && pickOutputs[0]) || null;
             if (out0 && out0.total_tokens !== undefined && out0.prompt_tokens !== undefined && out0.completion_tokens !== undefined) {
               tokenHtml = `
                 <div class="token-info">
@@ -13503,15 +13700,16 @@ function createSideWindow(item, isCheckMode = false) {
             <div class="section-container">
               <h3>Outputs</h3>`;
           try {
-            (pickNode.Outputs||[]).forEach((output) => {
+            const pickOutputs = normalizeSideWindowOutputs(pickNode);
+            pickOutputs.forEach((output, idx2) => {
               let v = '';
               if (output.Kind === 'Num') v = output.Num ?? '';
               else if ((output.Kind||'').includes('String')) v = output.Context ?? '';
               else if (output.Kind === 'Boolean' || output.Kind==='Trigger') v = output.Boolean ? 'true' : 'false';
               outputsHtml2 += `
                 <div class="output-item">
-                  <label><strong>${output.name}:</strong></label>
-                  <textarea class="side-window-textarea" readonly>${v}</textarea>
+                  <label><strong>${escapeForTextarea(output.name || `Output${idx2 + 1}`)}:</strong></label>
+                  <textarea class="side-window-textarea" readonly>${escapeForTextarea(v)}</textarea>
                 </div>`;
             });
           } catch(_) {}
@@ -16620,6 +16818,12 @@ function pasteFunction() {
   document.addEventListener('mousemove', function(event) {
       let target = graph.getPointByClient(event.clientX, event.clientY);
       
+      // Ctrl+V 后可紧接 Ctrl+A 将本次粘贴升级为“全面复制”
+      const pending = window.__wfPastePending;
+      const fullPaste = !!(pending && pending.full);
+      // 本次粘贴消费掉 pending（一次性）
+      try { window.__wfPastePending = null; } catch (_) {}
+
       // 确保复制的节点存在
       if (CopyNodeTemp) {
           // 获取鼠标位置的 canvas 坐标
@@ -16627,7 +16831,10 @@ function pasteFunction() {
           let canvasY = target.y;
 
           // 粘贴节点到鼠标位置
-          copyNode(CopyNodeTemp, canvasX, canvasY);
+          copyNode(CopyNodeTemp, canvasX, canvasY, {
+            cloneInputEdges: fullPaste,
+            inputEdges: CopyInputEdgesTemp
+          });
       } else {
           alert("No node to paste!");
       }
@@ -16636,10 +16843,22 @@ function pasteFunction() {
 function copyFunction() {
   //遍历所有的node找到ishovor==true的node
   let DataTemp=graph.save();
+  const edges = Array.isArray(DataTemp.edges) ? DataTemp.edges : [];
   DataTemp.nodes.forEach(node => {
     if (node.IsHovor) {
       CopyNodeTemp = node;
+      // 缓存“Inputs 的入边”：target 为该节点，且 targetAnchorID 对应 Inputs[].Id
+      try {
+        const inputIds = new Set((node.Inputs || []).map(i => i && i.Id).filter(Boolean));
+        CopyInputEdgesTemp = edges
+          .filter(e => e && e.target === node.id && inputIds.has(e.targetAnchorID))
+          .map(e => structuredClone(e));
+      } catch (e) {
+        CopyInputEdgesTemp = [];
+        console.warn('[CopyFull] build input edge cache failed:', e);
+      }
       console.log('CopyNodeTemp:',CopyNodeTemp);
+      console.log('CopyInputEdgesTemp:', CopyInputEdgesTemp);
     }
   });
 }
@@ -16713,6 +16932,12 @@ document.addEventListener('keydown', function(event) {
     copyFunction();
   } else if (!isInput && event.ctrlKey && event.key === 'v') {
     event.preventDefault();
+    pasteFunction();
+  }
+  // Ctrl+B：全面粘贴（包含 Inputs 的 edge 关系），比 Ctrl+V+A 更容易按出来
+  else if (!isInput && event.ctrlKey && (event.key === 'b' || event.key === 'B')) {
+    event.preventDefault();
+    window.__wfPastePending = { full: true, at: Date.now() };
     pasteFunction();
   }
   else if(event.ctrlKey && event.key === 'r') {

@@ -1019,13 +1019,14 @@ class WorkflowEngine:
         This does NOT affect dataflow outputs; it's only for UI/debug display.
         """
         try:
-            max_chars = int(os.getenv("WF_NODE_DEBUG_MAX_CHARS", "20000") or 20000)
+            # 默认不裁剪，恢复老版本“完整保留”行为；需要时可通过环境变量开启
+            max_chars = int(os.getenv("WF_NODE_DEBUG_MAX_CHARS", "0") or 0)
         except Exception:
-            max_chars = 20000
+            max_chars = 0
         try:
-            max_items = int(os.getenv("WF_NODE_DEBUG_MAX_ITEMS", "200") or 200)
+            max_items = int(os.getenv("WF_NODE_DEBUG_MAX_ITEMS", "0") or 0)
         except Exception:
-            max_items = 200
+            max_items = 0
 
         try:
             if v is None:
@@ -1060,9 +1061,10 @@ class WorkflowEngine:
         IMPORTANT: This only caps what we store for UI/state; dataflow propagation uses `result["output"]`.
         """
         try:
-            max_chars = int(os.getenv("WF_OUTPUT_CONTEXT_MAX_CHARS", "20000") or 20000)
+            # 默认不裁剪，恢复老版本“完整保留”行为；需要时可通过环境变量开启
+            max_chars = int(os.getenv("WF_OUTPUT_CONTEXT_MAX_CHARS", "0") or 0)
         except Exception:
-            max_chars = 20000
+            max_chars = 0
         if not max_chars:
             return
         try:
@@ -1123,14 +1125,6 @@ class WorkflowEngine:
             if not self._is_history_enabled(str(workflow_id)):
                 return
             debug = getattr(self, "DEBUG_PRINT", False)
-            # 防止单条 Context/prompt 超大撑爆文件：字符串截断
-            def _trunc(s, max_chars: int = 20000):
-                try:
-                    if isinstance(s, str) and max_chars and len(s) > max_chars:
-                        return s[:max_chars] + f"\n...[truncated {len(s) - max_chars} chars]"
-                except Exception:
-                    pass
-                return s
             # 打印调试信息（可开关）
             if debug:
                 print(f"📝 [HISTORY] 添加历史记录 - 工作流: {workflow_id}")
@@ -1146,45 +1140,11 @@ class WorkflowEngine:
                 # 兼容字符串或其它非常规类型
                 filtered_data = {'message': str(node_data)}
             else:
-                # 过滤节点数据，只保留必要字段（与前端逻辑一致）
-                filtered_data = {
-                    'NodeKind': node_data.get('NodeKind'),
-                    'label': node_data.get('label'),
-                    'Outputs': [],
-                    'Inputs': []
-                }
-                
-                # 处理Outputs
-                for item in node_data.get('Outputs', []):
-                    selected_field = {}
-                    if 'String' in item.get('Kind', ''):
-                        selected_field = {'Context': _trunc(item.get('Context'))}
-                    elif 'Boolean' in item.get('Kind', ''):
-                        selected_field = {'Boolean': item.get('Boolean')}
-                    elif 'Num' in item.get('Kind', ''):
-                        selected_field = {'Num': item.get('Num')}
-                    
-                    filtered_data['Outputs'].append({
-                        'name': item.get('name'),
-                        'Kind': item.get('Kind'),
-                        **selected_field
-                    })
-                
-                # 处理Inputs
-                for item in node_data.get('Inputs', []):
-                    selected_field = {}
-                    if 'String' in item.get('Kind', ''):
-                        selected_field = {'Context': _trunc(item.get('Context'))}
-                    elif 'Boolean' in item.get('Kind', ''):
-                        selected_field = {'Boolean': item.get('Boolean')}
-                    elif 'Num' in item.get('Kind', ''):
-                        selected_field = {'Num': item.get('Num')}
-                    
-                    filtered_data['Inputs'].append({
-                        'name': item.get('name'),
-                        'Kind': item.get('Kind'),
-                        **selected_field
-                    })
+                # 恢复老版本：记录完整节点数据，避免 Inputs/Outputs 被“瘦身”
+                try:
+                    filtered_data = copy.deepcopy(node_data)
+                except Exception:
+                    filtered_data = dict(node_data)
                 
                 if debug:
                     print(f"📝 [HISTORY] 过滤后的数据: {json.dumps(filtered_data, ensure_ascii=False, indent=2)}")
@@ -1357,87 +1317,34 @@ class WorkflowEngine:
             except Exception:
                 # 兜底：仍然退化为旧命名方式
                 fp = history_dir / f"{ts}.json"
-            # 体积优化：只保存必要字段，并截断超长字符串
-            def _trunc(s, max_chars: int = 4000):
-                try:
-                    if isinstance(s, str) and max_chars and len(s) > max_chars:
-                        return s[:max_chars] + f"\n...[truncated {len(s) - max_chars} chars]"
-                except Exception:
-                    pass
-                return s
-
-            def _slim_ports(arr):
-                out = []
-                if not isinstance(arr, list):
-                    return out
-                for it in arr:
-                    if not isinstance(it, dict):
-                        continue
-                    kind = str(it.get("Kind", "") or "")
-                    d = {
-                        "name": it.get("name"),
-                        "Kind": it.get("Kind"),
-                    }
-                    if "String" in kind:
-                        d["Context"] = _trunc(it.get("Context"))
-                    elif "Boolean" in kind:
-                        d["Boolean"] = it.get("Boolean")
-                    elif "Num" in kind:
-                        d["Num"] = it.get("Num")
-                    out.append(d)
-                return out
-
-            def _slim_edges(arr):
-                out = []
-                if not isinstance(arr, list):
-                    return out
-                for e in arr:
-                    if not isinstance(e, dict):
-                        continue
-                    out.append({
-                        "id": e.get("id"),
-                        "source": e.get("source"),
-                        "target": e.get("target"),
-                        "sourceAnchor": e.get("sourceAnchor"),
-                        "targetAnchor": e.get("targetAnchor"),
-                        "sourceAnchorID": e.get("sourceAnchorID"),
-                        "targetAnchorID": e.get("targetAnchorID"),
-                        # 可选字段：用于渲染/并行边恢复（存在则保留）
-                        "type": e.get("type"),
-                        "label": e.get("label"),
-                        "curveOffset": e.get("curveOffset"),
-                        "curvePosition": e.get("curvePosition"),
-                        "minCurveOffset": e.get("minCurveOffset"),
-                    })
-                return out
-
-            slim_nodes = []
-            if isinstance(nodes, list):
-                for n in nodes:
-                    if not isinstance(n, dict):
-                        continue
-                    slim_nodes.append({
-                        "id": n.get("id"),
-                        "name": n.get("name"),
-                        "label": n.get("label"),
-                        "NodeKind": n.get("NodeKind"),
-                        "isFinish": n.get("isFinish"),
-                        "IsError": n.get("IsError"),
-                        "ErrorContext": _trunc(n.get("ErrorContext")),
-                        "Inputs": _slim_ports(n.get("Inputs", [])),
-                        "Outputs": _slim_ports(n.get("Outputs", [])),
-                    })
-
-            payload = {
-                "project": comp_safe,
-                "saved_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-                "nodes": slim_nodes,
-                # 之前这里为了节省体积只存 nodes；但 edges 对回放/还原拓扑很关键，这里补回（仍为精简版）
-                "edges": _slim_edges(edges)
-            }
+            # 适度压缩快照：保留业务字段，剔除前端布局/样式字段（不影响回放逻辑）
+            try:
+                payload_nodes = copy.deepcopy(nodes)
+            except Exception:
+                payload_nodes = nodes
+            try:
+                drop_keys = {
+                    "anchorPoints",
+                    "style",
+                    "x",
+                    "y",
+                    "width",
+                    "height",
+                    "depth",
+                    "draggable",
+                    "type",
+                }
+                if isinstance(payload_nodes, list):
+                    for n in payload_nodes:
+                        if not isinstance(n, dict):
+                            continue
+                        for k in drop_keys:
+                            n.pop(k, None)
+            except Exception:
+                pass
+            payload = {"nodes": payload_nodes}
             with open(fp, "w", encoding="utf-8") as f:
-                # 体积优化：不缩进 + 紧凑分隔符
-                json.dump(payload, f, ensure_ascii=False, separators=(',', ':'))
+                json.dump(payload, f, ensure_ascii=False, indent=2)
             try:
                 print(f"[HISTORY:SAVE] {fp}")
             except Exception:
@@ -4795,9 +4702,12 @@ class WorkflowEngine:
             if exec_result is None:
                 continue
                 
-            node = exec_result["node"]
+            exec_node = exec_result["node"]
             result = exec_result["result"]
-            node_id = node["id"]
+            node_id = exec_node["id"]
+            # execute_single_node 使用了深拷贝节点；这里必须把结果写回 graph_data 中的真实节点
+            state_node = next((n for n in all_nodes if n.get("id") == node_id), None)
+            node = state_node if isinstance(state_node, dict) else exec_node
             
             with result_lock:
                 # 更新节点状态为完成 (保持RecursionBehavior)
@@ -4806,7 +4716,7 @@ class WorkflowEngine:
                     "isFinish": True,
                     "ErrorContext": "",
                     "IsError": False,
-                    "RecursionBehavior": node.get("RecursionBehavior", "STOP")
+                    "RecursionBehavior": exec_node.get("RecursionBehavior", "STOP")
                 })
                 
                 # 更新节点输出
