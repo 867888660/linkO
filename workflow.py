@@ -45,6 +45,12 @@ WF_SHARED_NODE_MODULES = os.getenv("WF_SHARED_NODE_MODULES", "0").strip() in ("1
 # - 若担心性能/兼容性，可通过环境变量关闭：WF_PERSIST_NODE_STATE=0
 WF_PERSIST_NODE_STATE = os.getenv("WF_PERSIST_NODE_STATE", "1").strip() in ("1", "true", "True", "yes", "YES")
 
+# ArrayTrigger 队列项是否携带 graph_data 快照：
+# - 旧行为：每次 enqueue 时 deepcopy 整张图，写入 queue item["graph_data"]
+#   这在大量数组输出/子任务场景下会显著抬高内存占用，并可能造成 RSS 随运行时间持续增长。
+# - 新默认：不携带快照（0），在消费队列时使用当前 data_temp 现场路由 outputData。
+WF_QUEUE_STORE_GRAPH_SNAPSHOT = os.getenv("WF_QUEUE_STORE_GRAPH_SNAPSHOT", "0").strip() in ("1", "true", "True", "yes", "YES")
+
 # =========================
 # Workflow Print Switch
 # =========================
@@ -524,7 +530,20 @@ class WorkflowEngine:
 
         # 3) 前缀类缓存（如 wid:xxx）
         try:
-            stale = [k for k in list(self._last_ring_fp.keys()) if str(k).startswith(f"{workflow_id}:")]
+            wid0 = str(workflow_id or "")
+            stale = []
+            for k in list(self._last_ring_fp.keys()):
+                try:
+                    # canonical: (workflow_id, node_id)
+                    if isinstance(k, tuple) and len(k) >= 1 and str(k[0]) == wid0:
+                        stale.append(k)
+                        continue
+                    # legacy: "wid:xxx" / other string-like keys
+                    if isinstance(k, str) and k.startswith(f"{wid0}:"):
+                        stale.append(k)
+                        continue
+                except Exception:
+                    continue
             for k in stale:
                 self._last_ring_fp.pop(k, None)
         except Exception:
@@ -540,7 +559,28 @@ class WorkflowEngine:
 
         # 5) cache_time 侧表清理
         try:
-            stale_time_keys = [ck for ck in list(self._cache_time.keys()) if str(ck[1]).startswith(f"{workflow_id}:")]
+            wid0 = str(workflow_id or "")
+            stale_time_keys = []
+            for ck in list(self._cache_time.keys()):
+                try:
+                    # ck is (cache_name, key)
+                    if not isinstance(ck, tuple) or len(ck) != 2:
+                        continue
+                    _key = ck[1]
+                    # common: key == workflow_id (e.g. _event_throttle_last_ts)
+                    if str(_key) == wid0:
+                        stale_time_keys.append(ck)
+                        continue
+                    # tuple keys like (workflow_id, node_id) for _last_ring_fp
+                    if isinstance(_key, tuple) and len(_key) >= 1 and str(_key[0]) == wid0:
+                        stale_time_keys.append(ck)
+                        continue
+                    # legacy prefix style
+                    if isinstance(_key, str) and _key.startswith(f"{wid0}:"):
+                        stale_time_keys.append(ck)
+                        continue
+                except Exception:
+                    continue
             for ck in stale_time_keys:
                 self._cache_time.pop(ck, None)
         except Exception:
@@ -873,6 +913,141 @@ class WorkflowEngine:
                 wf["last_update"] = time.time()
         except Exception:
             pass
+
+    # -------------------------
+    # Memory guards / lightweight clones
+    # -------------------------
+    def _clone_graph_for_child(self, graph_data: dict):
+        """
+        Lightweight graph clone for ArrayTrigger child workflows.
+        Goal: avoid deep-copying large runtime fields from the parent graph (Outputs Context, node debug, messages, etc.).
+        We keep node/edge structure and node INPUTS (config) intact, but clear node OUTPUTS/runtime flags.
+        """
+        try:
+            if not isinstance(graph_data, dict):
+                return copy.deepcopy(graph_data)
+
+            out = {}
+            # Copy top-level keys except nodes/edges (handled below)
+            for k, v in graph_data.items():
+                if k in ("nodes", "edges"):
+                    continue
+                try:
+                    out[k] = copy.deepcopy(v)
+                except Exception:
+                    out[k] = v
+
+            nodes = graph_data.get("nodes", []) or []
+            edges = graph_data.get("edges", []) or []
+
+            new_nodes = []
+            drop_node_keys = {
+                "messages", "debug", "ErrorContext", "inputStatus",
+                "IsBlock", "IsRunning", "IsError", "isFinish", "firstRun",
+                "TriggerLink", "_state",
+            }
+            for n in nodes:
+                if not isinstance(n, dict):
+                    continue
+                nn = {}
+                for k, v in n.items():
+                    if k in drop_node_keys:
+                        continue
+                    if k == "Outputs":
+                        continue
+                    # Inputs carry config; keep as-is but deep-copy for isolation
+                    if k == "Inputs":
+                        try:
+                            nn["Inputs"] = copy.deepcopy(v)
+                        except Exception:
+                            nn["Inputs"] = v
+                        continue
+                    try:
+                        nn[k] = copy.deepcopy(v)
+                    except Exception:
+                        nn[k] = v
+
+                # Outputs: keep port definitions, clear runtime values to avoid copying huge Context/debug.
+                outs = n.get("Outputs", []) or []
+                new_outs = []
+                for o in outs:
+                    if not isinstance(o, dict):
+                        continue
+                    oo = {}
+                    for ok, ov in o.items():
+                        if ok in ("Context", "Num", "Boolean", "prompt_tokens", "completion_tokens", "total_tokens"):
+                            continue
+                        try:
+                            oo[ok] = copy.deepcopy(ov)
+                        except Exception:
+                            oo[ok] = ov
+                    kind = str(o.get("Kind", "") or "")
+                    if "String" in kind:
+                        oo["Context"] = ""
+                    elif kind == "Num":
+                        oo["Num"] = None
+                    elif kind == "Boolean":
+                        oo["Boolean"] = False
+                    new_outs.append(oo)
+                nn["Outputs"] = new_outs
+                new_nodes.append(nn)
+
+            new_edges = []
+            for e in edges:
+                if isinstance(e, dict):
+                    try:
+                        new_edges.append(copy.deepcopy(e))
+                    except Exception:
+                        new_edges.append(dict(e))
+            out["nodes"] = new_nodes
+            out["edges"] = new_edges
+            return out
+        except Exception:
+            # fallback: correctness over performance
+            try:
+                return copy.deepcopy(graph_data)
+            except Exception:
+                return graph_data
+
+    def _cap_node_debug(self, v):
+        """Limit node-level debug payload stored in graph_data to avoid unbounded RSS growth.
+        This does NOT affect dataflow outputs; it's only for UI/debug display.
+        """
+        try:
+            max_chars = int(os.getenv("WF_NODE_DEBUG_MAX_CHARS", "20000") or 20000)
+        except Exception:
+            max_chars = 20000
+        try:
+            max_items = int(os.getenv("WF_NODE_DEBUG_MAX_ITEMS", "200") or 200)
+        except Exception:
+            max_items = 200
+
+        try:
+            if v is None:
+                return ""
+            if isinstance(v, str):
+                if max_chars and len(v) > max_chars:
+                    return v[:max_chars] + f"\n...[debug truncated {len(v) - max_chars} chars]"
+                return v
+            if isinstance(v, (list, tuple)):
+                items = list(v)
+                if max_items and len(items) > max_items:
+                    items = items[:max_items] + [f"...[debug truncated {len(v) - max_items} items]"]
+                out = []
+                for it in items:
+                    s = str(it)
+                    if max_chars and len(s) > max_chars:
+                        s = s[:max_chars] + f"...[truncated {len(str(it)) - max_chars} chars]"
+                    out.append(s)
+                # Keep as list to preserve frontend expectations (some nodes already return list)
+                return out
+            # fallback: stringify
+            s = str(v)
+            if max_chars and len(s) > max_chars:
+                return s[:max_chars] + f"\n...[debug truncated {len(s) - max_chars} chars]"
+            return s
+        except Exception:
+            return v
 
     def _safe_project_dir(self, name: str) -> str:
         """将项目名转为安全的目录名"""
@@ -2806,7 +2981,7 @@ class WorkflowEngine:
                 
                 # 写回 debug
                 if isinstance(result, dict):
-                    node["debug"] = result.get("debug", "")
+                    node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 更新节点输出（包括 token 信息）
                 if isinstance(result, dict) and result.get("output") is not None:
@@ -3100,7 +3275,7 @@ class WorkflowEngine:
                 
                 # 写回 debug
                 if isinstance(result, dict):
-                    node["debug"] = result.get("debug", "")
+                    node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 更新节点输出（包括 token 信息）
                 if isinstance(result, dict) and result.get("output") is not None:
@@ -3199,7 +3374,7 @@ class WorkflowEngine:
                 
                 # 写回 debug
                 if isinstance(result, dict):
-                    node["debug"] = result.get("debug", "")
+                    node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 更新节点输出（包括 token 信息）
                 if isinstance(result, dict) and result.get("output") is not None:
@@ -3279,10 +3454,12 @@ class WorkflowEngine:
                             pass
                     
                     # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
-                    try:
-                        shared_graph_snapshot = copy.deepcopy(data_temp)
-                    except Exception:
-                        shared_graph_snapshot = data_temp
+                    shared_graph_snapshot = None
+                    if WF_QUEUE_STORE_GRAPH_SNAPSHOT:
+                        try:
+                            shared_graph_snapshot = copy.deepcopy(data_temp)
+                        except Exception:
+                            shared_graph_snapshot = data_temp
                     
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
                     # 每个子数组代表一个完整的输出组，应该作为一个队列项
@@ -3302,7 +3479,9 @@ class WorkflowEngine:
                         fp = self._calc_fp(node_id, group)            # ← 新增
                         key = (workflow_id, node_id)
                         last_fp = self._last_ring_fp.get(key)
-                        item = {"outputData": group, "nodeId": node_id, "graph_data": shared_graph_snapshot}
+                        item = {"outputData": group, "nodeId": node_id}
+                        if WF_QUEUE_STORE_GRAPH_SNAPSHOT and shared_graph_snapshot is not None:
+                            item["graph_data"] = shared_graph_snapshot
 
                         # 性能优化：使用索引字典快速定位最后一个相同 nodeId 的项
                         # 注意：deque 支持 index 访问与赋值（O(n)），但仍远比 list(tmp)+clear+extend 省内存/更快
@@ -3486,7 +3665,7 @@ class WorkflowEngine:
                     
                     # 写回 debug
                     if isinstance(result, dict):
-                        node["debug"] = result.get("debug", "")
+                        node["debug"] = self._cap_node_debug(result.get("debug", ""))
                     
                     # 更新节点输出
                     if isinstance(result, dict) and result.get("output") is not None:
@@ -3619,7 +3798,7 @@ class WorkflowEngine:
                 
                 # 写回 debug
                 if isinstance(result, dict):
-                    node["debug"] = result.get("debug", "")
+                    node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 更新节点输出（包括 token 信息）
                 if isinstance(result, dict) and result.get("output"):
@@ -3708,10 +3887,12 @@ class WorkflowEngine:
                         print(f"[ARRAY-DEBUG] ArrayTrigger 原始输出数量: {len(original_outputs)}")
                     
                     # 性能关键：每批输出只冻结一次 graph 快照，避免每条队列项都 deepcopy 整张图
-                    try:
-                        shared_graph_snapshot = copy.deepcopy(data_temp)
-                    except Exception:
-                        shared_graph_snapshot = data_temp
+                    shared_graph_snapshot = None
+                    if WF_QUEUE_STORE_GRAPH_SNAPSHOT:
+                        try:
+                            shared_graph_snapshot = copy.deepcopy(data_temp)
+                        except Exception:
+                            shared_graph_snapshot = data_temp
                     
                     # 🔥 关键修复：ArrayTrigger 的 output 是嵌套数组结构
                     # 每个子数组代表一个完整的输出组，应该作为一个队列项
@@ -3726,7 +3907,9 @@ class WorkflowEngine:
                         fp = self._calc_fp(node_id, group)            # ← 新增
                         key = (workflow_id, node_id)
                         last_fp = self._last_ring_fp.get(key)
-                        item = {"outputData": group, "nodeId": node_id, "graph_data": shared_graph_snapshot}
+                        item = {"outputData": group, "nodeId": node_id}
+                        if WF_QUEUE_STORE_GRAPH_SNAPSHOT and shared_graph_snapshot is not None:
+                            item["graph_data"] = shared_graph_snapshot
 
                         # 性能优化：使用索引字典快速定位最后一个相同 nodeId 的项
                         queue_index = self._array_queue_last_index.setdefault(workflow_id, {})
@@ -3953,7 +4136,7 @@ class WorkflowEngine:
                             self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger outputData type: {type(array_data.get('outputData'))}")
                             self._log_event(workflow_id, f"🔴 [DEBUG] ArrayTrigger outputData: {array_data.get('outputData')}")
                             # 处理节点连接
-                            processed_data_temp = self._process_node_connections(copy.deepcopy(effective_graph), array_node, array_data["outputData"], workflow_id)
+                            processed_data_temp = self._process_node_connections(self._clone_graph_for_child(effective_graph), array_node, array_data["outputData"], workflow_id)
                             if getattr(self, "DEBUG_PRINT", False):
                                 print(f"[ARRAY-DEBUG] 处理节点连接完成，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
                             self._log_event(workflow_id, f"🔴 [DEBUG] 开始处理普通节点，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
@@ -4024,10 +4207,11 @@ class WorkflowEngine:
             if array_data.get("nodeId") is None:
                 graph_payload = array_data.get("graph_data") or array_data
                 if isinstance(graph_payload, dict):
-                    return copy.deepcopy(graph_payload)
+                    # Even when a snapshot is provided, avoid copying runtime junk if possible
+                    return self._clone_graph_for_child(graph_payload)
                 return None
             effective_graph = array_data.get("graph_data") or parent_graph_data
-            graph_copy = copy.deepcopy(effective_graph)
+            graph_copy = self._clone_graph_for_child(effective_graph)
             nodes = graph_copy.get("nodes", [])
             array_node = next((node for node in nodes if node.get("id") == array_data.get("nodeId")), None)
             if array_node is None:
@@ -4169,7 +4353,7 @@ class WorkflowEngine:
                 if array_node:
                     self._log_event(parent_workflow_id, f"   └─ [BATCH] hit ArrayTrigger node: {array_node.get('label', array_node.get('id'))}")
                     # 处理节点连接
-                    processed_data_temp = self._process_node_connections(copy.deepcopy(effective_graph), array_node, array_data["outputData"], parent_workflow_id)
+                    processed_data_temp = self._process_node_connections(self._clone_graph_for_child(effective_graph), array_node, array_data["outputData"], parent_workflow_id)
                     # 处理节点
                     self._process_normal_nodes(processed_data_temp, workflow_state)
                     self._log_event(parent_workflow_id, f"   └─ [BATCH] 批次处理完成")
@@ -4552,7 +4736,7 @@ class WorkflowEngine:
                                 node["Outputs"][0][field] = first_output[field]
                 
                 # 更新节点debug信息
-                node["debug"] = result.get("debug", "")
+                node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 标记节点已执行
                 node["firstRun"] = False
