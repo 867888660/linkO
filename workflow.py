@@ -358,6 +358,11 @@ class WorkflowEngine:
         self._sysmon_cache_ts = 0.0
         self._sysmon_cache_interval_s = float(os.getenv("WF_SYSMON_INTERVAL_S", "2.0") or 2.0)
         self._sysmon_cache = {"ConnNow": None, "TWNow": None, "PortUse": None}
+        # System-wide scans (psutil.net_connections / netstat) are much heavier than per-process scans.
+        # Cache them separately with a larger interval to reduce memory churn/high-water RSS.
+        self._sysmon_system_cache_ts = 0.0
+        self._sysmon_system_cache_interval_s = float(os.getenv("WF_SYSMON_SYSTEM_INTERVAL_S", "15.0") or 15.0)
+        self._sysmon_system_cache = {"TWNow": None, "PortUse": None}
         self._dyn_port_range_cache = None  # (start_port:int, num_ports:int)
 
         # ---- Persisted per-node state (for triggers like Timer) ----
@@ -1590,6 +1595,18 @@ class WorkflowEngine:
                 proc_conns = proc.connections(kind="tcp")  # type: ignore
             conn_now = len(proc_conns) if proc_conns is not None else None
 
+            # System-wide metrics are expensive; compute them less frequently and cache.
+            now = time.time()
+            with self._sysmon_lock:
+                tw_cached = (self._sysmon_system_cache or {}).get("TWNow")
+                port_cached = (self._sysmon_system_cache or {}).get("PortUse")
+                last_sys = float(self._sysmon_system_cache_ts or 0.0)
+                sys_interval = float(self._sysmon_system_cache_interval_s or 15.0)
+            need_sys = (now - last_sys) >= sys_interval
+
+            if not need_sys:
+                return {"ConnNow": conn_now, "TWNow": tw_cached, "PortUse": port_cached}
+
             try:
                 sys_conns = psutil.net_connections(kind="tcp")
             except Exception:
@@ -1631,6 +1648,14 @@ class WorkflowEngine:
                     port_use = round((len(used_ports) / float(np)) * 100.0, 1)
             except Exception:
                 port_use = None
+
+            # update system cache
+            try:
+                with self._sysmon_lock:
+                    self._sysmon_system_cache = {"TWNow": tw, "PortUse": port_use}
+                    self._sysmon_system_cache_ts = now
+            except Exception:
+                pass
 
             return {"ConnNow": conn_now, "TWNow": tw, "PortUse": port_use}
         except Exception:
