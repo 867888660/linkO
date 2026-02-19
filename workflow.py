@@ -1049,6 +1049,60 @@ class WorkflowEngine:
         except Exception:
             return v
 
+    def _cap_output_context_in_place(self, outputs):
+        """
+        Cap stored output Context in node["Outputs"] to prevent graph_data from retaining huge strings.
+        IMPORTANT: This only caps what we store for UI/state; dataflow propagation uses `result["output"]`.
+        """
+        try:
+            max_chars = int(os.getenv("WF_OUTPUT_CONTEXT_MAX_CHARS", "20000") or 20000)
+        except Exception:
+            max_chars = 20000
+        if not max_chars:
+            return
+        try:
+            if not isinstance(outputs, list):
+                return
+            for o in outputs:
+                if not isinstance(o, dict):
+                    continue
+                ctx = o.get("Context")
+                if isinstance(ctx, str) and len(ctx) > max_chars:
+                    o["Context"] = ctx[:max_chars] + f"\n...[output truncated {len(ctx) - max_chars} chars]"
+        except Exception:
+            pass
+
+    def _maybe_clear_graph_after_done(self, workflow: dict):
+        """
+        If workflow is DONE (completed/error/stopped) and past TTL, clear graph_data to free memory.
+        Keep an empty graph dict to avoid frontend crashes expecting graph_data.nodes.
+        """
+        try:
+            if not isinstance(workflow, dict):
+                return
+            st = workflow.get("status")
+            if st not in (WorkflowStatus.COMPLETED, WorkflowStatus.ERROR, WorkflowStatus.STOPPED):
+                return
+            ttl_s = float(os.getenv("WF_DONE_GRAPH_TTL_S", "30") or 30)
+            if ttl_s < 0:
+                return
+            done_ts = workflow.get("done_ts")
+            if done_ts is None:
+                # fallback: use last_update as approximation
+                done_ts = workflow.get("last_update")
+            if done_ts is None:
+                return
+            if (time.time() - float(done_ts)) < ttl_s:
+                return
+            gd = workflow.get("graph_data")
+            # already cleared?
+            if isinstance(gd, dict) and gd.get("_cleared") is True:
+                return
+            # clear to minimal stub
+            workflow["graph_data"] = {"nodes": [], "edges": [], "_cleared": True}
+        except Exception:
+            return
+
     def _safe_project_dir(self, name: str) -> str:
         """将项目名转为安全的目录名"""
         try:
@@ -2928,6 +2982,10 @@ class WorkflowEngine:
                         except Exception:
                             pass
                         self.workflows[workflow_id]["status"] = WorkflowStatus.COMPLETED
+                        try:
+                            self.workflows[workflow_id]["done_ts"] = time.time()
+                        except Exception:
+                            pass
                     # 最后兜底保存一次：
                     # - 仅针对“普通工作流”（没有 passivity / ArrayTrigger）
                     # - 避免在数组模式下多出一条“父级总览”，保证“按条数保存”的直觉一致
@@ -3000,6 +3058,9 @@ class WorkflowEngine:
                             for field in token_fields:
                                 if field in first_output:
                                     node["Outputs"][0][field] = first_output[field]
+
+                    # Cap stored output contexts (UI/state only)
+                    self._cap_output_context_in_place(node.get("Outputs", []))
                 
                 # 运行完成，更新状态
                 self._update_node_status(data_temp, node["id"], {"IsRunning": False, "isFinish": True, "IsError": False, "ErrorContext": ""})
@@ -3294,6 +3355,9 @@ class WorkflowEngine:
                             for field in token_fields:
                                 if field in first_output:
                                     node["Outputs"][0][field] = first_output[field]
+
+                    # Cap stored output contexts (UI/state only)
+                    self._cap_output_context_in_place(node.get("Outputs", []))
                 
                 # 运行完成（仅本地数据）
                 self._update_node_status(data_temp, node["id"], {"IsRunning": False, "isFinish": True, "IsError": False, "ErrorContext": ""})
@@ -3393,6 +3457,9 @@ class WorkflowEngine:
                             for field in token_fields:
                                 if field in first_output:
                                     node["Outputs"][0][field] = first_output[field]
+
+                    # Cap stored output contexts (UI/state only)
+                    self._cap_output_context_in_place(node.get("Outputs", []))
                 
                 # 运行完成（仅本地数据）
                 self._update_node_status(data_temp, node["id"], {"IsRunning": False, "isFinish": True, "IsError": False, "ErrorContext": ""})
@@ -3684,6 +3751,9 @@ class WorkflowEngine:
                                 for field in token_fields:
                                     if field in first_output:
                                         node["Outputs"][0][field] = first_output[field]
+
+                        # Cap stored output contexts (UI/state only)
+                        self._cap_output_context_in_place(node.get("Outputs", []))
                     
                     # 运行完成
                     self._update_node_status(data_temp, node["id"], {"IsRunning": False, "isFinish": True, "IsError": False, "ErrorContext": ""})
@@ -3814,6 +3884,9 @@ class WorkflowEngine:
                             for field in token_fields:
                                 if field in first_output:
                                     node["Outputs"][0][field] = first_output[field]
+
+                    # Cap stored output contexts (UI/state only)
+                    self._cap_output_context_in_place(node.get("Outputs", []))
                 
                 # 运行完成
                 with self.lock:
@@ -4297,6 +4370,11 @@ class WorkflowEngine:
             # 守护：避免长时间保持 RUNNING，未被正常收敛时强制标记完成
             if workflow_state.get("status") == WorkflowStatus.RUNNING:
                 workflow_state["status"] = WorkflowStatus.COMPLETED
+            try:
+                if workflow_state.get("status") in (WorkflowStatus.COMPLETED, WorkflowStatus.ERROR, WorkflowStatus.STOPPED):
+                    workflow_state["done_ts"] = time.time()
+            except Exception:
+                pass
             workflow_state["last_update"] = time.time()
             try:
                 self._save_simple_history(workflow_state.get("graph_data"))
@@ -4734,6 +4812,9 @@ class WorkflowEngine:
                         for field in token_fields:
                             if field in first_output:
                                 node["Outputs"][0][field] = first_output[field]
+
+                # Cap stored output contexts to avoid retaining huge strings in graph_data
+                self._cap_output_context_in_place(node.get("Outputs", []))
                 
                 # 更新节点debug信息
                 node["debug"] = self._cap_node_debug(result.get("debug", ""))
@@ -5144,6 +5225,10 @@ class WorkflowEngine:
             except Exception:
                 pass
             wf["status"] = WorkflowStatus.STOPPED
+            try:
+                wf["done_ts"] = time.time()
+            except Exception:
+                pass
             print(f"✅ [STOPPED] 工作流已停止: {workflow_id}")
             self._stop_child_workflows(workflow_id)
             
@@ -5169,6 +5254,11 @@ class WorkflowEngine:
             return {"error": f"Workflow {workflow_id} is None (may have been cleaned up)"}
         
         try:
+            # If done for long enough, clear graph_data to free memory (keeps empty stub for UI)
+            try:
+                self._maybe_clear_graph_after_done(workflow)
+            except Exception:
+                pass
             # 优先从统一写回的队列字段读取，避免线程内本地副本与全局字典不同步造成的滞后
             try:
                 q = workflow.get("queues") or workflow.get("queue_lengths") or {}
