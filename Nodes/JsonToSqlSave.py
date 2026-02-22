@@ -208,6 +208,7 @@ _DEDUPE_IGNORE_KEYS_LOWER = {
     "latency_ms",
     "query_time_beijing",
     "query_time",
+    "action_time_point",
 }
 
 # RealTime 拆行时要剔除的“时间/易变字段”（这些字段不入库）
@@ -244,6 +245,8 @@ _ACTION_FP_IGNORE_KEYS_LOWER = {
     "action_index",
     "action_source",
     "action_raw_json",
+    # 仅用于记录该批动作对应时间点；不应触发“动作变化”
+    "action_time_point",
     # 原始 JSON 备份列：不参与“动作是否变化”的判定（避免仅格式变化导致重复写入）
     "originaljson",
     # print 是日志/解释文本，可能包含 day_to_end 等易变行；不应触发“动作变化”
@@ -428,6 +431,50 @@ def _extract_action_as_dict(action_val: Any) -> Optional[Dict[str, Any]]:
         return v
     if isinstance(v, list) and len(v) == 1 and isinstance(v[0], dict):
         return v[0]
+    return None
+
+
+def _extract_yes_no_pct_from_actions(actions_val: Any) -> Tuple[Optional[Any], Optional[Any], bool]:
+    """
+    从 actions 中提取 Yes/No 两侧 pct：
+    - 支持 actions 为 list[dict]、JSON 字符串
+    - 支持外层是 {"actions":[...]} 的结构
+    返回：(yes_pct, no_pct, found_any)
+    """
+    v = _maybe_json_load(actions_val)
+    if isinstance(v, dict):
+        lower_map = {(_safe_str(k).strip().lower()): k for k in v.keys()}
+        if "actions" in lower_map:
+            v = _maybe_json_load(v.get(lower_map["actions"]))
+    if not isinstance(v, list):
+        return None, None, False
+
+    yes_pct: Optional[Any] = None
+    no_pct: Optional[Any] = None
+    found = False
+    for item in v:
+        if not isinstance(item, dict):
+            continue
+        side = _safe_str(_pick_ci_value(item, ("side", "position_side"))).strip().lower()
+        pct_v = _pick_ci_value(item, ("pct", "percentage", "ratio", "value"))
+        if side in {"yes", "y"}:
+            yes_pct = pct_v
+            found = True
+        elif side in {"no", "n"}:
+            no_pct = pct_v
+            found = True
+    return yes_pct, no_pct, found
+
+
+def _pick_ci_value(d: Dict[str, Any], keys: Tuple[str, ...]) -> Any:
+    """
+    在 dict 中按大小写不敏感挑选第一个存在的 key 的值。
+    """
+    lower_map = {(_safe_str(k).strip().lower()): k for k in d.keys()}
+    for kk in keys:
+        k2 = kk.strip().lower()
+        if k2 in lower_map:
+            return d.get(lower_map[k2])
     return None
 
 
@@ -966,17 +1013,6 @@ def run_node(node):
                     _set_last_col_value(conn, table, col, val, symbol=(sym or ""))
                     last_col_cache[(table, sym or "", col)] = val
 
-                def _pick_value_ci(d: Dict[str, Any], keys: Tuple[str, ...]) -> Any:
-                    """
-                    在 dict 中按大小写不敏感挑选第一个存在的 key 的值。
-                    """
-                    lower_map = {(_safe_str(k).strip().lower()): k for k in d.keys()}
-                    for kk in keys:
-                        k2 = kk.strip().lower()
-                        if k2 in lower_map:
-                            return d.get(lower_map[k2])
-                    return None
-
                 # RealTime：允许把 data 里的列表拆成多条记录
                 if source_label == "RealTime":
                     expanded: List[Any] = []
@@ -1356,6 +1392,22 @@ def run_node(node):
                     if not isinstance(actions, list):
                         continue
                     rt_time = _safe_str(rt.get("query_time")).strip() or unified_query_time
+                    # 先落一条“汇总动作”记录：保存 Yes_Pct/No_Pct，并携带时间点用于去重
+                    y_pct, n_pct, has_pct = _extract_yes_no_pct_from_actions(actions)
+                    if has_pct:
+                        summary_rec: Dict[str, Any] = {
+                            "action_source": "RealTimeJson.actions_summary",
+                            "rt_time": rt_time,
+                            # 不忽略该字段：确保按时间点去重（同一时间重复输入会被跳过）
+                            "action_time_point": rt_time,
+                            "Yes_Pct": y_pct,
+                            "No_Pct": n_pct,
+                        }
+                        actions_raw_json = _json_text_or_none(_maybe_json_load(actions))
+                        if actions_raw_json:
+                            summary_rec["action_raw_json"] = actions_raw_json
+                        action_records.append(summary_rec)
+
                     for idx, act in enumerate(actions):
                         # act 可能是 dict，也可能是 JSON 字符串；尽量解析成 dict 以拆列保存（pct/side/type）
                         act_dict = _extract_action_as_dict(act)
@@ -1384,6 +1436,21 @@ def run_node(node):
                 a_records, pe = _normalize_to_records(action_raw)
                 action_parse_err += pe
                 for act in [x for x in a_records if x is not None]:
+                    # 若上游直接给了 {"actions":[...]}，同样提取 Yes_Pct/No_Pct 写入汇总行
+                    y_pct, n_pct, has_pct = _extract_yes_no_pct_from_actions(act)
+                    if has_pct:
+                        summary_rec = {
+                            "action_source": "ActionInput.actions_summary",
+                            "rt_time": unified_query_time,
+                            "action_time_point": unified_query_time,
+                            "Yes_Pct": y_pct,
+                            "No_Pct": n_pct,
+                        }
+                        raw_json = _json_text_or_none(_maybe_json_load(act))
+                        if raw_json:
+                            summary_rec["action_raw_json"] = raw_json
+                        action_records.append(summary_rec)
+
                     act_dict = _extract_action_as_dict(act)
                     if act_dict is not None:
                         rec = dict(act_dict)
@@ -1470,6 +1537,24 @@ def run_node(node):
                     return True
 
                 src = _safe_str(tmp.get("action_source")).strip()
+                print_v = tmp.get("print")
+
+                def _has_lint_error_print(v: Any) -> bool:
+                    """
+                    Action 输入中常见 line/lint error 包：
+                    {"actions":[],"print":["[LintError] ..."], ...}
+                    这类记录虽无动作，但应写入 Action_Data 便于排查。
+                    """
+                    if v is None:
+                        return False
+                    if isinstance(v, str):
+                        return "[linterror]" in v.lower()
+                    if isinstance(v, list):
+                        for item in v:
+                            if "[linterror]" in _safe_str(item).lower():
+                                return True
+                        return False
+                    return "[linterror]" in _safe_str(v).lower()
 
                 # ModeQtyInputs：允许无 actions，只要模式/数量有值就算有效
                 if src == "ModeQtyInputs":
@@ -1482,6 +1567,9 @@ def run_node(node):
                 actions_v = tmp.get("actions")
                 if isinstance(actions_v, (list, dict)):
                     if len(actions_v) > 0:
+                        return True
+                    # 兼容：动作为空，但 print 携带 LintError（lineError）也要落库
+                    if _has_lint_error_print(print_v):
                         return True
                     # 显式 actions=[] / {} => 直接判定无动作
                     return False
