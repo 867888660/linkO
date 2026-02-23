@@ -239,6 +239,34 @@ def _norm_company_name(name):
     return "".join(ch for ch in str(name or "").upper() if ch.isalnum())
 
 
+def _stable_json_dumps(obj):
+    try:
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    except Exception:
+        return json.dumps({"error": "json_serialize_failed"}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _pick_ts(usedata: _UseDataProxy):
+    keys = ("NowTime", "query_time", "query_time_beijing", "ts_utc", "timestamp")
+    for k in keys:
+        v = usedata.get(k, None)
+        s = str(v).strip() if v is not None else ""
+        if s:
+            return s
+    return None
+
+
+def _emit_db_json(Print, ts, inputs, actions):
+    payload = {
+        "ts": ts,
+        "inputs": inputs if isinstance(inputs, dict) else {},
+        "actions": actions if isinstance(actions, list) else [],
+    }
+    Print("===DB_JSON_BEGIN===")
+    Print(_stable_json_dumps(payload))
+    Print("===DB_JSON_END===")
+
+
 _COMPANY_ALIAS_MAP = {
     "GOOGLE": "GOOGL",
     "ALPHABET": "GOOGL",
@@ -307,7 +335,6 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     actions = []
     logs = []
     wake_reason = None
-
     def Print(text):
         logs.append(str(text))
 
@@ -321,7 +348,7 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         Print("param.UseData." + str(k) + "=" + str(raw_usedata.get(k)))
     Print("=== INPUT_PARAMS_END ===")
 
-    def SetPos(side, pct):
+    def SetPos(side, pct, desc=None):
         s = str(side).strip().capitalize()
         if s not in ("Yes", "No"):
             raise ValueError(f"side 必须是 Yes/No，当前: {side}")
@@ -332,7 +359,10 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
             p = 0.0
         if p > 1:
             p = 1.0
-        actions.append({"type": "SETPOS", "side": s, "pct": float(p)})
+        action_desc = str(desc).strip() if desc is not None else ""
+        if not action_desc:
+            action_desc = f"将 {s} 目标仓位设为 {float(p)}"
+        actions.append({"type": "SETPOS", "side": s, "pct": float(p), "desc": action_desc})
 
     Enddate = usedata.get("Enddate", usedata.get("end_date", ""))
     day_to_end = _to_float(usedata.get("day_to_end", usedata.get("days_to_end", 9999)), default=9999)
@@ -571,6 +601,19 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
                 Print("side=No")
                 Print("pct=1.0")
                 Print("reason=hold S4")
+
+    ts = _pick_ts(usedata)
+    inputs_payload = {
+        "raw_param": {
+            "AnchorCompany": anchor_company,
+            "RankPosition": rank_position,
+        },
+        "raw_usedata": raw_usedata,
+        "UseData": raw_usedata,
+        "NowTime": ts,
+        "Enddate": Enddate,
+    }
+    _emit_db_json(Print, ts, inputs_payload, actions)
 
     return {"actions": actions, "print": logs, "wake_reason": wake_reason}
 

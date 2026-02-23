@@ -380,6 +380,35 @@ def _extract_prev_target(usedata: _UseDataProxy, side: str):
     return None
 
 
+def _stable_json_dumps(obj):
+    try:
+        return json.dumps(obj, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+    except Exception:
+        return json.dumps({"error": "json_serialize_failed"}, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
+
+
+def _pick_ts_from_map(data_map: dict):
+    if not isinstance(data_map, dict):
+        return None
+    for k in ("NowTime", "query_time", "query_time_beijing", "ts_utc", "timestamp"):
+        v = data_map.get(k)
+        s = str(v).strip() if v is not None else ""
+        if s:
+            return s
+    return None
+
+
+def _emit_db_json(Print, ts, inputs, actions):
+    payload = {
+        "ts": ts,
+        "inputs": inputs if isinstance(inputs, dict) else {},
+        "actions": actions if isinstance(actions, list) else [],
+    }
+    Print("===DB_JSON_BEGIN===")
+    Print(_stable_json_dumps(payload))
+    Print("===DB_JSON_END===")
+
+
 def _run_strategy(usedata: _UseDataProxy, fact_side, ref_ask, risk, hedge_sell_bias, trend_sell_bias, core_sell_bias, start_day):
     actions = []
     logs = []
@@ -388,7 +417,7 @@ def _run_strategy(usedata: _UseDataProxy, fact_side, ref_ask, risk, hedge_sell_b
     def Print(text):
         logs.append(str(text))
 
-    def SetPos(side, pct):
+    def SetPos(side, pct, desc=None):
         s = _side_name(side)
         if s not in ("Yes", "No"):
             raise ValueError(f"side 必须是 Yes/No，当前: {side}")
@@ -396,7 +425,10 @@ def _run_strategy(usedata: _UseDataProxy, fact_side, ref_ask, risk, hedge_sell_b
         if p > 1.0 and p <= 100.0:
             p = p / 100.0
         p = _clamp(p, 0.0, 1.0)
-        actions.append({"type": "SETPOS", "side": s, "pct": float(p)})
+        action_desc = str(desc).strip() if desc is not None else ""
+        if not action_desc:
+            action_desc = f"将 {s} 目标仓位设为 {float(p)}"
+        actions.append({"type": "SETPOS", "side": s, "pct": float(p), "desc": action_desc})
 
     # 开头先打印全部入参与 UseData 原始字段，便于逐项核对
     Print("=== RAW_INPUTS_BEGIN ===")
@@ -676,6 +708,23 @@ def _run_strategy(usedata: _UseDataProxy, fact_side, ref_ask, risk, hedge_sell_b
 
     SetPos(fact_side_name, f_target)
     SetPos(opp_side_name, o_target)
+    ts = _pick_ts_from_map(raw_map)
+    inputs_payload = {
+        "raw_param": {
+            "FactSide": fact_side,
+            "FactSide_ref_ask": ref_ask,
+            "risk": risk,
+            "hedge_sell_bias": hedge_sell_bias,
+            "trend_sell_bias": trend_sell_bias,
+            "core_sell_bias": core_sell_bias,
+            "start_day": start_day,
+        },
+        "raw_usedata": raw_map,
+        "UseData": raw_map,
+        "NowTime": ts,
+        "Enddate": usedata.get("Enddate", usedata.get("end_date", "")),
+    }
+    _emit_db_json(Print, ts, inputs_payload, actions)
 
     return {"actions": actions, "print": logs, "wake_reason": wake_reason}
 
@@ -1046,10 +1095,13 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     def Print(msg):
         logs.append(str(msg))
 
-    def SetPos(side, pct):
+    def SetPos(side, pct, desc=None):
         s = _norm_side(side)
         p = _clamp(_to_float(pct, 0.0), 0.0, 1.0)
-        actions.append({"type": "SETPOS", "side": s, "pct": float(p)})
+        action_desc = str(desc).strip() if desc is not None else ""
+        if not action_desc:
+            action_desc = f"将 {s} 目标仓位设为 {float(p)}"
+        actions.append({"type": "SETPOS", "side": s, "pct": float(p), "desc": action_desc})
 
     # 开头先打印全部入参与 UseData 原始字段，便于逐项核对
     Print("=== RAW_INPUTS_BEGIN ===")
@@ -1299,6 +1351,15 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
 
     SetPos(fact_side, fact_target)
     SetPos(opp_side, opp_target)
+    ts = _pick_ts_from_map(raw_map)
+    inputs_payload = {
+        "raw_param": raw_params,
+        "raw_usedata": raw_map,
+        "UseData": raw_map,
+        "NowTime": ts,
+        "Enddate": usedata.get("Enddate", usedata.get("end_date", "")),
+    }
+    _emit_db_json(Print, ts, inputs_payload, actions)
     return {"actions": actions, "print": logs, "wake_reason": wake_reason}
 
 
