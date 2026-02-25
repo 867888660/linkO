@@ -101,8 +101,8 @@ Outputs[1]['Kind'] = 'String'
 Outputs[1]['name'] = 'Full_Path'
 
 FunctionIntroduction = (
-    '组件功能：将 Yes / No / 实时 的 JSON 输入解析为结构化记录，并写入 SQLite 的四张业务表：'
-    '`Yes_Data` / `No_Data` / `RealTime_Data` / `Action_Data`。\n\n'
+    '组件功能：将 Yes / No / 实时 / 指标 的 JSON 输入解析为结构化记录，并写入 SQLite 的五张业务表：'
+    '`Yes_Data` / `No_Data` / `RealTime_Data` / `Action_Data` / `metrics`。\n\n'
     '代码功能摘要：\n'
     '- 输入分三路：YesJson / NoJson / RealTimeJson（支持 `{...}`、`[{...},{...}]`、多行 JSONL、多个 JSON 拼接；不再支持 KV 行兜底）\n'
     '- 可选 Action 输入：写入 `Action_Data`（同样支持 JSON/JSONL/多段 JSON）\n'
@@ -227,9 +227,6 @@ _RT_DEDUPE_FP_COL = "__rt_data_fingerprint"
 _ACT_DEDUPE_FP_COL = "__action_fingerprint"
 _ACT_BATCH_DEDUPE_FP_COL = "__action_batch_fingerprint"
 
-# RealTime：当这两个核心字段都不变时，整条实时记录不插入（直接沿用上一时间点）
-_RT_NO_UPDATE_IF_SAME_COLS = ("data_price", "data_market_cap_used")
-
 # Action 指纹去重时忽略的字段（这些字段变化不应触发写入）
 _ACTION_FP_IGNORE_KEYS_LOWER = {
     # 时间/批次类
@@ -245,8 +242,6 @@ _ACTION_FP_IGNORE_KEYS_LOWER = {
     "action_index",
     "action_source",
     "action_raw_json",
-    # 仅用于记录该批动作对应时间点；不应触发“动作变化”
-    "action_time_point",
     # 原始 JSON 备份列：不参与“动作是否变化”的判定（避免仅格式变化导致重复写入）
     "originaljson",
     # print 是日志/解释文本，可能包含 day_to_end 等易变行；不应触发“动作变化”
@@ -274,6 +269,76 @@ _ACTION_DB_FIELDS = (
     "db_prints_json",
     "db_calc_json",
 )
+
+_ACTION_ALLOWED_KEYS = (
+    "Yes_Pct",
+    "No_Pct",
+    "action_raw_json",
+    "YesMode",
+    "NoMode",
+    "YesQty",
+    "NoQty",
+    "Print",
+)
+
+
+def _extract_metrics_dict(v: Any) -> Optional[Dict[str, Any]]:
+    """
+    尽量把输入解析为 metrics dict：
+    - dict 直接返回
+    - str 尝试按 JSON 解析后返回 dict
+    其它类型返回 None
+    """
+    vv = _maybe_json_load(v)
+    if isinstance(vv, dict):
+        return vv
+    return None
+
+
+def _build_action_snapshot(rec: Any, print_hint: Any = None) -> Optional[Dict[str, Any]]:
+    """
+    把任意 action 来源归一化为 Action_Data 快照行，仅保留允许字段。
+    """
+    if not isinstance(rec, dict):
+        return None
+    out: Dict[str, Any] = {}
+
+    # 1) Yes/No pct（优先直接字段，否则尝试从 actions 提取）
+    y_pct = rec.get("Yes_Pct")
+    n_pct = rec.get("No_Pct")
+    if y_pct is None and n_pct is None:
+        yy, nn, ok = _extract_yes_no_pct_from_actions(rec.get("actions"))
+        if ok:
+            y_pct, n_pct = yy, nn
+    if y_pct is not None:
+        out["Yes_Pct"] = y_pct
+    if n_pct is not None:
+        out["No_Pct"] = n_pct
+
+    # 2) 原始 action json
+    raw_json = _json_text_or_none(_maybe_json_load(rec.get("actions")))
+    if raw_json:
+        out["action_raw_json"] = raw_json
+    elif rec.get("action_raw_json") is not None:
+        out["action_raw_json"] = rec.get("action_raw_json")
+
+    # 3) 模式/数量
+    for kk in ("YesMode", "NoMode", "YesQty", "NoQty"):
+        vv = rec.get(kk)
+        if vv is not None and _safe_str(vv).strip() != "":
+            out[kk] = vv
+
+    # 4) Print（优先当前记录，再回退 hint）
+    pv = rec.get("Print", rec.get("print", print_hint))
+    if pv is not None and _safe_str(pv).strip() != "":
+        out["Print"] = pv
+
+    # 5) 仅保留白名单列
+    final_out: Dict[str, Any] = {}
+    for k in _ACTION_ALLOWED_KEYS:
+        if k in out:
+            final_out[k] = out.get(k)
+    return final_out if final_out else None
 
 
 def _sanitize_col_name(name: Any) -> str:
@@ -359,23 +424,6 @@ def _iter_json_from_text(text: str) -> Iterable[Any]:
 def _maybe_json_load(v: Any) -> Any:
     """
     如果 v 是形如 '{...}' / '[...]' 的字符串，尝试 json.loads；失败则返回原值。
-    """
-    if not isinstance(v, str):
-        return v
-    s = v.strip()
-    if not s:
-        return v
-    if not ((s.startswith("{") and s.endswith("}")) or (s.startswith("[") and s.endswith("]"))):
-        return v
-    try:
-        return json.loads(s)
-    except Exception:
-        return v
-
-
-def _try_parse_json_text(v: Any) -> Any:
-    """
-    若 v 是 JSON 文本则尽量解析；否则返回原值。
     """
     if not isinstance(v, str):
         return v
@@ -493,6 +541,48 @@ def _attach_db_payload_fields(rec: Dict[str, Any], db_payload: Any) -> int:
         rec["db_calc_json"] = db_calc
         attached += 1
     return attached
+
+
+def _prepare_action_record_for_storage(rec: Dict[str, Any], overwrite_from_raw: bool = True) -> Dict[str, Any]:
+    """
+    统一处理 Action 记录：
+    - 解析 action_raw_json（可选覆盖 actions/print）
+    - 提取并挂载 DB_JSON 协议字段（db_ts/db_*_json）
+    - 保留 OriginalJson 便于排查
+    """
+    if not isinstance(rec, dict):
+        return {}
+    out = dict(rec)
+    db_payload = None
+
+    try:
+        raw_txt = _safe_str(out.get("action_raw_json")).strip()
+        if raw_txt:
+            if "OriginalJson" not in out:
+                out["OriginalJson"] = raw_txt
+            parsed = _maybe_json_load(raw_txt)
+            parsed = _strip_keys_recursive(parsed, _ACTION_STRIP_KEYS_LOWER)
+            if isinstance(parsed, dict):
+                lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
+                if "actions" in lower_map:
+                    if overwrite_from_raw or ("actions" not in out):
+                        out["actions"] = parsed.get(lower_map["actions"])
+                if "print" in lower_map:
+                    if overwrite_from_raw or ("print" not in out):
+                        out["print"] = parsed.get(lower_map["print"])
+            elif isinstance(parsed, list):
+                if overwrite_from_raw or ("actions" not in out):
+                    out["actions"] = parsed
+    except Exception:
+        pass
+
+    if "print" in out:
+        db_payload = _extract_db_json_block(out.get("print"))
+    if isinstance(db_payload, dict):
+        _attach_db_payload_fields(out, db_payload)
+        if ("actions" not in out) and ("actions" in db_payload):
+            out["actions"] = db_payload.get("actions")
+    return out
 
 
 def _extract_data_as_dict(data_val: Any) -> Optional[Dict[str, Any]]:
@@ -953,6 +1043,22 @@ def _infer_symbol_from_records(records: List[Any]) -> str:
     return ""
 
 
+def _infer_symbol_from_inputs(rt_val: Any, yes_val: Any, no_val: Any) -> str:
+    """
+    若未显式传入 symbol，按 RealTime -> Yes -> No 的优先级尝试从输入 JSON 中推断。
+    失败时返回空字符串。
+    """
+    for raw in (rt_val, yes_val, no_val):
+        try:
+            recs, _pe = _normalize_to_records(raw)
+            sym = _infer_symbol_from_records(recs)
+            if sym:
+                return sym
+        except Exception:
+            continue
+    return ""
+
+
 def _ensure_columns(conn: sqlite3.Connection, table: str, col_names: List[str], existing_cols_cache: Dict[str, set]):
     """
     确保这些列存在；不存在就 ALTER TABLE ADD COLUMN。
@@ -1021,6 +1127,7 @@ def run_node(node):
                 "No": "No_Data",
                 "RealTime": "RealTime_Data",
                 "Action": "Action_Data",
+                "Metrics": "metrics",
             }
             for t in tables.values():
                 _ensure_table(conn, t)
@@ -1035,23 +1142,7 @@ def run_node(node):
 
             # 若未显式提供 symbol，则尽量从输入 JSON 推断（优先 RealTime，其次 Yes/No）
             if not symbol_s:
-                try:
-                    rt_records, _pe = _normalize_to_records(rt_val)
-                    symbol_s = _infer_symbol_from_records(rt_records) or symbol_s
-                except Exception:
-                    pass
-            if not symbol_s:
-                try:
-                    y_records, _pe = _normalize_to_records(yes_val)
-                    symbol_s = _infer_symbol_from_records(y_records) or symbol_s
-                except Exception:
-                    pass
-            if not symbol_s:
-                try:
-                    n_records, _pe = _normalize_to_records(no_val)
-                    symbol_s = _infer_symbol_from_records(n_records) or symbol_s
-                except Exception:
-                    pass
+                symbol_s = _infer_symbol_from_inputs(rt_val, yes_val, no_val) or symbol_s
 
             # 统一批次时间：NowTime > RealTimeJson(JSON 内) > 当前 UTC
             now_time_s = _safe_str(now_time).strip()
@@ -1073,6 +1164,8 @@ def run_node(node):
                 skipped = 0
                 # Action_Data：不按 symbol 维度写入/去重（表内也不需要 symbol 列）
                 is_action_table = source_label == "Action"
+                # metrics 表：按 symbol 维度保存；同值列写 NULL；若整行都未变化则跳过
+                is_metrics_table = source_label == "Metrics"
                 # RealTime_Data.data_json：直接存入“整段 RealTimeJson 原始输入”（不加工）
                 rt_raw_text: Optional[str] = None
                 if source_label == "RealTime":
@@ -1116,7 +1209,7 @@ def run_node(node):
                         # 仅从 data 拆；data_json 在本组件语义中固定为“整段 RealTimeJson 原文”
                         payload = None
                         if "data" in r0:
-                            payload = _try_parse_json_text(r0.get("data"))
+                            payload = _maybe_json_load(r0.get("data"))
 
                         if isinstance(payload, list) and payload and all(isinstance(x, dict) for x in payload):
                             expanded.extend(payload)
@@ -1237,11 +1330,10 @@ def run_node(node):
                                 except Exception:
                                     pass
 
-                            # 注入统一时间
-                            # 强制统一三表的 query_time：以 RealTimeJson 的时间为准
-                            if unified_query_time:
+                            # 注入统一时间（Action_Data 按你的要求仅保留动作快照字段，不写 query_time*）
+                            if (not is_action_table) and unified_query_time:
                                 r["query_time"] = unified_query_time
-                            if unified_query_time_beijing:
+                            if (not is_action_table) and unified_query_time_beijing:
                                 r["query_time_beijing"] = unified_query_time_beijing
 
                             # 注入盘口（由新增 inputs 提供，优先级最高）
@@ -1260,156 +1352,32 @@ def run_node(node):
                                 if nb:
                                     r["bid"] = nb
 
-                            # RealTime: actions 单独拆到 Action_Data；此处避免把整段 actions 列表写入 RealTime_Data
-                            if source_label == "RealTime" and "actions" in r:
-                                raw_actions = r.get("actions")
-                                actions_json = _json_text_or_none(_maybe_json_load(raw_actions))
-                                if actions_json:
-                                    r["actions_json"] = actions_json
-                                try:
-                                    del r["actions"]
-                                except Exception:
-                                    pass
+                            # RealTime 的“拆行 + 去时间字段 + 整行指纹去重”已在上方专用分支处理；
+                            # 这里进入的是非 RealTime 路径，保持逻辑简洁避免误读。
 
-                            # RealTime: 解析并展开 data -> data_<key> 列
-                            if source_label == "RealTime" and "data" in r:
-                                raw_data = r.get("data")
-                                # 备份原始 data（若是结构化）
-                                data_json = _json_text_or_none(_maybe_json_load(raw_data))
-                                if data_json:
-                                    r["data_json"] = data_json
-
-                                data_dict = _extract_data_as_dict(raw_data)
-                                if data_dict is not None:
-                                    for dk, dv in data_dict.items():
-                                        # 用前缀避免和顶层字段冲突
-                                        r[f"data_{_safe_str(dk).strip()}"] = dv
-                                    # 原始 data 不再以单列写入（避免重复和大字段）
-                                    try:
-                                        del r["data"]
-                                    except Exception:
-                                        pass
-
-                            # RealTime 的“拆行 + 去时间字段 + 整行指纹去重”已在上方专用分支处理
-
-                            # RealTime 额外去重：仅关注“核心实时数据”（data_* / data_json），忽略 query_time* 等
-                            if source_label == "RealTime":
-                                fp_payload: Dict[str, Any] = {}
-                                for k, v in r.items():
-                                    ks = _safe_str(k)
-                                    if ks.startswith("data_"):
-                                        fp_payload[ks] = _to_sqlite_value(v)
-                                if not fp_payload and "data_json" in r:
-                                    fp_payload["data_json"] = _safe_str(r.get("data_json"))
-                                # 若 data 不是可展开结构，也纳入指纹（避免 fp 为空导致误判）
-                                if not fp_payload and "data" in r:
-                                    fp_payload["data"] = _to_sqlite_value(r.get("data"))
-                                # 保底：至少把 symbol 放进去，避免不同 symbol 共用一个 fp
-                                if symbol_s:
-                                    fp_payload["symbol"] = symbol_s
-                                fp = _stable_json_fingerprint(fp_payload)
-                                if fp and fp == (_get_last_cached(_RT_DEDUPE_FP_COL, symbol_s or "") or ""):
-                                    skipped += 1
-                                    continue
-                                if fp:
-                                    changed_meta.append((_RT_DEDUPE_FP_COL, fp))
-
-                            # Action 额外去重：忽略时间/索引/来源，只要“动作内容”不变就不插入
+                            # Action_Data：仅保留动作快照需要的列
                             if source_label == "Action":
-                                # 如果 action_raw_json 是一个包含 actions/print 的 JSON，把它拆成两列
-                                # - actions: list/dict（会转成 JSON 存 TEXT）
-                                # - print : 可能是 list[str]（按行拼接成可读 TEXT）
-                                db_payload = None
-                                try:
-                                    raw_txt = _safe_str(r.get("action_raw_json")).strip()
-                                    if raw_txt:
-                                        # 备份原始 JSON（用户需要的列名：OriginalJson）
-                                        if "OriginalJson" not in r:
-                                            r["OriginalJson"] = raw_txt
-                                        parsed = _try_parse_json_text(raw_txt)
-                                        parsed = _strip_keys_recursive(parsed, _ACTION_STRIP_KEYS_LOWER)
-                                        if isinstance(parsed, dict):
-                                            lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
-                                            if "actions" in lower_map:
-                                                r["actions"] = parsed.get(lower_map["actions"])
-                                            if "print" in lower_map:
-                                                r["print"] = parsed.get(lower_map["print"])
-                                                db_payload = _extract_db_json_block(parsed.get(lower_map["print"]))
-                                        elif isinstance(parsed, list):
-                                            # 若 raw_json 直接就是 actions 列表
-                                            r["actions"] = parsed
-                                except Exception:
-                                    pass
-
-                                # 支持从 print 协议块提取结构化参数，稳定入库到 Action_Data
-                                if db_payload is None and "print" in r:
-                                    db_payload = _extract_db_json_block(r.get("print"))
-                                if isinstance(db_payload, dict):
-                                    db_ts = _safe_str(db_payload.get("ts")).strip()
-                                    if db_ts:
-                                        r["db_ts"] = db_ts
-
-                                    db_inputs = _json_text_or_none(db_payload.get("inputs"))
-                                    if db_inputs:
-                                        r["db_inputs_json"] = db_inputs
-
-                                    db_actions = _json_text_or_none(db_payload.get("actions"))
-                                    if db_actions:
-                                        r["db_actions_json"] = db_actions
-                                        if "actions" not in r:
-                                            r["actions"] = db_payload.get("actions")
-
-                                    db_prints = _json_text_or_none(db_payload.get("prints"))
-                                    if db_prints:
-                                        r["db_prints_json"] = db_prints
-
-                                    db_calc = _json_text_or_none(db_payload.get("calc"))
-                                    if db_calc:
-                                        r["db_calc_json"] = db_calc
-
-                                # 只要进入 Action 分支，就确保 DB 协议列在 Action_Data 中存在。
-                                # 这样即使本次值与上一时间点相同被置为 NULL，表结构里也能看到对应列。
-                                try:
-                                    _ensure_columns(
-                                        conn,
-                                        table,
-                                        [_sanitize_col_name(k) for k in _ACTION_DB_FIELDS],
-                                        existing_cols_cache,
-                                    )
-                                except Exception:
-                                    pass
-
-                                # 不把原始 print 大文本直接入 Action_Data（只保留结构化 DB 字段）
-                                try:
-                                    if "print" in r:
-                                        del r["print"]
-                                except Exception:
-                                    pass
-
-                                # DB 协议字段：若与上一时间点一致，则本行写 NULL（meta 仍保留上次非空值）
-                                for db_key in _ACTION_DB_FIELDS:
-                                    if db_key not in r:
-                                        continue
-                                    cur_norm = _norm_cmp(_to_sqlite_value(r.get(db_key)))
-                                    last_norm = _get_last_cached(_sanitize_col_name(db_key), "")
-                                    if cur_norm == last_norm:
-                                        r[db_key] = None
-
-                                fp_payload: Dict[str, Any] = {}
-                                for k, v in r.items():
-                                    kl = _safe_str(k).strip().lower()
-                                    if kl in _ACTION_FP_IGNORE_KEYS_LOWER:
-                                        continue
-                                    # 也跳过 query_time*（即便大小写不同）
-                                    if kl in _DEDUPE_IGNORE_KEYS_LOWER:
-                                        continue
-                                    fp_payload[_safe_str(k).strip()] = _to_sqlite_value(v)
-                                fp = _stable_json_fingerprint(fp_payload)
-                                if fp and fp == (_get_last_cached(_ACT_DEDUPE_FP_COL, "" if is_action_table else (symbol_s or "")) or ""):
-                                    skipped += 1
-                                    continue
-                                if fp:
-                                    changed_meta.append((_ACT_DEDUPE_FP_COL, fp))
+                                allowed_keys = (
+                                    "Yes_Pct",
+                                    "No_Pct",
+                                    "action_raw_json",
+                                    "YesMode",
+                                    "NoMode",
+                                    "YesQty",
+                                    "NoQty",
+                                    "Print",
+                                    "print",
+                                )
+                                compact: Dict[str, Any] = {}
+                                for ak in allowed_keys:
+                                    if ak in r:
+                                        compact[ak] = r.get(ak)
+                                # 统一列名：只存 Print
+                                if "Print" not in compact and "print" in compact:
+                                    compact["Print"] = compact.get("print")
+                                if "print" in compact:
+                                    del compact["print"]
+                                r = compact
 
                             # 单列去重：只写“发生变化”的非易变列；易变列不参与触发判断
                             seen_cols = set()
@@ -1417,6 +1385,7 @@ def run_node(node):
                             changed_vals: List[Any] = []
                             volatile_cols: List[str] = []
                             volatile_vals: List[Any] = []
+                            metrics_has_change = False
 
                             for k, v in r.items():
                                 base = _sanitize_col_name(k)
@@ -1445,14 +1414,23 @@ def run_node(node):
                                 cur_v = _norm_cmp(sql_val)
                                 # Action_Data：不分 symbol
                                 last_v = _get_last_cached(col, "" if is_action_table else (symbol_s or ""))
+                                if is_metrics_table and cur_v == last_v:
+                                    # metrics 规则：同值列显式写 NULL，避免重复值污染
+                                    changed_cols.append(col)
+                                    changed_vals.append(None)
+                                    continue
                                 if cur_v == last_v:
                                     continue
+                                metrics_has_change = True
                                 changed_cols.append(col)
                                 changed_vals.append(sql_val)
                                 changed_meta.append((col, cur_v))
 
                             # 没有任何“非易变列”的变化 => 整行跳过
                             if not changed_cols:
+                                skipped += 1
+                                continue
+                            if is_metrics_table and (not metrics_has_change):
                                 skipped += 1
                                 continue
 
@@ -1519,6 +1497,8 @@ def run_node(node):
             # Action_Data：收集两路 action 记录后复用 _save_one("Action", ...)
             action_records: List[Any] = []
             action_parse_err = 0
+            metrics_records: List[Any] = []
+            metrics_parse_err = 0
             action_dbg = {
                 "rt_records_seen": 0,
                 "action_input_records_seen": 0,
@@ -1532,109 +1512,82 @@ def run_node(node):
                 "action_last_batch_fp_preview": "",
             }
 
+            def _append_metrics_record(m: Any, source: str, ts_hint: Optional[str], symbol_hint: str):
+                mm = _extract_metrics_dict(m)
+                if not isinstance(mm, dict) or not mm:
+                    return
+                rec = dict(mm)
+                rec["metric_source"] = source
+                mts = _safe_str(rec.get("ts")).strip() or _safe_str(ts_hint).strip()
+                if mts:
+                    rec["ts"] = mts
+                rec["symbol"] = _safe_str(symbol_hint).strip() or symbol_s or ""
+                metrics_records.append(rec)
+
+            action_print_hint: Any = None
+
             # 1) RealTimeJson.actions
             if rt_val is not None and _safe_str(rt_val).strip() != "":
                 rt_records, pe = _normalize_to_records(rt_val)
                 action_parse_err += pe
+                metrics_parse_err += pe
                 for rt in [x for x in rt_records if x is not None]:
                     if not isinstance(rt, dict):
                         continue
                     action_dbg["rt_records_seen"] += 1
+                    rt_symbol = _safe_str(rt.get("symbol")).strip() or symbol_s or ""
+                    rt_time_hint = _safe_str(rt.get("query_time")).strip() or unified_query_time
+                    _append_metrics_record(rt.get("metrics"), "RealTimeJson.metrics", rt_time_hint, rt_symbol)
                     actions = rt.get("actions")
                     if not isinstance(actions, list):
                         continue
                     rt_db_payload = _extract_db_json_block(rt.get("print"))
                     if isinstance(rt_db_payload, dict):
                         action_dbg["db_json_detected_rt"] += 1
+                        _append_metrics_record(
+                            rt_db_payload.get("calc"),
+                            "RealTimeJson.dbjson.calc",
+                            rt_time_hint,
+                            rt_symbol,
+                        )
+                    if action_print_hint is None:
+                        action_print_hint = rt.get("print")
                     rt_time = _safe_str(rt.get("query_time")).strip() or unified_query_time
-                    # 先落一条“汇总动作”记录：保存 Yes_Pct/No_Pct，并携带时间点用于去重
-                    y_pct, n_pct, has_pct = _extract_yes_no_pct_from_actions(actions)
-                    if has_pct:
-                        summary_rec: Dict[str, Any] = {
-                            "action_source": "RealTimeJson.actions_summary",
-                            "rt_time": rt_time,
-                            # 不忽略该字段：确保按时间点去重（同一时间重复输入会被跳过）
-                            "action_time_point": rt_time,
-                            "Yes_Pct": y_pct,
-                            "No_Pct": n_pct,
-                        }
-                        actions_raw_json = _json_text_or_none(_maybe_json_load(actions))
-                        if actions_raw_json:
-                            summary_rec["action_raw_json"] = actions_raw_json
-                        action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(summary_rec, rt_db_payload)
-                        action_records.append(summary_rec)
-                    elif isinstance(rt_db_payload, dict):
-                        # 即使没有 Yes/No 汇总，也把 DB_JSON 落一条结构化记录
-                        db_only_rec: Dict[str, Any] = {
-                            "action_source": "RealTimeJson.dbjson",
-                            "rt_time": rt_time,
-                            "action_time_point": rt_time,
-                        }
-                        action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(db_only_rec, rt_db_payload)
-                        action_records.append(db_only_rec)
-
-                    for idx, act in enumerate(actions):
-                        # act 可能是 dict，也可能是 JSON 字符串；尽量解析成 dict 以拆列保存（pct/side/type）
-                        act_dict = _extract_action_as_dict(act)
-                        if act_dict is not None:
-                            rec = dict(act_dict)
-                            rec["action_index"] = idx
-                            rec["action_source"] = "RealTimeJson.actions"
-                            rec["rt_time"] = rt_time
-                            # 备份原始 action（便于排查）
-                            raw_json = _json_text_or_none(_maybe_json_load(act))
-                            if raw_json:
-                                rec["action_raw_json"] = raw_json
-                            action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(rec, rt_db_payload)
-                            action_records.append(rec)
-                        else:
-                            rec = {
-                                "action_index": idx,
-                                "action_source": "RealTimeJson.actions",
-                                "rt_time": rt_time,
-                                "action_value": act,
-                            }
-                            action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(rec, rt_db_payload)
-                            action_records.append(rec)
+                    snap = _build_action_snapshot(
+                        {"actions": actions, "print": rt.get("print")},
+                        print_hint=rt.get("print"),
+                    )
+                    if snap:
+                        action_records.append(snap)
 
             # 2) Action input
             if action_raw is not None and _safe_str(action_raw).strip() != "":
                 a_records, pe = _normalize_to_records(action_raw)
                 action_parse_err += pe
+                metrics_parse_err += pe
                 for act in [x for x in a_records if x is not None]:
                     action_dbg["action_input_records_seen"] += 1
+                    act_symbol = _safe_str(act.get("symbol")).strip() if isinstance(act, dict) else (symbol_s or "")
+                    _append_metrics_record(
+                        act.get("metrics") if isinstance(act, dict) else None,
+                        "ActionInput.metrics",
+                        unified_query_time,
+                        act_symbol,
+                    )
                     act_db_payload = _extract_db_json_block(act.get("print")) if isinstance(act, dict) else None
                     if isinstance(act_db_payload, dict):
                         action_dbg["db_json_detected_action_input"] += 1
-                    # 若上游直接给了 {"actions":[...]}，同样提取 Yes_Pct/No_Pct 写入汇总行
-                    y_pct, n_pct, has_pct = _extract_yes_no_pct_from_actions(act)
-                    if has_pct:
-                        summary_rec = {
-                            "action_source": "ActionInput.actions_summary",
-                            "rt_time": unified_query_time,
-                            "action_time_point": unified_query_time,
-                            "Yes_Pct": y_pct,
-                            "No_Pct": n_pct,
-                        }
-                        raw_json = _json_text_or_none(_maybe_json_load(act))
-                        if raw_json:
-                            summary_rec["action_raw_json"] = raw_json
-                        action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(summary_rec, act_db_payload)
-                        action_records.append(summary_rec)
-
-                    act_dict = _extract_action_as_dict(act)
-                    if act_dict is not None:
-                        rec = dict(act_dict)
-                        rec["action_source"] = "ActionInput"
-                        raw_json = _json_text_or_none(_maybe_json_load(act))
-                        if raw_json:
-                            rec["action_raw_json"] = raw_json
-                        action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(rec, act_db_payload)
-                        action_records.append(rec)
-                    else:
-                        rec = {"action_source": "ActionInput", "action_value": act}
-                        action_dbg["db_fields_attached_total"] += _attach_db_payload_fields(rec, act_db_payload)
-                        action_records.append(rec)
+                        _append_metrics_record(
+                            act_db_payload.get("calc"),
+                            "ActionInput.dbjson.calc",
+                            unified_query_time,
+                            act_symbol,
+                        )
+                    if action_print_hint is None and isinstance(act, dict):
+                        action_print_hint = act.get("print")
+                    snap = _build_action_snapshot(act, print_hint=action_print_hint)
+                    if snap:
+                        action_records.append(snap)
 
             # 3) YesMode/NoMode/YesQty/NoQty inputs -> 写入 Action_Data
             # - 任意字段非空即写入 1 条记录（列名与 Input 名保持一致，便于直接查表）
@@ -1645,126 +1598,31 @@ def run_node(node):
             if ym or nm or yq or nq:
                 action_records.append(
                     {
-                        "action_source": "ModeQtyInputs",
-                        "rt_time": unified_query_time,
                         "YesMode": ym or None,
                         "NoMode": nm or None,
                         "YesQty": yq or None,
                         "NoQty": nq or None,
                     }
                 )
-
-            # 4) 过滤“空动作”：
-            # - 解析 action_raw_json 得到 actions/print
-            # - 若 actions 为空且 print 为空（且无其它有效字段）=> 直接不写入（不插入新行）
-            def _action_has_meaningful_payload(rec: Any) -> bool:
-                if rec is None:
-                    return False
-                if not isinstance(rec, dict):
-                    return _safe_str(rec).strip() != ""
-
-                tmp = dict(rec)
-                try:
-                    raw_txt = _safe_str(tmp.get("action_raw_json")).strip()
-                    if raw_txt:
-                        parsed = _try_parse_json_text(raw_txt)
-                        parsed = _strip_keys_recursive(parsed, _ACTION_STRIP_KEYS_LOWER)
-                        if isinstance(parsed, dict):
-                            lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
-                            if "actions" in lower_map and "actions" not in tmp:
-                                tmp["actions"] = parsed.get(lower_map["actions"])
-                            if "print" in lower_map and "print" not in tmp:
-                                tmp["print"] = parsed.get(lower_map["print"])
-                        elif isinstance(parsed, list):
-                            if "actions" not in tmp:
-                                tmp["actions"] = parsed
-                except Exception:
-                    pass
-
-                # 判定有效字段（排除元字段/易变字段）
-                ignore_keys = {
-                    "action_source",
-                    "rt_time",
-                    "action_index",
-                    "action_raw_json",
-                    "originaljson",
-                    "wake_reason",
-                    "symbol",
-                    "saved_at_utc",
-                    "query_time",
-                    "query_time_beijing",
-                    "ts_utc",
-                    "nowtime",
-                    "ingested_at",
-                    "latency_ms",
-                    # print 不作为“动作是否存在/是否变化”的依据
-                    "print",
-                }
-
-                def _non_empty(v: Any) -> bool:
-                    if v is None:
-                        return False
-                    if isinstance(v, str):
-                        return v.strip() != ""
-                    if isinstance(v, (list, dict)):
-                        return len(v) > 0
-                    return True
-
-                src = _safe_str(tmp.get("action_source")).strip()
-                print_v = tmp.get("print")
-
-                def _has_lint_error_print(v: Any) -> bool:
-                    """
-                    Action 输入中常见 line/lint error 包：
-                    {"actions":[],"print":["[LintError] ..."], ...}
-                    这类记录虽无动作，但应写入 Action_Data 便于排查。
-                    """
-                    if v is None:
-                        return False
-                    if isinstance(v, str):
-                        return "[linterror]" in v.lower()
-                    if isinstance(v, list):
-                        for item in v:
-                            if "[linterror]" in _safe_str(item).lower():
-                                return True
-                        return False
-                    return "[linterror]" in _safe_str(v).lower()
-
-                # ModeQtyInputs：允许无 actions，只要模式/数量有值就算有效
-                if src == "ModeQtyInputs":
-                    for kk in ("YesMode", "NoMode", "YesQty", "NoQty"):
-                        if _non_empty(tmp.get(kk)):
-                            return True
-                    return False
-
-                # 其它来源：actions 为空就视为“无动作”，不写入（即使 print 有内容也不写）
-                actions_v = tmp.get("actions")
-                if isinstance(actions_v, (list, dict)):
-                    if len(actions_v) > 0:
-                        return True
-                    # 兼容：动作为空，但 print 携带 LintError（lineError）也要落库
-                    if _has_lint_error_print(print_v):
-                        return True
-                    # 显式 actions=[] / {} => 直接判定无动作
-                    return False
-
-                # 若没有 actions 字段，但有 action_value（例如 actions 元素不是 dict）也算有效
-                action_value_v = tmp.get("action_value")
-                if _non_empty(action_value_v):
-                    return True
-
-                # 再检查是否有其它非空字段（例如 pct/side/type 等）
-                for k, v in tmp.items():
-                    kl = _safe_str(k).strip().lower()
-                    if kl in ignore_keys:
-                        continue
-                    if _non_empty(v):
-                        return True
-                return False
-
+            # 合并同批 action 快照：每列取“最后一个非空值”，最终只保留一条记录
             action_dbg["action_records_before_filter"] = len(action_records)
             if action_records:
-                action_records = [r for r in action_records if _action_has_meaningful_payload(r)]
+                merged: Dict[str, Any] = {}
+                for rec in action_records:
+                    if not isinstance(rec, dict):
+                        continue
+                    for kk in _ACTION_ALLOWED_KEYS:
+                        if kk not in rec:
+                            continue
+                        vv = rec.get(kk)
+                        if vv is None:
+                            continue
+                        if isinstance(vv, str) and vv.strip() == "":
+                            continue
+                        merged[kk] = vv
+                if "Print" not in merged and action_print_hint is not None and _safe_str(action_print_hint).strip() != "":
+                    merged["Print"] = action_print_hint
+                action_records = [merged] if merged else []
             action_dbg["action_records_after_filter"] = len(action_records)
 
             if action_records:
@@ -1773,44 +1631,14 @@ def run_node(node):
                     payloads: List[Any] = []
                     for rec in recs:
                         if isinstance(rec, dict):
-                            tmp = dict(rec)
-                            # 批次指纹也纳入 DB_JSON（避免 actions 相同但 inputs 变化时被整批 skip）
-                            try:
-                                db_payload = None
-                                raw_txt = _safe_str(tmp.get("action_raw_json")).strip()
-                                if raw_txt:
-                                    parsed = _try_parse_json_text(raw_txt)
-                                    if isinstance(parsed, dict):
-                                        lower_map = {(_safe_str(k).strip().lower()): k for k in parsed.keys()}
-                                        if "print" in lower_map:
-                                            db_payload = _extract_db_json_block(parsed.get(lower_map["print"]))
-                                if db_payload is None and "print" in tmp:
-                                    db_payload = _extract_db_json_block(tmp.get("print"))
-                                if isinstance(db_payload, dict):
-                                    db_ts = _safe_str(db_payload.get("ts")).strip()
-                                    if db_ts:
-                                        tmp["db_ts"] = db_ts
-                                    db_inputs = _json_text_or_none(db_payload.get("inputs"))
-                                    if db_inputs:
-                                        tmp["db_inputs_json"] = db_inputs
-                                    db_actions = _json_text_or_none(db_payload.get("actions"))
-                                    if db_actions:
-                                        tmp["db_actions_json"] = db_actions
-                                    db_prints = _json_text_or_none(db_payload.get("prints"))
-                                    if db_prints:
-                                        tmp["db_prints_json"] = db_prints
-                                    db_calc = _json_text_or_none(db_payload.get("calc"))
-                                    if db_calc:
-                                        tmp["db_calc_json"] = db_calc
-                            except Exception:
-                                pass
-
                             fp_payload: Dict[str, Any] = {}
-                            for k, v in tmp.items():
-                                kl = _safe_str(k).strip().lower()
-                                if kl in _ACTION_FP_IGNORE_KEYS_LOWER:
+                            for k in _ACTION_ALLOWED_KEYS:
+                                if k not in rec:
                                     continue
-                                if kl in _DEDUPE_IGNORE_KEYS_LOWER:
+                                v = rec.get(k)
+                                if v is None:
+                                    continue
+                                if isinstance(v, str) and v.strip() == "":
                                     continue
                                 fp_payload[_safe_str(k).strip()] = _to_sqlite_value(v)
                             payloads.append(fp_payload)
@@ -1835,6 +1663,12 @@ def run_node(node):
             else:
                 a_ins, a_skip, a_err = 0, 0, action_parse_err
 
+            if metrics_records:
+                m_ins, m_skip, m_err = _save_one("Metrics", metrics_records)
+                m_err += metrics_parse_err
+            else:
+                m_ins, m_skip, m_err = 0, 0, metrics_parse_err
+
             conn.commit()
         finally:
             try:
@@ -1849,6 +1683,7 @@ def run_node(node):
             f"  - No   -> No_Data  (Inserted={n_ins}, Skipped={n_skip}, Errors={n_err})\n"
             f"  - RT   -> RealTime_Data (Inserted={r_ins}, Skipped={r_skip}, Errors={r_err})\n"
             f"  - ACT  -> Action_Data (Inserted={a_ins}, Skipped={a_skip}, Errors={a_err})\n"
+            f"  - MET  -> metrics (Inserted={m_ins}, Skipped={m_skip}, Errors={m_err})\n"
             f"ActionDebug:\n"
             f"  - rt_records_seen={action_dbg.get('rt_records_seen')}, action_input_records_seen={action_dbg.get('action_input_records_seen')}\n"
             f"  - db_json_detected_rt={action_dbg.get('db_json_detected_rt')}, db_json_detected_action_input={action_dbg.get('db_json_detected_action_input')}\n"

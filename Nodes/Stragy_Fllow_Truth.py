@@ -398,11 +398,12 @@ def _pick_ts_from_map(data_map: dict):
     return None
 
 
-def _emit_db_json(Print, ts, inputs, actions):
+def _emit_db_json(Print, ts, inputs, actions, calc=None):
     payload = {
         "ts": ts,
         "inputs": inputs if isinstance(inputs, dict) else {},
         "actions": actions if isinstance(actions, list) else [],
+        "calc": calc if isinstance(calc, dict) else {},
     }
     Print("===DB_JSON_BEGIN===")
     Print(_stable_json_dumps(payload))
@@ -1349,9 +1350,53 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     Print(f"RR_F={RR_F} RR_O={RR_O} profit_F={profit_F}")
     Print(f"target_fact={fact_target} target_opp={opp_target}")
 
-    SetPos(fact_side, fact_target)
-    SetPos(opp_side, opp_target)
+    should_set = (abs(fact_target - F_pos) > 1e-8) or (abs(opp_target - O_pos) > 1e-8)
+    if should_set:
+        SetPos(fact_side, fact_target)
+        SetPos(opp_side, opp_target)
+
     ts = _pick_ts_from_map(raw_map)
+    decision = "SETPOS" if should_set else "HOLD"
+    metrics = {
+        "ts": ts or "missing",
+        "fact_side": fact_side,
+        "opp_side": opp_side,
+        "time_ratio": time_ratio,
+        "core_stop": core_strict_line,
+        "core_stop_loose": core_loose_line,
+        "trend_tp": trend_tp_line,
+        "hedge_line": hedge_line,
+        "fact_target": fact_target,
+        "opp_target": opp_target,
+        "decision": decision,
+    }
+
+    summary_print = [
+        "[INPUT]",
+        f"FactSide={fact_side} ref_ask={ref_ask}",
+        f"day_to_end={day_to_end} start_day={start_day}",
+        f"F_bid={F_bid} O_bid={O_bid}",
+        "[CALC]",
+        f"time_ratio={time_ratio}",
+        f"core_stop={core_strict_line} core_stop_loose={core_loose_line}",
+        f"trend_tp={trend_tp_line} hedge_line={hedge_line}",
+        "[RULE]",
+    ]
+    if should_set:
+        summary_print.append("命中调仓条件，输出双边目标仓位。")
+    else:
+        summary_print.append("未命中调仓条件，维持当前仓位。")
+    if reduced_this_tick:
+        summary_print.append("本轮包含风险收缩动作（止盈/止损优先）。")
+    else:
+        summary_print.append("本轮无风险收缩信号。")
+    summary_print.append("[RESULT]")
+    summary_print.append(f"Decision={decision}")
+    if should_set:
+        summary_print.append(f"SetPos={fact_side}:{fact_target}, {opp_side}:{opp_target}")
+    else:
+        summary_print.append("Reason=hold_current_position")
+
     inputs_payload = {
         "raw_param": raw_params,
         "raw_usedata": raw_map,
@@ -1359,8 +1404,13 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
         "NowTime": ts,
         "Enddate": usedata.get("Enddate", usedata.get("end_date", "")),
     }
-    _emit_db_json(Print, ts, inputs_payload, actions)
-    return {"actions": actions, "print": logs, "wake_reason": wake_reason}
+    db_logs = []
+
+    def DBPrint(text):
+        db_logs.append(str(text))
+
+    _emit_db_json(DBPrint, ts, inputs_payload, actions, calc=metrics)
+    return {"actions": actions, "metrics": metrics, "print": summary_print, "wake_reason": wake_reason}
 
 
 def run_node(node):

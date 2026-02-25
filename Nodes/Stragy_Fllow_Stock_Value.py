@@ -256,11 +256,12 @@ def _pick_ts(usedata: _UseDataProxy):
     return None
 
 
-def _emit_db_json(Print, ts, inputs, actions):
+def _emit_db_json(Print, ts, inputs, actions, calc=None):
     payload = {
         "ts": ts,
         "inputs": inputs if isinstance(inputs, dict) else {},
         "actions": actions if isinstance(actions, list) else [],
+        "calc": calc if isinstance(calc, dict) else {},
     }
     Print("===DB_JSON_BEGIN===")
     Print(_stable_json_dumps(payload))
@@ -603,6 +604,55 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
                 Print("reason=hold S4")
 
     ts = _pick_ts(usedata)
+    metrics = {
+        "ts": ts or "missing",
+        "state": state,
+        "day_to_end": day_to_end,
+        "anchor_company": anchor,
+        "target_rank": target_rank,
+        "higher_count": higher_count,
+        "tie_flag": tie_flag,
+        "is_target_rank": is_target_rank,
+        "edge_margin": edge_margin,
+        "anchor_mcap": anchor_mcap,
+    }
+    decision = "SETPOS" if len(actions) > 0 else "HOLD"
+    reason_line = ""
+    for line in reversed(logs):
+        s = str(line)
+        if s.startswith("reason="):
+            reason_line = s.split("=", 1)[1].strip()
+            break
+    if not reason_line:
+        reason_line = "no_rule_triggered"
+    metrics["decision"] = decision
+
+    summary_inputs = [
+        "[INPUT]",
+        f"Anchor={anchor} TargetRank={target_rank}",
+        f"day_to_end={day_to_end}",
+        f"Yes_bid={Yes_now_bid} No_bid={No_now_bid}",
+        "[CALC]",
+        f"state={state}",
+        f"is_target_rank={is_target_rank}",
+        f"edge_margin={edge_margin}",
+        "[RULE]",
+    ]
+    if is_target_rank == 1:
+        summary_inputs.append("目标名次满足，允许偏向 Yes 侧决策。")
+    else:
+        summary_inputs.append("目标名次不满足，策略更偏向防守或保持。")
+    if decision == "HOLD":
+        summary_inputs.append("本轮未触发仓位切换条件。")
+    else:
+        summary_inputs.append("本轮触发仓位切换条件，已下发 SetPos。")
+    summary_inputs.append("[RESULT]")
+    summary_inputs.append(f"Decision={decision}")
+    summary_inputs.append(f"Reason={reason_line}")
+    if decision == "SETPOS":
+        acts = [f"{a.get('side')}:{a.get('pct')}" for a in actions if isinstance(a, dict)]
+        summary_inputs.append("SetPos=" + ", ".join(acts))
+
     inputs_payload = {
         "raw_param": {
             "AnchorCompany": anchor_company,
@@ -613,9 +663,13 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         "NowTime": ts,
         "Enddate": Enddate,
     }
-    _emit_db_json(Print, ts, inputs_payload, actions)
+    db_logs = []
 
-    return {"actions": actions, "print": logs, "wake_reason": wake_reason}
+    def DBPrint(text):
+        db_logs.append(str(text))
+
+    _emit_db_json(DBPrint, ts, inputs_payload, actions, calc=metrics)
+    return {"actions": actions, "metrics": metrics, "print": summary_inputs, "wake_reason": wake_reason}
 
 
 def run_node(node):
