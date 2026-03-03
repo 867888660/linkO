@@ -375,6 +375,12 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     No_Now_Pos = _to_float(usedata.get("No_Now_Pos", 0.0), default=0.0)
     anchor_raw = anchor_company
     mcap_map = _extract_mcap_usd_map(usedata)
+
+    # === 新增：排名输入完整性检查（避免 429 导致子集误判）===
+    RANK_UNIVERSE_REQUIRED = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
+    missing_rank_symbols = [s for s in RANK_UNIVERSE_REQUIRED if s not in mcap_map or _to_float(mcap_map.get(s), 0.0) <= 0.0]
+    rank_ok = (len(missing_rank_symbols) == 0)
+
     anchor, anchor_resolve = _resolve_anchor_company(anchor_raw, mcap_map)
     if not anchor or anchor not in mcap_map:
         companies = sorted(list(mcap_map.keys()))[:10]
@@ -464,8 +470,9 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     Print("state=" + str(state))
 
     is_target_rank = 0
-    if higher_count == (target_rank - 1) and tie_flag == 0:
+    if rank_ok and higher_count == (target_rank - 1) and tie_flag == 0:
         is_target_rank = 1
+    Print("rank_ok=" + str(rank_ok) + " missing_rank_symbols=" + ",".join(missing_rank_symbols))
     Print("is_target_rank=" + str(is_target_rank))
 
     if day_to_end <= 0.25:
@@ -638,6 +645,9 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         f"edge_margin={edge_margin}",
         "[RULE]",
     ]
+    if not rank_ok:
+        summary_inputs.append("⚠️ 市值数据不完整（可能触发 429/超时），本轮排名判断已降级为不可信。缺失: " + ",".join(missing_rank_symbols))
+
     if is_target_rank == 1:
         summary_inputs.append("目标名次满足，允许偏向 Yes 侧决策。")
     else:

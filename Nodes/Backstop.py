@@ -59,10 +59,10 @@ def run_node(node):
     table_name = "polyMarket_Monitor"
     required_columns = {
         "Strategy",
-        "Yes_Min_Qty",
-        "Yes_Max_Qty",
-        "No_Min_Qty",
-        "No_Max_Qty",
+        "Yes_Min_BudgetCap",
+        "Yes_Max_BudgetCap",
+        "No_Min_BudgetCap",
+        "No_Max_BudgetCap",
         "Search_words",
         "days_to_end",
         "Inputs1",
@@ -101,45 +101,44 @@ def run_node(node):
             cur,
             f'''
             UPDATE "{table_name}"
-            SET "Yes_Min_Qty" = 0
-            WHERE "Yes_Min_Qty" IS NULL OR TRIM(CAST("Yes_Min_Qty" AS TEXT)) = '';
+            SET "Yes_Min_BudgetCap" = 0
+            WHERE "Yes_Min_BudgetCap" IS NULL OR TRIM(CAST("Yes_Min_BudgetCap" AS TEXT)) = '';
             ''',
         )
         updated_yes_max = _run_update(
             cur,
             f'''
             UPDATE "{table_name}"
-            SET "Yes_Max_Qty" = 20
-            WHERE "Yes_Max_Qty" IS NULL OR TRIM(CAST("Yes_Max_Qty" AS TEXT)) = '';
+            SET "Yes_Max_BudgetCap" = 20
+            WHERE "Yes_Max_BudgetCap" IS NULL OR TRIM(CAST("Yes_Max_BudgetCap" AS TEXT)) = '';
             ''',
         )
         updated_no_min = _run_update(
             cur,
             f'''
             UPDATE "{table_name}"
-            SET "No_Min_Qty" = 0
-            WHERE "No_Min_Qty" IS NULL OR TRIM(CAST("No_Min_Qty" AS TEXT)) = '';
+            SET "No_Min_BudgetCap" = 0
+            WHERE "No_Min_BudgetCap" IS NULL OR TRIM(CAST("No_Min_BudgetCap" AS TEXT)) = '';
             ''',
         )
         updated_no_max = _run_update(
             cur,
             f'''
             UPDATE "{table_name}"
-            SET "No_Max_Qty" = 20
-            WHERE "No_Max_Qty" IS NULL OR TRIM(CAST("No_Max_Qty" AS TEXT)) = '';
+            SET "No_Max_BudgetCap" = 20
+            WHERE "No_Max_BudgetCap" IS NULL OR TRIM(CAST("No_Max_BudgetCap" AS TEXT)) = '';
             ''',
         )
 
-        # 2) Strategy = Stragy_Fllow_Stock_Value.py 时，Search_words 兜底
+        # 2) Strategy = Stragy_Fllow_Stock_Value.py 时，Search_words 强制覆盖
         updated_search_words = _run_update(
             cur,
             f'''
             UPDATE "{table_name}"
             SET "Search_words" = ?
-            WHERE "Strategy" = ?
-              AND ("Search_words" IS NULL OR TRIM(CAST("Search_words" AS TEXT)) = '');
+            WHERE "Strategy" LIKE ?;
             ''',
-            ["AAPL,MSFT,GOOGL,AMZN,NVDA", "Stragy_Fllow_Stock_Value.py"],
+            ["AAPL,MSFT,GOOGL,AMZN,NVDA", "%Stragy_Fllow_Stock_Value%"],
         )
 
         # 3) Strategy = Stragy_Fllow_Stock_Value.py 且 Inputs1=GooG 时，修正为 GOOGL
@@ -148,14 +147,14 @@ def run_node(node):
             f'''
             UPDATE "{table_name}"
             SET "Inputs1" = ?
-            WHERE "Strategy" = ?
+            WHERE "Strategy" LIKE ?
               AND "Inputs1" = ?;
             ''',
-            ["GOOGL", "Stragy_Fllow_Stock_Value.py", "GooG"],
+            ["GOOGL", "%Stragy_Fllow_Stock_Value%", "GooG"],
         )
 
         # 4) Strategy = Stragy_Fllow_Truth.py 时，Inputs1-6 兜底 0.5
-        truth_strategy = "Stragy_Fllow_Truth.py"
+        truth_strategy = "%Stragy_Fllow_Truth%"
         truth_input_filled = 0
         for idx in range(1, 7):
             col = f"Inputs{idx}"
@@ -164,8 +163,10 @@ def run_node(node):
                 f'''
                 UPDATE "{table_name}"
                 SET "{col}" = 0.5
-                WHERE "Strategy" = ?
-                  AND ("{col}" IS NULL OR TRIM(CAST("{col}" AS TEXT)) = '');
+                WHERE "Strategy" LIKE ?
+                  AND ("{col}" IS NULL 
+                       OR TRIM(CAST("{col}" AS TEXT)) = ''
+                       OR TRIM(CAST("{col}" AS TEXT)) IN ('None', 'null', 'NULL'));
                 ''',
                 [truth_strategy],
             )
@@ -176,7 +177,7 @@ def run_node(node):
             f'''
             UPDATE "{table_name}"
             SET "Inputs7" = "days_to_end"
-            WHERE "Strategy" = ?;
+            WHERE "Strategy" LIKE ?;
             ''',
             [truth_strategy],
         )
@@ -184,10 +185,10 @@ def run_node(node):
         conn.commit()
 
         result_lines.append("执行成功：polyMarket_Monitor 参数兜底完成。")
-        result_lines.append(f"Yes_Min_Qty 兜底行数: {updated_yes_min}")
-        result_lines.append(f"Yes_Max_Qty 兜底行数: {updated_yes_max}")
-        result_lines.append(f"No_Min_Qty 兜底行数: {updated_no_min}")
-        result_lines.append(f"No_Max_Qty 兜底行数: {updated_no_max}")
+        result_lines.append(f"Yes_Min_BudgetCap 兜底行数: {updated_yes_min}")
+        result_lines.append(f"Yes_Max_BudgetCap 兜底行数: {updated_yes_max}")
+        result_lines.append(f"No_Min_BudgetCap 兜底行数: {updated_no_min}")
+        result_lines.append(f"No_Max_BudgetCap 兜底行数: {updated_no_max}")
         result_lines.append(f"Search_words 兜底行数: {updated_search_words}")
         result_lines.append(f"Inputs1 GooG->GOOGL 修正行数: {updated_inputs1_goog}")
         result_lines.append(f"Inputs1-6 兜底总行数: {truth_input_filled}")

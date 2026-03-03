@@ -786,6 +786,234 @@ def resolve_end_date_and_debug(mid: str, mm: Dict[str, Any], retry: int) -> (str
     dbg.append("fallback_endDate_9999")
     return mm["endDate"], "; ".join(dbg)
 
+# =====================
+# Tags / Category Enrichment（把“类别”抓出来）
+# =====================
+
+def _parse_category_filter_and_mode(category_filter: str) -> tuple[str, str]:
+    """
+    复用 Input7(category_filter)：
+    - "Politics" / "100381" / "All"
+    - "Politics|tags=auto"  (tags=none/stub/market/event/auto)
+    返回: (base_filter, tags_mode)
+    """
+    cf = (category_filter or "").strip()
+    if not cf:
+        return "All", "auto"
+    parts = [p.strip() for p in cf.split("|") if p.strip()]
+    base = parts[0] if parts else "All"
+    mode = "auto"
+    for p in parts[1:]:
+        if p.lower().startswith("tags="):
+            mode = p.split("=", 1)[1].strip().lower() or "auto"
+    if mode not in ("none", "stub", "market", "event", "auto"):
+        mode = "auto"
+    return base, mode
+
+def fetch_market_tags(mid: str, retry: int = 1, debug_lines: List[str] = None) -> List[Dict[str, Any]]:
+    """
+    方案1：GET /markets/{id}/tags
+    https://gamma-api.polymarket.com/markets/{id}/tags
+    """
+    try:
+        data = robust_get(f"{GAMMA}/markets/{mid}/tags", params=None, retry=max(1, retry), timeout=10)
+        if isinstance(data, dict) and isinstance(data.get("data"), list):
+            tags = data["data"]
+        elif isinstance(data, list):
+            tags = data
+        else:
+            tags = []
+        return tags
+    except Exception as e:
+        if debug_lines is not None:
+            debug_lines.append(f"market_tags_fail: mid={mid} err={type(e).__name__}")
+        return []
+
+def fetch_event_tags(eid: str, retry: int = 1, debug_lines: List[str] = None) -> List[Dict[str, Any]]:
+    """
+    方案2：GET /events/{id}/tags
+    https://gamma-api.polymarket.com/events/{id}/tags
+    """
+    try:
+        data = robust_get(f"{GAMMA}/events/{eid}/tags", params=None, retry=max(1, retry), timeout=10)
+        if isinstance(data, dict) and isinstance(data.get("data"), list):
+            tags = data["data"]
+        elif isinstance(data, list):
+            tags = data
+        else:
+            tags = []
+        return tags
+    except Exception as e:
+        if debug_lines is not None:
+            debug_lines.append(f"event_tags_fail: eid={eid} err={type(e).__name__}")
+        return []
+
+def _extract_tags_from_stub(stub: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    方案0：尽量从 /markets 列表 stub 里取 tags/category（不保证存在）
+    统一输出成 [{id,label,slug}, ...] 结构（能拿到多少算多少）
+    """
+    if not isinstance(stub, dict):
+        return []
+    cand = None
+    for k in ("tags", "tag", "categories", "category"):
+        if k in stub and stub.get(k):
+            cand = stub.get(k)
+            break
+    if cand is None:
+        return []
+
+    out = []
+    if isinstance(cand, list):
+        for it in cand:
+            if isinstance(it, dict):
+                out.append({
+                    "id": it.get("id"),
+                    "label": it.get("label") or it.get("name") or it.get("title"),
+                    "slug": it.get("slug"),
+                })
+            elif isinstance(it, str):
+                out.append({"id": None, "label": it, "slug": None})
+    elif isinstance(cand, dict):
+        out.append({
+            "id": cand.get("id"),
+            "label": cand.get("label") or cand.get("name") or cand.get("title"),
+            "slug": cand.get("slug"),
+        })
+    elif isinstance(cand, str):
+        out.append({"id": None, "label": cand, "slug": None})
+
+    # 清洗空项
+    cleaned = []
+    for t in out:
+        if not isinstance(t, dict):
+            continue
+        label = (t.get("label") or "").strip()
+        slug = (t.get("slug") or "").strip() if t.get("slug") else ""
+        tid = t.get("id")
+        if label or slug or tid:
+            cleaned.append({"id": tid, "label": label, "slug": slug})
+    return cleaned
+
+def _normalize_tags(tags: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    只提取指定的 tags（过滤掉其他的），并且只输出 'tags' 这一个字段。
+    """
+    ALLOWED_TAGS = {
+        "crypto", "elections", "politics", "sports", "companies", 
+        "economic", "financial", "geopolitical", "tech", "world", 
+        "climate & science", "public health", "culture", "earnings", 
+        "regulations", "mentions"
+    }
+
+    def _is_allowed(label: str, slug: str) -> bool:
+        lb = label.lower()
+        sl = slug.lower()
+        for a in ALLOWED_TAGS:
+            if a == lb or a == sl:
+                return True
+            if a.replace(" & ", "-").replace(" ", "-") == sl:
+                return True
+        return False
+
+    tags = tags if isinstance(tags, list) else []
+    norm = []
+    for t in tags:
+        if not isinstance(t, dict):
+            continue
+        
+        label = (t.get("label") or "").strip()
+        slug = (t.get("slug") or "").strip()
+        
+        if _is_allowed(label, slug):
+            tid = t.get("id")
+            try:
+                tid_i = int(tid) if str(tid).isdigit() else None
+            except Exception:
+                tid_i = None
+            norm.append({"id": tid_i, "label": label, "slug": slug})
+
+    return {
+        "tags": norm
+    }
+
+def enrich_records_with_tags(records: List[Dict[str, Any]],
+                             stubs_all: List[Dict[str, Any]],
+                             tags_mode: str,
+                             retry: int,
+                             debug_lines: List[str] = None):
+    """
+    把 方案0/1/2 都集成起来：
+    - tags_mode=none: 不做任何 enrichment
+    - tags_mode=stub: 仅从 stub 尝试提取 tags
+    - tags_mode=market: /markets/{id}/tags
+    - tags_mode=event: /events/{event_id}/tags（带缓存）
+    - tags_mode=auto: 有 event_id 走 event，否则走 market（推荐）
+    """
+    if not records:
+        return
+    if tags_mode == "none":
+        if debug_lines is not None:
+            debug_lines.append("tags_enrich=none")
+        return
+
+    # 建立 mid -> stub 的映射（你 records 里没保存 mid，所以这里用 question+endDate 不可靠）
+    # 最小改动：建议你在 records 里把 mid 存一下（下方 run_node 会给你加）
+    stub_by_mid = {}
+    for s in (stubs_all or []):
+        mid = (s or {}).get("id")
+        if mid:
+            stub_by_mid[str(mid)] = s
+
+    # event tags cache（重要：省请求）
+    event_cache: Dict[str, List[Dict[str, Any]]] = {}
+
+    enrich_count = 0
+    for rec in records:
+        mid = str(rec.get("id") or "").strip()
+        eid = str(rec.get("event_id") or "").strip()
+
+        tags = []
+
+        # 方案0：stub 优先（如果 tags_mode=stub 或 auto/market/event 都可以先用 stub 兜底）
+        if tags_mode in ("stub", "auto", "market", "event"):
+            stub = stub_by_mid.get(mid)
+            tags = _extract_tags_from_stub(stub) if stub else []
+            if tags:
+                norm = _normalize_tags(tags)
+                rec.update(norm)
+                enrich_count += 1
+                continue
+            if tags_mode == "stub":
+                # 只取 stub，不做网络补抓
+                continue
+
+        # 方案2：event tags（优先在 auto/event 里尝试）
+        want_event = (tags_mode == "event") or (tags_mode == "auto" and bool(eid))
+        if want_event and eid:
+            if eid not in event_cache:
+                event_cache[eid] = fetch_event_tags(eid, retry=retry, debug_lines=debug_lines)
+            tags = event_cache.get(eid) or []
+            if tags:
+                norm = _normalize_tags(tags)
+                rec.update(norm)
+                enrich_count += 1
+                continue
+
+        # 方案1：market tags（market/auto 且 event 失败时）
+        want_market = (tags_mode == "market") or (tags_mode == "auto")
+        if want_market and mid:
+            tags = fetch_market_tags(mid, retry=retry, debug_lines=debug_lines)
+            if tags:
+                norm = _normalize_tags(tags)
+                rec.update(norm)
+                enrich_count += 1
+                continue
+
+    if debug_lines is not None:
+        debug_lines.append(f"tags_enrich_mode={tags_mode}, enriched={enrich_count}/{len(records)}, event_cache_size={len(event_cache)}")
+
+
 # **Function definition**
 def run_node(node):
     """
@@ -817,7 +1045,8 @@ def run_node(node):
     
     # 读取 category_filter
     _cat_filter_input = node['Inputs'][6]
-    category_filter = str(_cat_filter_input.get('Context') or _cat_filter_input.get('Num') or 'All').strip()
+    category_filter_raw = str(_cat_filter_input.get('Context') or _cat_filter_input.get('Num') or 'All').strip()
+    category_filter, tags_mode = _parse_category_filter_and_mode(category_filter_raw)
 
     # 读取 event_id（可选）
     _event_input = node['Inputs'][7] if len(node.get('Inputs', [])) >= 8 else {}
@@ -836,7 +1065,7 @@ def run_node(node):
             off = offset_end
 
     debug_lines: List[str] = []
-    debug_lines.append(f"config: limit={limit}, offset=[{off},{off}], offset_end={offset_end}, bounded_mode={bounded_mode}, closed={closed}, retry={retry}, category_filter={category_filter}, event_id={event_id}")
+    debug_lines.append(f"config: limit={limit}, offset=[{off},{off}], offset_end={offset_end}, bounded_mode={bounded_mode}, closed={closed}, retry={retry}, category_filter={category_filter}, tags_mode={tags_mode}, event_id={event_id}")
     debug_lines.append(f"save_path={save_path}")
 
     # 1) 抓取该页 /markets
@@ -883,12 +1112,14 @@ def run_node(node):
         # 创建记录（包含 yesToken 和 noToken 两个字段）
         # 优化：rules 只在需要解析时才规范化（延迟处理）
         rec = {
+            "id": str(mid),  # ✅ 新增：用于 market tags 补抓
             "question": question,
             "rules": rules_raw,  # 先保存原始值，后续需要时再规范化
             "endDate": endDate,
             "yesToken": yes_token,
             "noToken": no_token,
             "event_id": _extract_event_id_from_market_stub(stub),
+            "tags": [],  # 预置空数组，过滤后若为空则保留空数组
         }
         records.append(rec)
     
@@ -948,6 +1179,9 @@ def run_node(node):
             rec["endDate"] = endDate_raw
     
     debug_lines.append(f"final_records={len(records)}")
+
+    # ✅ 方案0/1/2：把 tags/category 抓出来（按 tags_mode 控制）
+    enrich_records_with_tags(records, stubs_all=stubs_all, tags_mode=tags_mode, retry=retry, debug_lines=debug_lines)
 
     # 7) 落盘（每页一个文件）
     fname = autogen_filename()

@@ -2,9 +2,8 @@ import math
 
 # **Define the number of outputs and inputs**
 OutPutNum = 1
-InPutNum = 3
+InPutNum = 5
 
-# **Initialize Outputs and Inputs arrays and assign names directly**
 Outputs = [
     {
         "Num": None,
@@ -32,10 +31,25 @@ Inputs = [
     for i in range(InPutNum)
 ]
 
-NodeKind = 'Normal'
+NodeKind = "Normal"
 Lable = [{"Id": "Label1", "Kind": "None"}]
 
-FunctionIntroduction = '组件功能：计算当前仓位占最大仓位的百分比（0~1）。\\n\\n代码功能摘要：将 (Now_qty + OpenOrdersQty) 视为当前占用仓位，除以 Max_qty 得到百分比，并做除零保护与 clamp 到 0~1。\\n\\n参数\\n```yaml\\ninputs:\\n  - name: Now_qty\\n    type: number\\n    required: true\\n    description: 当前已持仓数量\\n  - name: Max_qty\\n    type: number\\n    required: true\\n    description: 最大允许持仓数量\\n  - name: OpenOrdersQty\\n    type: number\\n    required: true\\n    description: 当前挂单占用数量（会加到 Now_qty 上）\\noutputs:\\n  - name: PositionPct\\n    type: number\\n    description: 当前仓位/最大仓位（0~1）\\n```\\n'
+FunctionIntroduction = (
+    "组件功能：按【预算口径】计算当前仓位占最大预算的百分比（0~1）。\n\n"
+    "核心公式：\n"
+    "NowCost = AvgPrice*Now_qty + NowAsk*OpenOrdersQty（OpenOrdersQty 仅统计挂买单）\n"
+    "PositionPct = clamp01(NowCost / Max_BudgetCap)\n\n"
+    "参数\n```yaml\n"
+    "inputs:\n"
+    "  - name: Now_qty\n    type: number\n    required: true\n    description: 当前已持仓数量\n"
+    "  - name: OpenOrdersQty\n    type: number\n    required: true\n    description: 当前挂买单数量（仅买单；用于预留资金占用）\n"
+    "  - name: AvgPrice\n    type: number\n    required: true\n    description: 当前持仓均价（VWAP）\n"
+    "  - name: NowAsk\n    type: number\n    required: true\n    description: 当前 ask（近似挂单价，用于预留成本）\n"
+    "  - name: Max_BudgetCap\n    type: number\n    required: true\n    description: 该 side 的最大资金预算（稳定分母）\n"
+    "outputs:\n"
+    "  - name: PositionPct\n    type: number\n    description: 当前占用资金 / 最大预算（0~1）\n"
+    "```\n"
+)
 
 
 def _safe_float(x, default: float = 0.0) -> float:
@@ -78,18 +92,26 @@ def _read_num(node, idx: int, default: float = 0.0) -> float:
 
 def run_node(node):
     now_qty = _read_num(node, 0, 0.0)
-    max_qty = _read_num(node, 1, 0.0)
-    open_orders_qty = _read_num(node, 2, 0.0)
+    open_orders_qty = _read_num(node, 1, 0.0)
+    avg_price = _read_num(node, 2, 0.0)
+    now_ask = _read_num(node, 3, 0.0)
+    max_budget_cap = _read_num(node, 4, 0.0)
 
-    # 与仓位调整节点一致：把 open_orders 加到当前仓位上
-    current_qty = now_qty + open_orders_qty
-    if current_qty < 0.0:
-        current_qty = 0.0
-
-    if max_qty <= 0.0:
+    if now_qty < 0.0:
+        now_qty = 0.0
+    if open_orders_qty < 0.0:
+        open_orders_qty = 0.0
+    if avg_price < 0.0:
+        avg_price = 0.0
+    if now_ask < 0.0:
+        now_ask = 0.0
+    if max_budget_cap <= 0.0:
         pct = 0.0
     else:
-        pct = _clamp01(current_qty / max_qty)
+        now_cost = (avg_price * now_qty) + (now_ask * open_orders_qty)
+        if now_cost < 0.0:
+            now_cost = 0.0
+        pct = _clamp01(now_cost / max_budget_cap)
 
     Outputs[0]["Num"] = float(pct)
     return Outputs
@@ -98,10 +120,18 @@ def run_node(node):
 # ---- Port definitions ----
 Inputs[0]["name"] = "Now_qty"
 Inputs[0]["Kind"] = "Num"
-Inputs[1]["name"] = "Max_qty"
+
+Inputs[1]["name"] = "OpenOrdersQty"
 Inputs[1]["Kind"] = "Num"
-Inputs[2]["name"] = "OpenOrdersQty"
+
+Inputs[2]["name"] = "AvgPrice"
 Inputs[2]["Kind"] = "Num"
+
+Inputs[3]["name"] = "NowAsk"
+Inputs[3]["Kind"] = "Num"
+
+Inputs[4]["name"] = "Max_BudgetCap"
+Inputs[4]["Kind"] = "Num"
 
 Outputs[0]["name"] = "PositionPct"
 Outputs[0]["Kind"] = "Num"

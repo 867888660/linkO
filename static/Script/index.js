@@ -36,9 +36,9 @@ let recordPanelButtonMap = new Map(); // filename -> button element
 // 记录列表后台标注任务：用于取消/防止并发把前后端拖慢
 let recordAnnotateController = null;
 let recordAnnotateToken = 0;
-const RECORD_ANNOTATE_CONCURRENCY = 2;        // 并发过高会把 /history/run 与 UI 都拖慢
-const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标注，避免“越多越卡”
-const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+const RECORD_ANNOTATE_CONCURRENCY = 5;        // 并发过高会把 /history/run 与 UI 都拖慢
+const RECORD_ANNOTATE_MAX_ITEMS = 1000;       // 记录太多时不做全量标注，避免“越多越卡”
+const RECORD_DEEP_SEARCH_MAX_ITEMS = 1000;    // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
 // 深度搜索文本索引版本：当构建策略变化时递增，强制重建缓存，避免“修了但不生效”
 const RECORD_SEARCH_TEXT_VERSION = 2;
 let recordSearchRefilterTimer = null;
@@ -3706,6 +3706,34 @@ function normalizeGraphForRender(g) {
   return g;
 }
 
+// 标记有状态的节点 IsBlock = true，确保外框颜色正常显示
+function markStatefulNodesBlock(nodes) {
+  if (!Array.isArray(nodes)) return;
+  nodes.forEach(node => {
+    if (
+      node && (
+        node.isFinish ||
+        node.IsRunning ||
+        node.IsError ||
+        (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+      )
+    ) {
+      node.IsBlock = true;
+    }
+  });
+}
+
+// 从图数据中恢复 ProjectName（默认值 'Temp' 也视为未初始化）
+function syncProjectNameFromGraph(graphData) {
+  if (!graphData || !graphData.ProjectName) return;
+  if (ProjectName && ProjectName !== 'Temp' && ProjectName === graphData.ProjectName) return;
+  const prev = ProjectName;
+  ProjectName = graphData.ProjectName;
+  if (prev !== ProjectName) {
+    console.log('[RECORD] ProjectName 已同步:', prev, '->', ProjectName);
+  }
+}
+
 async function enterRecordMode() {
   try {
     isRecordMode = true;
@@ -3713,38 +3741,22 @@ async function enterRecordMode() {
     document.body.classList.add('record-mode');
     setRecordButtonState(true);
     toggleToolbarSelect(true);
-    
-    // 🔥 关键修复：在 monitor_completed 模式下，先确保图数据已加载
+
+    // monitor_completed 模式：优先使用已保存的完整图数据
     if (frontendMode === 'monitor_completed' && window.__lastCompletedGraphData) {
       console.log('[RECORD] monitor_completed 模式：先加载完整图数据');
       const graphDataToLoad = structuredClone(window.__lastCompletedGraphData);
-      
-      // 🔥 确保 ProjectName 正确设置（从保存的图数据中获取）
-      if (graphDataToLoad.ProjectName && !ProjectName) {
-        ProjectName = graphDataToLoad.ProjectName;
-        console.log('[RECORD] 从图数据中恢复 ProjectName:', ProjectName);
-      }
-      
-      // 确保关键状态节点的 IsBlock 为 true（否则外框颜色不会显示）
-      if (graphDataToLoad.nodes) {
-        graphDataToLoad.nodes.forEach(node => {
-          if (
-            node && (
-              node.isFinish ||
-              node.IsRunning ||
-              node.IsError ||
-              (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
-            )
-          ) {
-            node.IsBlock = true;
-          }
-        });
-      }
-      // 🔥 关键修复：从 edges 反算 Link，并补齐 IsLabel/Kind/value 字段，确保锚点连接状态与参数值正常显示
+
+      // 🔥 修复：即使 ProjectName 已有默认值 'Temp'，也要用图数据中的正确值覆盖
+      syncProjectNameFromGraph(graphDataToLoad);
+
+      markStatefulNodesBlock(graphDataToLoad.nodes);
+      // 从 edges 反算 Link，补齐 IsLabel/Kind/value 字段
       normalizeGraphForRender(graphDataToLoad);
       ChangeDatas(graphDataToLoad);
       RefreshEdge();
-      // 手动触发节点更新
+
+      // 将状态同步到画布上的节点实例
       if (graphDataToLoad.nodes) {
         graphDataToLoad.nodes.forEach(node => {
           const nodeItem = graph.findById(node.id);
@@ -3758,34 +3770,21 @@ async function enterRecordMode() {
           }
         });
       }
-      // 更新 TempMessageNode
+
       TempMessageNode = structuredClone({ nodes: graphDataToLoad.nodes });
-      // 🔥 关键修复：保存当前图数据到记录模式专用变量，供 sidewindow 使用
       window.__recordModeCurrentGraph = structuredClone(graphDataToLoad);
-      console.log('[RECORD] 图数据已加载，节点数:', graphDataToLoad.nodes?.length || 0);
+      console.warn('[RECORD] 图数据已加载，节点数:', graphDataToLoad.nodes?.length || 0);
     } else {
-      // 非 monitor_completed 模式：使用当前图数据
+      // 非 monitor_completed 模式：使用当前画布数据
       const currentGraph = graph.save();
+      syncProjectNameFromGraph(currentGraph);
       try {
-        if (currentGraph && Array.isArray(currentGraph.nodes)) {
-          currentGraph.nodes.forEach(node => {
-            if (
-              node && (
-                node.isFinish ||
-                node.IsRunning ||
-                node.IsError ||
-                (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
-              )
-            ) {
-              node.IsBlock = true;
-            }
-          });
-        }
+        markStatefulNodesBlock(currentGraph?.nodes);
       } catch (_) {}
       window.__recordModeCurrentGraph = structuredClone(currentGraph);
-      console.log('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
+      console.warn('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
     }
-    
+
     backupGraphForRecordMode();
     disableEditorButtons(true);
     openRecordPanel();
@@ -3863,8 +3862,7 @@ async function loadRecordItems() {
         annotateRecordItemsWithErrorFlag(recordItemsCache, {
           token,
           signal: recordAnnotateController?.signal,
-          // 列表加载阶段只做“错误标记”（轻量）；深度搜索索引按需在用户输入时再构建
-          enableDeepSearch: false
+          enableDeepSearch: true // 默认在后台加载时就构建深层搜索索引，以支持内容搜索
         });
       }, 0);
     } catch (e) {
@@ -3924,10 +3922,24 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
       );
       if (!resp.ok) return;
       const payload = await resp.json();
-      // payload.nodes 可能是数组，也可能是 { nodes: [...] }
-      let nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
-      if (!nodes.length && payload && payload.nodes && Array.isArray(payload.nodes.nodes)) {
-        nodes = payload.nodes.nodes;
+      
+      let nodes = [];
+      if (Array.isArray(payload)) {
+        if (payload.length && Array.isArray(payload[payload.length - 1])) {
+          const latestSession = payload[payload.length - 1];
+          nodes = latestSession.filter(n => n && typeof n === 'object');
+        } else if (payload.length && payload.every(n => n && typeof n === 'object' && !Array.isArray(n))) {
+          nodes = payload.filter(n => n && typeof n === 'object');
+        } else {
+          for (const it of payload) {
+            if (!it || typeof it !== 'object') continue;
+            if (Array.isArray(it.nodes)) { nodes = it.nodes; break; }
+            if (it.nodes && Array.isArray(it.nodes.nodes)) { nodes = it.nodes.nodes; break; }
+          }
+        }
+      } else if (payload && typeof payload === 'object') {
+        nodes = Array.isArray(payload.nodes) ? payload.nodes : (payload.nodes && Array.isArray(payload.nodes.nodes) ? payload.nodes.nodes : []);
+        if (!nodes.length && Array.isArray(payload.items)) nodes = payload.items.filter(n => n && typeof n === 'object');
       }
 
       // 快速判定是否有错误节点（可短路）
@@ -4139,7 +4151,7 @@ function renderRecordPanel(items) {
   updateRecordPanelSelection(recordModeCurrentFilename);
 
   // 绑定搜索过滤
-  const inputEl = document.getElementById('record-panel-search');
+  const inputEl = searchWrap.querySelector('input');
   if (inputEl) {
     let isComposing = false;    // 中文输入法合成态
     let buildTimer = null;      // debounce 深度索引构建
@@ -4171,9 +4183,6 @@ function renderRecordPanel(items) {
     const scheduleDeepBuild = () => {
       const q = normalizeQuery(inputEl.value);
       if (!q) return;
-      // 包含非数字字符时，认为用户在搜中文/英文关键词：触发深度索引构建
-      const looksLikeTextQuery = /[^\d]/.test(q);
-      if (!looksLikeTextQuery) return;
       if (q === lastScheduledQuery) return;
       lastScheduledQuery = q;
       try {

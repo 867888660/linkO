@@ -2,6 +2,10 @@ import json
 import logging
 import os
 import time
+import random
+import traceback
+import threading
+import socket
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Optional, List, Dict, Any
 import re
@@ -9,7 +13,7 @@ import re
 # 标准库 HTTP（用于 Gamma API 查询；不引入额外第三方依赖）
 from urllib.request import Request, urlopen
 from urllib.error import URLError, HTTPError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 
 # 可选：链上 redeem（需要 web3.py）。若缺失则在 BURN 模式给出友好提示。
 try:
@@ -206,6 +210,86 @@ def _append_debug(debug_list: List[str], message: str) -> None:
         pass
 
 
+def _safe_truncate(v: Any, n: int = 400) -> str:
+    s = str(v)
+    return s if len(s) <= n else (s[:n] + "...(truncated)")
+
+
+def _append_exception_debug(debug: List[str], label: str, exc: Exception) -> None:
+    """输出更可定位的异常细节，便于分析并发下的 Request exception。"""
+    _append_debug(debug, f"{label} 异常类型: {type(exc).__name__}")
+    _append_debug(debug, f"{label} 异常repr: {repr(exc)}")
+    _append_debug(debug, f"{label} 异常args: {_safe_truncate(getattr(exc, 'args', ())) }")
+
+    # 常见 SDK 异常字段
+    for attr in ("status_code", "error_message", "message", "code"):
+        if hasattr(exc, attr):
+            try:
+                _append_debug(debug, f"{label} 异常字段 {attr}={_safe_truncate(getattr(exc, attr))}")
+            except Exception:
+                pass
+
+    # 兼容 requests/httpx 风格 response 对象
+    resp = getattr(exc, "response", None)
+    if resp is not None:
+        try:
+            _append_debug(debug, f"{label} response.status_code={getattr(resp, 'status_code', None)}")
+            txt = getattr(resp, "text", None)
+            if txt:
+                _append_debug(debug, f"{label} response.text={_safe_truncate(txt, 800)}")
+        except Exception:
+            pass
+
+    # 链式异常
+    cause = getattr(exc, "__cause__", None)
+    if cause is not None:
+        _append_debug(debug, f"{label} cause: {type(cause).__name__} | {repr(cause)}")
+    ctx = getattr(exc, "__context__", None)
+    if ctx is not None and ctx is not cause:
+        _append_debug(debug, f"{label} context: {type(ctx).__name__} | {repr(ctx)}")
+
+    # 完整 traceback（单行压缩，避免日志太乱）
+    try:
+        tb = traceback.format_exc()
+        if tb and tb.strip() and tb.strip() != "NoneType: None":
+            _append_debug(debug, f"{label} traceback:\n{tb}")
+    except Exception:
+        pass
+
+
+def _debug_host_diagnostics(host: str, debug: List[str]) -> None:
+    """输出 host/DNS/代理 等诊断信息，快速判断是否是网络层问题。"""
+    try:
+        pu = urlparse(host)
+        _append_debug(debug, f"[net] host={host}, scheme={pu.scheme}, netloc={pu.netloc}, path={pu.path or '/'}")
+        target_host = pu.hostname
+        target_port = pu.port or (443 if pu.scheme == "https" else 80)
+        if target_host:
+            try:
+                infos = socket.getaddrinfo(target_host, target_port, proto=socket.IPPROTO_TCP)
+                ip_list: List[str] = []
+                for it in infos:
+                    try:
+                        ip = str(it[4][0])
+                        if ip not in ip_list:
+                            ip_list.append(ip)
+                    except Exception:
+                        continue
+                _append_debug(debug, f"[net] dns {target_host}:{target_port} -> {ip_list[:6]}")
+            except Exception as e:
+                _append_debug(debug, f"[net] dns resolve failed: {type(e).__name__}: {e}")
+    except Exception as e:
+        _append_debug(debug, f"[net] host parse failed: {e}")
+
+    # 常见代理环境变量
+    proxy_keys = ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy")
+    proxy_info = {k: os.getenv(k) for k in proxy_keys if os.getenv(k)}
+    if proxy_info:
+        _append_debug(debug, f"[net] proxy env: {proxy_info}")
+    else:
+        _append_debug(debug, "[net] proxy env: <empty>")
+
+
 def _extract_signed_raw_tx(signed: Any) -> Any:
     """
     兼容不同 eth-account/web3 版本的签名结果，尽力提取可用于 send_raw_transaction 的 raw tx bytes/HexBytes。
@@ -263,12 +347,29 @@ RETRY_BACKOFF_CAP = float(os.getenv('POLYMARKET_BACKOFF_CAP', '20'))
 
 def _sleep_backoff(attempt: int) -> float:
     delay = min((RETRY_BACKOFF_BASE ** (attempt - 1)), RETRY_BACKOFF_CAP)
+    # 并发场景下加入轻微抖动，避免多个节点在同一时间点重试造成“惊群”
+    jitter_ratio = float(os.getenv("POLYMARKET_BACKOFF_JITTER", "0.2") or 0.2)
+    jitter_ratio = max(0.0, min(jitter_ratio, 1.0))
+    if jitter_ratio > 0:
+        low = max(0.1, 1.0 - jitter_ratio)
+        high = 1.0 + jitter_ratio
+        delay *= random.uniform(low, high)
     return max(0.5, delay)
 
 
-def _with_retry(fn, *args, debug: Optional[List[str]] = None, label: str = '', retry_on_unsuccess: bool = False, **kwargs):
+def _with_retry(
+    fn,
+    *args,
+    debug: Optional[List[str]] = None,
+    label: str = '',
+    retry_on_unsuccess: bool = False,
+    max_attempts: Optional[int] = None,
+    **kwargs
+):
     last_exc = None
-    for attempt in range(1, RETRY_MAX_ATTEMPTS + 1):
+    attempts = int(max_attempts or RETRY_MAX_ATTEMPTS)
+    attempts = max(1, attempts)
+    for attempt in range(1, attempts + 1):
         try:
             res = fn(*args, **kwargs)
             # 若返回是 dict 且需要对 success 进行判断
@@ -283,7 +384,8 @@ def _with_retry(fn, *args, debug: Optional[List[str]] = None, label: str = '', r
             msg = str(e)
             if debug is not None:
                 _append_debug(debug, f"{label} 第{attempt}次失败: {msg}")
-            if attempt >= RETRY_MAX_ATTEMPTS:
+                _append_exception_debug(debug, f"{label} 第{attempt}次失败细节", e)
+            if attempt >= attempts:
                 break
             sleep_s = _sleep_backoff(attempt)
             if debug is not None:
@@ -476,6 +578,7 @@ def _http_get_json(url: str, timeout: float, debug: Optional[List[str]] = None) 
     except (HTTPError, URLError, TimeoutError, ValueError) as e:
         if debug is not None:
             _append_debug(debug, f"HTTP GET failed: {url} => {e}")
+            _append_exception_debug(debug, f"HTTP GET failed detail [{url}]", e)
         raise
 
 
@@ -886,10 +989,14 @@ def run_node(node):
     else:
         private_key = ""
     token_id = str(_get_input(5) or "").strip()
-    host = str(_get_input(6) or os.getenv("HOST", "https://clob.polymarket.com"))
+    host = str(_get_input(6) or os.getenv("HOST", "https://clob.polymarket.com")).strip().rstrip("/")
+    if host and not (host.startswith("http://") or host.startswith("https://")):
+        host = "https://" + host
     chain_id = int(_get_input(7) or os.getenv("CHAIN_ID", 137))
 
     try:
+        _append_debug(Debugging, f"[ctx] pid={os.getpid()} thread={threading.current_thread().name} mode={mode} chain_id={chain_id}")
+        _debug_host_diagnostics(host, Debugging)
         if not private_key:
             raise ValueError("缺少 PRIVATE_KEY")
         if not token_id:
@@ -903,8 +1010,22 @@ def run_node(node):
 
         client = _build_client(private_key, host, chain_id)
         _try_set_timeout(client, REQUEST_TIMEOUT_SECONDS, Debugging)
-        ok_val = _with_retry(client.get_ok, debug=Debugging, label="get_ok")
-        _append_debug(Debugging, f"GET /ok -> {ok_val}")
+        # get_ok 在并发场景容易偶发 Request exception；改为“尽力检查，不作为致命失败”
+        ok_retry_attempts = int(os.getenv("POLYMARKET_OK_MAX_RETRIES", "3") or 3)
+        ok_retry_attempts = max(1, min(ok_retry_attempts, RETRY_MAX_ATTEMPTS))
+        try:
+            ok_val = _with_retry(client.get_ok, debug=Debugging, label="get_ok", max_attempts=ok_retry_attempts)
+            _append_debug(Debugging, f"GET /ok (sdk) -> {ok_val}")
+        except Exception as e:
+            _append_debug(Debugging, f"get_ok(sdk) 失败（忽略并继续）: {e}")
+            _append_exception_debug(Debugging, "get_ok(sdk) 失败细节", e)
+            # 回退到公共 HTTP /ok，便于区分“SDK链路异常”与“主机不可达”
+            try:
+                ok_http = _http_get_json(f"{host}/ok", REQUEST_TIMEOUT_SECONDS, Debugging)
+                _append_debug(Debugging, f"GET /ok (http) -> {ok_http}")
+            except Exception as e2:
+                _append_debug(Debugging, f"get_ok(http) 也失败（继续尝试后续 API）: {e2}")
+                _append_exception_debug(Debugging, "get_ok(http) 失败细节", e2)
         # 凭据创建使用原始逻辑，避免不必要的改动与参数不匹配
         _create_or_set_creds(client, Debugging)
         try:
@@ -1165,6 +1286,7 @@ def run_node(node):
         err_msg = str(e)
         Outputs[0]['Context'] = json.dumps({"success": False, "error": err_msg}, ensure_ascii=False)
         _append_debug(Debugging, f"ERROR => {e}")
+        _append_exception_debug(Debugging, "run_node 终止异常细节", e)
         low = err_msg.lower()
         if ("not enough balance" in low) or ("allowance" in low):
             _append_debug(Debugging, "诊断：余额或授权不足。")
