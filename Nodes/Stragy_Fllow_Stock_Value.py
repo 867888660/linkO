@@ -278,7 +278,6 @@ _COMPANY_ALIAS_MAP = {
     "MICROSOFT": "MSFT",
     "AMAZON": "AMZN",
     "NVIDIA": "NVDA",
-    "TESLA": "TSLA",
 }
 
 
@@ -475,7 +474,10 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     Print("rank_ok=" + str(rank_ok) + " missing_rank_symbols=" + ",".join(missing_rank_symbols))
     Print("is_target_rank=" + str(is_target_rank))
 
-    if day_to_end <= 0.25:
+    if not rank_ok:
+        Print("decision=HOLD")
+        Print("reason=rank_data_incomplete: 市值数据不完整（缺失: " + ",".join(missing_rank_symbols) + "），不执行任何仓位变动")
+    elif day_to_end <= 0.25:
         if state == "S1":
             if is_target_rank == 0 or edge_margin <= DOWN_Y1:
                 SetPos("No", 0.0)

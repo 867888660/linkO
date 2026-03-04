@@ -138,7 +138,7 @@ def run_node(node):
             SET "Search_words" = ?
             WHERE "Strategy" LIKE ?;
             ''',
-            ["AAPL,MSFT,GOOGL,AMZN,NVDA", "%Stragy_Fllow_Stock_Value%"],
+            ["AAPL,MSFT,GOOGL,AMZN,NVDA,META", "%Stragy_Fllow_Stock_Value%"],
         )
 
         # 3) Strategy = Stragy_Fllow_Stock_Value.py 且 Inputs1=GooG 时，修正为 GOOGL

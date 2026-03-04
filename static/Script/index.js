@@ -103,7 +103,38 @@ function scheduleRecordSearchIndexBuild(query, refilterFn) {
   const q = (query || '').trim().toLowerCase();
   if (!q) return;
   if (!Array.isArray(recordItemsCache) || !recordItemsCache.length) return;
-  // 搜索时优先级最高：取消正在进行的后台标注，避免占用网络/主线程
+
+  // 检查是否所有记录都已经有深度搜索文本
+  const allIndexed = recordItemsCache.every(item =>
+    !item || !item.filename ||
+    (typeof item.__searchText === 'string' && item.__searchTextVersion === RECORD_SEARCH_TEXT_VERSION)
+  );
+
+  // 如果已全部索引完毕，仅触发一次 refilter 即可
+  if (allIndexed) {
+    if (typeof refilterFn === 'function') {
+      try { refilterFn(); } catch (_) {}
+    }
+    return;
+  }
+
+  // 如果后台标注仍在运行（controller 未 abort），不要取消它——
+  // 让后台继续构建索引，我们只需要挂上 refilter 回调
+  const bgStillRunning = recordAnnotateController && !recordAnnotateController.signal.aborted;
+  if (bgStillRunning) {
+    // 后台正在运行，先用当前已有数据做一次 refilter
+    if (typeof refilterFn === 'function') {
+      try {
+        if (recordSearchRefilterTimer) clearTimeout(recordSearchRefilterTimer);
+        recordSearchRefilterTimer = setTimeout(() => {
+          try { refilterFn(); } catch(_) {}
+        }, 80);
+      } catch(_) {}
+    }
+    return;
+  }
+
+  // 后台已停止或不存在，启动新的索引构建
   cancelRecordAnnotation('search build');
   const token = ++recordAnnotateToken;
   recordAnnotateController = new AbortController();
@@ -112,7 +143,7 @@ function scheduleRecordSearchIndexBuild(query, refilterFn) {
     token,
     signal: recordAnnotateController?.signal,
     enableDeepSearch: true,
-    // 搜索索引比错误标记更“有用”，这里允许多处理一些（仍然要限流）
+    // 搜索索引比错误标记更"有用"，这里允许多处理一些（仍然要限流）
     maxItems: Math.max(RECORD_ANNOTATE_MAX_ITEMS, 600),
     onItemUpdated: () => {
       if (typeof refilterFn !== 'function') return;
@@ -3853,7 +3884,7 @@ async function loadRecordItems() {
     renderRecordPanel(recordItemsCache);
     // 异步标记是否存在错误节点，用于控制记录条目的底色（红/蓝）
     try {
-      // 取消上一轮标注任务，避免“记录越多，点一条越慢”
+      // 取消上一轮标注任务，避免"记录越多，点一条越慢"
       cancelRecordAnnotation('reload record list');
       const token = ++recordAnnotateToken;
       recordAnnotateController = new AbortController();
@@ -3862,7 +3893,17 @@ async function loadRecordItems() {
         annotateRecordItemsWithErrorFlag(recordItemsCache, {
           token,
           signal: recordAnnotateController?.signal,
-          enableDeepSearch: true // 默认在后台加载时就构建深层搜索索引，以支持内容搜索
+          enableDeepSearch: true, // 默认在后台加载时就构建深层搜索索引，以支持内容搜索
+          onItemUpdated: (updatedItem) => {
+            // 后台索引构建完成一条后，立即同步到对应 DOM 按钮的搜索文本
+            try {
+              const btn = recordPanelButtonMap && updatedItem && updatedItem.filename
+                ? recordPanelButtonMap.get(updatedItem.filename) : null;
+              if (btn && updatedItem.__searchText) {
+                btn.dataset.searchText = updatedItem.__searchText;
+              }
+            } catch (_) {}
+          }
         });
       }, 0);
     } catch (e) {
@@ -4101,10 +4142,10 @@ function renderRecordPanel(items) {
   searchWrap.innerHTML = `
     <input
       id="record-panel-search"
-      type="text"
-      placeholder="搜索关键字（中文/英文/数字）..."
+      type="search"
+      placeholder="搜索记录（支持中文/英文/数字，空格分隔多关键词）..."
       autocomplete="off"
-      style="width:100%;height:28px;line-height:28px;padding:0 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#0f172a;color:#fff;outline:none;margin:8px 0;"
+      style="width:100%;height:30px;line-height:30px;padding:0 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:#0f172a;color:#fff;outline:none;margin:8px 0;font-size:13px;"
     />
   `;
   container.appendChild(searchWrap);
@@ -4119,14 +4160,43 @@ function renderRecordPanel(items) {
 
   const list = document.createElement('div');
   list.className = 'record-panel-list';
-  items.forEach(item => {
+  console.warn('[SEARCH:RENDER] 开始渲染记录面板，items数量:', items.length);
+  items.forEach((item, _idx) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'record-panel-item';
     btn.dataset.filename = item.filename;
     // 预置搜索文本（先用已有信息，后续异步补齐深度索引）
     const stOk = item && item.__searchText && item.__searchTextVersion === RECORD_SEARCH_TEXT_VERSION;
-    btn.dataset.searchText = ((stOk ? item.__searchText : null) || formatRecordLabel(item)).toLowerCase();
+    if (stOk) {
+      btn.dataset.searchText = item.__searchText;
+      if (_idx < 3) console.warn(`[SEARCH:RENDER] item[${_idx}] 使用已有深度索引, filename=${item.filename}, searchText长度=${item.__searchText.length}`);
+    } else {
+      // 构建更丰富的初始搜索文本，包含所有可用的元数据字段
+      const _parts = [formatRecordLabel(item)];
+      try {
+        if (item.filename) _parts.push(item.filename);
+        if (item.time_label) _parts.push(item.time_label);
+        if (item.label) _parts.push(item.label);
+        if (item.project_name) _parts.push(item.project_name);
+        // 遍历 item 上的所有短字符串字段，纳入初始搜索文本
+        for (const _k in item) {
+          if (!Object.prototype.hasOwnProperty.call(item, _k)) continue;
+          if (_k.startsWith('_')) continue; // 跳过内部字段
+          const _v = item[_k];
+          if (typeof _v === 'string' && _v.length > 0 && _v.length < 500) {
+            if (!_parts.includes(_v)) _parts.push(_v);
+          }
+        }
+      } catch (_) {}
+      btn.dataset.searchText = _parts.join(' ').toLowerCase();
+      if (_idx < 3) console.warn(`[SEARCH:RENDER] item[${_idx}] 初始搜索文本, filename=${item.filename}, parts=${_parts.length}, text="${btn.dataset.searchText.slice(0, 120)}..."`);
+    }
+    // 打印 item 的全部 key，帮助确认后端返回了哪些字段
+    if (_idx === 0) {
+      console.warn('[SEARCH:RENDER] 第一条item的全部key:', Object.keys(item || {}));
+      console.warn('[SEARCH:RENDER] 第一条item内容:', JSON.stringify(item, (k, v) => k.startsWith('__') ? undefined : v, 2).slice(0, 600));
+    }
     // 如果已经提前标记了是否有错误，则在渲染阶段直接加上对应样式
     if (item && item.__hasError) {
       btn.classList.add('record-panel-item-error');
@@ -4155,13 +4225,12 @@ function renderRecordPanel(items) {
   if (inputEl) {
     let isComposing = false;    // 中文输入法合成态
     let buildTimer = null;      // debounce 深度索引构建
-    let lastScheduledQuery = '';
 
     const normalizeQuery = (s) => (s || '').trim().toLowerCase();
     const matchQuery = (text, q) => {
       const qq = normalizeQuery(q);
       if (!qq) return true;
-      // 允许用空格做“多个关键词同时命中”
+      // 允许用空格做"多个关键词同时命中"（AND 逻辑）
       const tokens = qq.split(/\s+/).filter(Boolean);
       if (!tokens.length) return true;
       const t = (text || '').toLowerCase();
@@ -4174,41 +4243,87 @@ function renderRecordPanel(items) {
     const doFilter = () => {
       const q = normalizeQuery(inputEl.value);
       const itemsEls = list.querySelectorAll('.record-panel-item');
-      itemsEls.forEach(el => {
-        const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
-        el.style.display = q ? (matchQuery(text, q) ? '' : 'none') : '';
+      let visibleCount = 0;
+      let totalCount = itemsEls.length;
+      let sampleTexts = []; // 收集前几条的搜索文本用于调试
+      itemsEls.forEach((el, elIdx) => {
+        if (!q) {
+          el.style.display = '';
+          visibleCount++;
+          return;
+        }
+        // 合并 searchText + textContent，确保两者都参与匹配
+        const searchText = (el.dataset.searchText || '').toLowerCase();
+        const textContent = (el.textContent || '').toLowerCase();
+        const combined = searchText.includes(textContent) ? searchText : (searchText + ' ' + textContent);
+        const visible = matchQuery(combined, q);
+        el.style.display = visible ? '' : 'none';
+        if (visible) visibleCount++;
+        // 收集前3条的搜索文本用于调试
+        if (elIdx < 3) {
+          sampleTexts.push({
+            idx: elIdx,
+            filename: el.dataset.filename,
+            searchTextLen: searchText.length,
+            searchTextPreview: searchText.slice(0, 150),
+            textContentPreview: textContent.slice(0, 80),
+            combinedLen: combined.length,
+            hasDeepIndex: searchText.length > 200,
+            matchResult: visible
+          });
+        }
       });
+      console.warn(`[SEARCH:FILTER] query="${q}", total=${totalCount}, visible=${visibleCount}, samples:`, sampleTexts);
+      if (q && visibleCount === 0) {
+        console.warn(`[SEARCH:FILTER] ❌ 没有匹配结果! query="${q}". 检查: searchText是否包含目标内容？深度索引是否已构建？`);
+      }
+      // 根据是否有匹配结果，可额外触发后台深度索引构建（首次搜索无结果时）
+      if (q && visibleCount === 0 && itemsEls.length > 0) {
+        scheduleDeepBuild();
+      }
     };
 
     const scheduleDeepBuild = () => {
       const q = normalizeQuery(inputEl.value);
       if (!q) return;
-      if (q === lastScheduledQuery) return;
-      lastScheduledQuery = q;
+      console.warn(`[SEARCH:DEEP] scheduleDeepBuild called, query="${q}"`);
+      // 移除 lastScheduledQuery 的去重判断：确保查询变化或无结果时都能触发
       try {
         if (buildTimer) clearTimeout(buildTimer);
         buildTimer = setTimeout(() => {
-          try { scheduleRecordSearchIndexBuild(q, doFilter); } catch (_) {}
-        }, 220);
+          console.warn(`[SEARCH:DEEP] 定时器触发，调用 scheduleRecordSearchIndexBuild, query="${q}"`);
+          try { scheduleRecordSearchIndexBuild(q, doFilter); } catch (e) { console.warn('[SEARCH:DEEP] scheduleRecordSearchIndexBuild 异常:', e); }
+        }, 200);
       } catch (_) {}
     };
 
-    inputEl.addEventListener('compositionstart', () => { isComposing = true; });
+    inputEl.addEventListener('compositionstart', () => {
+      isComposing = true;
+      console.warn('[SEARCH:EVENT] compositionstart (中文输入法开始)');
+    });
     inputEl.addEventListener('compositionend', () => {
       isComposing = false;
+      console.warn('[SEARCH:EVENT] compositionend (中文输入法结束), value="' + inputEl.value + '"');
+      // compositionend 后立即过滤并触发深度构建
       doFilter();
       scheduleDeepBuild();
     });
     inputEl.addEventListener('input', () => {
+      console.warn('[SEARCH:EVENT] input event, isComposing=' + isComposing + ', value="' + inputEl.value + '"');
       if (isComposing) return;
       doFilter();
       scheduleDeepBuild();
     });
     inputEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
+        e.preventDefault();
         doFilter();
         scheduleDeepBuild();
       }
+    });
+    // 清空搜索框时自动恢复全部显示
+    inputEl.addEventListener('search', () => {
+      if (!inputEl.value) doFilter();
     });
     try { inputEl.focus(); } catch(_) {}
   }
