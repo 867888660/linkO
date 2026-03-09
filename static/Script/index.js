@@ -4227,59 +4227,103 @@ function renderRecordPanel(items) {
     let buildTimer = null;      // debounce 深度索引构建
 
     const normalizeQuery = (s) => (s || '').trim().toLowerCase();
+    
+    // 判断字符串是否主要是中文（用于决定匹配策略）
+    const isMainlyChinese = (str) => {
+      if (!str) return false;
+      const chineseRegex = /[\u4e00-\u9fa5]/g;
+      const chineseCount = (str.match(chineseRegex) || []).length;
+      return chineseCount > 0 && chineseCount / str.length > 0.3; // 30%以上是中文
+    };
+    
     const matchQuery = (text, q) => {
       const qq = normalizeQuery(q);
       if (!qq) return true;
-      // 允许用空格做"多个关键词同时命中"（AND 逻辑）
-      const tokens = qq.split(/\s+/).filter(Boolean);
-      if (!tokens.length) return true;
       const t = (text || '').toLowerCase();
-      for (let i = 0; i < tokens.length; i++) {
-        if (!t.includes(tokens[i])) return false;
+      
+      // 如果查询主要是中文，使用更宽松的匹配策略（不强制按空格分词）
+      if (isMainlyChinese(qq)) {
+        // 中文查询：直接包含匹配，也支持空格分隔的多个关键词（AND逻辑）
+        const tokens = qq.split(/\s+/).filter(Boolean);
+        if (tokens.length === 1) {
+          // 单个词（可能是完整的中文短语），直接包含匹配
+          return t.includes(tokens[0]);
+        } else {
+          // 多个关键词，所有都要命中（AND逻辑）
+          for (let i = 0; i < tokens.length; i++) {
+            if (!t.includes(tokens[i])) return false;
+          }
+          return true;
+        }
+      } else {
+        // 英文/数字查询：按空格分词，所有token都要命中（AND逻辑）
+        const tokens = qq.split(/\s+/).filter(Boolean);
+        if (!tokens.length) return true;
+        for (let i = 0; i < tokens.length; i++) {
+          if (!t.includes(tokens[i])) return false;
+        }
+        return true;
       }
-      return true;
     };
 
     const doFilter = () => {
-      const q = normalizeQuery(inputEl.value);
-      const itemsEls = list.querySelectorAll('.record-panel-item');
-      let visibleCount = 0;
-      let totalCount = itemsEls.length;
-      let sampleTexts = []; // 收集前几条的搜索文本用于调试
-      itemsEls.forEach((el, elIdx) => {
-        if (!q) {
-          el.style.display = '';
-          visibleCount++;
+      try {
+        console.warn('[SEARCH:FILTER] doFilter 开始执行');
+        const q = normalizeQuery(inputEl.value);
+        console.warn('[SEARCH:FILTER] 规范化后的query:', q);
+        
+        if (!list) {
+          console.warn('[SEARCH:FILTER] ❌ list 变量未定义!');
           return;
         }
-        // 合并 searchText + textContent，确保两者都参与匹配
-        const searchText = (el.dataset.searchText || '').toLowerCase();
-        const textContent = (el.textContent || '').toLowerCase();
-        const combined = searchText.includes(textContent) ? searchText : (searchText + ' ' + textContent);
-        const visible = matchQuery(combined, q);
-        el.style.display = visible ? '' : 'none';
-        if (visible) visibleCount++;
-        // 收集前3条的搜索文本用于调试
-        if (elIdx < 3) {
-          sampleTexts.push({
-            idx: elIdx,
-            filename: el.dataset.filename,
-            searchTextLen: searchText.length,
-            searchTextPreview: searchText.slice(0, 150),
-            textContentPreview: textContent.slice(0, 80),
-            combinedLen: combined.length,
-            hasDeepIndex: searchText.length > 200,
-            matchResult: visible
-          });
+        
+        const itemsEls = list.querySelectorAll('.record-panel-item');
+        console.warn('[SEARCH:FILTER] 找到的items数量:', itemsEls.length);
+        
+        let visibleCount = 0;
+        let totalCount = itemsEls.length;
+        let sampleTexts = []; // 收集前几条的搜索文本用于调试
+        itemsEls.forEach((el, elIdx) => {
+          if (!q) {
+            el.style.display = '';
+            visibleCount++;
+            return;
+          }
+          // 合并 searchText + textContent，确保两者都参与匹配
+          const searchText = (el.dataset.searchText || '').toLowerCase();
+          const textContent = (el.textContent || '').toLowerCase();
+          const combined = searchText.includes(textContent) ? searchText : (searchText + ' ' + textContent);
+          const visible = matchQuery(combined, q);
+          el.style.display = visible ? '' : 'none';
+          if (visible) visibleCount++;
+          // 收集前3条的搜索文本用于调试
+          if (elIdx < 3) {
+            sampleTexts.push({
+              idx: elIdx,
+              filename: el.dataset.filename,
+              searchTextLen: searchText.length,
+              searchTextPreview: searchText.slice(0, 150),
+              textContentPreview: textContent.slice(0, 80),
+              combinedLen: combined.length,
+              combinedPreview: combined.slice(0, 200),
+              hasDeepIndex: searchText.length > 200,
+              matchResult: visible,
+              query: q,
+              isMainlyChineseQuery: isMainlyChinese(q)
+            });
+          }
+        });
+        console.warn(`[SEARCH:FILTER] query="${q}", total=${totalCount}, visible=${visibleCount}, isMainlyChinese=${isMainlyChinese(q)}, samples:`, sampleTexts);
+        if (q && visibleCount === 0) {
+          console.warn(`[SEARCH:FILTER] ❌ 没有匹配结果! query="${q}". 检查: searchText是否包含目标内容？深度索引是否已构建？`);
         }
-      });
-      console.warn(`[SEARCH:FILTER] query="${q}", total=${totalCount}, visible=${visibleCount}, samples:`, sampleTexts);
-      if (q && visibleCount === 0) {
-        console.warn(`[SEARCH:FILTER] ❌ 没有匹配结果! query="${q}". 检查: searchText是否包含目标内容？深度索引是否已构建？`);
-      }
-      // 根据是否有匹配结果，可额外触发后台深度索引构建（首次搜索无结果时）
-      if (q && visibleCount === 0 && itemsEls.length > 0) {
-        scheduleDeepBuild();
+        // 根据是否有匹配结果，可额外触发后台深度索引构建（首次搜索无结果时）
+        if (q && visibleCount === 0 && itemsEls.length > 0) {
+          scheduleDeepBuild();
+        }
+      } catch (error) {
+        console.warn('[SEARCH:FILTER] ❌ doFilter 执行异常:', error);
+        console.warn('[SEARCH:FILTER] 异常堆栈:', error.stack);
       }
     };
 
@@ -4299,14 +4343,22 @@ function renderRecordPanel(items) {
 
     inputEl.addEventListener('compositionstart', () => {
       isComposing = true;
-      console.warn('[SEARCH:EVENT] compositionstart (中文输入法开始)');
+      console.warn('[SEARCH:EVENT] compositionstart (中文输入法开始), value="' + inputEl.value + '"');
     });
-    inputEl.addEventListener('compositionend', () => {
+    inputEl.addEventListener('compositionend', (e) => {
       isComposing = false;
-      console.warn('[SEARCH:EVENT] compositionend (中文输入法结束), value="' + inputEl.value + '"');
-      // compositionend 后立即过滤并触发深度构建
-      doFilter();
-      scheduleDeepBuild();
+      // 使用 setTimeout 确保 compositionend 后 inputEl.value 已经更新
+      setTimeout(() => {
+        const finalValue = inputEl.value;
+        console.warn('[SEARCH:EVENT] compositionend (中文输入法结束), value="' + finalValue + '"');
+        // compositionend 后立即过滤并触发深度构建
+        try {
+          doFilter();
+          scheduleDeepBuild();
+        } catch (err) {
+          console.warn('[SEARCH:EVENT] compositionend 处理异常:', err);
+        }
+      }, 0);
     });
     inputEl.addEventListener('input', () => {
       console.warn('[SEARCH:EVENT] input event, isComposing=' + isComposing + ', value="' + inputEl.value + '"');

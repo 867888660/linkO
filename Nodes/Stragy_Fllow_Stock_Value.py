@@ -335,19 +335,13 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     actions = []
     logs = []
     wake_reason = None
+
     def Print(text):
         logs.append(str(text))
 
-    # 先打印完整入参，便于第一时间核对上游传入内容
-    raw_usedata = usedata.to_dict() or {}
-    Print("=== INPUT_PARAMS_BEGIN ===")
-    Print("param.AnchorCompany=" + str(anchor_company))
-    Print("param.RankPosition=" + str(rank_position))
-    Print("param.UseData.Count=" + str(len(raw_usedata)))
-    for k in sorted(raw_usedata.keys(), key=lambda x: str(x)):
-        Print("param.UseData." + str(k) + "=" + str(raw_usedata.get(k)))
-    Print("=== INPUT_PARAMS_END ===")
-
+    # =========================
+    # 基础工具
+    # =========================
     def SetPos(side, pct, desc=None):
         s = str(side).strip().capitalize()
         if s not in ("Yes", "No"):
@@ -364,18 +358,108 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
             action_desc = f"将 {s} 目标仓位设为 {float(p)}"
         actions.append({"type": "SETPOS", "side": s, "pct": float(p), "desc": action_desc})
 
+    def clamp01(x):
+        x = _to_float(x, 0.0)
+        if x < 0:
+            return 0.0
+        if x > 1:
+            return 1.0
+        return float(x)
+
+    def detect_pos_state(yes_pos, no_pos):
+        # 明确五档仓位状态，避免旧版 S2/S3 那种脏状态
+        EMPTY_TH = 0.10
+        HALF_LOW = 0.35
+        HALF_HIGH = 0.65
+        FULL_TH = 0.85
+
+        if yes_pos <= EMPTY_TH and no_pos <= EMPTY_TH:
+            return "P0_EMPTY"
+        if HALF_LOW <= yes_pos <= HALF_HIGH and no_pos <= EMPTY_TH:
+            return "P1_YES_HALF"
+        if yes_pos >= FULL_TH and no_pos <= EMPTY_TH:
+            return "P2_YES_FULL"
+        if HALF_LOW <= no_pos <= HALF_HIGH and yes_pos <= EMPTY_TH:
+            return "P3_NO_HALF"
+        if no_pos >= FULL_TH and yes_pos <= EMPTY_TH:
+            return "P4_NO_FULL"
+
+        # 非标准仓位：按主方向就近归类，但不再混成旧 S3 垃圾桶
+        if yes_pos > no_pos:
+            if yes_pos >= 0.70:
+                return "P2_YES_FULL"
+            return "P1_YES_HALF"
+        if no_pos > yes_pos:
+            if no_pos >= 0.70:
+                return "P4_NO_FULL"
+            return "P3_NO_HALF"
+        return "P0_EMPTY"
+
+    def target_state_from_fact(fact_state):
+        if fact_state == "F_YES":
+            return "P2_YES_FULL"
+        if fact_state == "F_NO":
+            return "P4_NO_FULL"
+        return "P0_EMPTY"
+
+    def step_towards(cur_state, target_state):
+        # 只允许一步迁移，防止抖动和反手过猛
+        if cur_state == target_state:
+            return cur_state
+
+        ladder = ["P4_NO_FULL", "P3_NO_HALF", "P0_EMPTY", "P1_YES_HALF", "P2_YES_FULL"]
+        cur_i = ladder.index(cur_state)
+        tar_i = ladder.index(target_state)
+
+        if cur_i < tar_i:
+            return ladder[cur_i + 1]
+        return ladder[cur_i - 1]
+
+    def apply_state(next_state, reason):
+        if next_state == "P0_EMPTY":
+            SetPos("Yes", 0.0, reason + " | Yes->0.0")
+            SetPos("No", 0.0, reason + " | No->0.0")
+        elif next_state == "P1_YES_HALF":
+            SetPos("No", 0.0, reason + " | No->0.0")
+            SetPos("Yes", 0.5, reason + " | Yes->0.5")
+        elif next_state == "P2_YES_FULL":
+            SetPos("No", 0.0, reason + " | No->0.0")
+            SetPos("Yes", 1.0, reason + " | Yes->1.0")
+        elif next_state == "P3_NO_HALF":
+            SetPos("Yes", 0.0, reason + " | Yes->0.0")
+            SetPos("No", 0.5, reason + " | No->0.5")
+        elif next_state == "P4_NO_FULL":
+            SetPos("Yes", 0.0, reason + " | Yes->0.0")
+            SetPos("No", 1.0, reason + " | No->1.0")
+        else:
+            raise ValueError(f"未知目标状态: {next_state}")
+
+    # =========================
+    # 输入读取
+    # =========================
+    raw_usedata = usedata.to_dict() or {}
+    Print("=== INPUT_PARAMS_BEGIN ===")
+    Print("param.AnchorCompany=" + str(anchor_company))
+    Print("param.RankPosition=" + str(rank_position))
+    Print("param.UseData.Count=" + str(len(raw_usedata)))
+    for k in sorted(raw_usedata.keys(), key=lambda x: str(x)):
+        Print("param.UseData." + str(k) + "=" + str(raw_usedata.get(k)))
+    Print("=== INPUT_PARAMS_END ===")
+
     Enddate = usedata.get("Enddate", usedata.get("end_date", ""))
     day_to_end = _to_float(usedata.get("day_to_end", usedata.get("days_to_end", 9999)), default=9999)
+
     Yes_now_bid = _to_float(usedata.get("Yes_now_bid", 0.0), default=0.0)
     Yes_now_ask = _to_float(usedata.get("Yes_now_ask", 1.0), default=1.0)
     No_now_bid = _to_float(usedata.get("No_now_bid", 0.0), default=0.0)
     No_now_ask = _to_float(usedata.get("No_now_ask", 1.0), default=1.0)
-    Yes_Now_Pos = _to_float(usedata.get("Yes_Now_Pos", 0.0), default=0.0)
-    No_Now_Pos = _to_float(usedata.get("No_Now_Pos", 0.0), default=0.0)
+
+    Yes_Now_Pos = clamp01(usedata.get("Yes_Now_Pos", 0.0))
+    No_Now_Pos = clamp01(usedata.get("No_Now_Pos", 0.0))
+
     anchor_raw = anchor_company
     mcap_map = _extract_mcap_usd_map(usedata)
 
-    # === 新增：排名输入完整性检查（避免 429 导致子集误判）===
     RANK_UNIVERSE_REQUIRED = ["AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "TSLA"]
     missing_rank_symbols = [s for s in RANK_UNIVERSE_REQUIRED if s not in mcap_map or _to_float(mcap_map.get(s), 0.0) <= 0.0]
     rank_ok = (len(missing_rank_symbols) == 0)
@@ -388,11 +472,13 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
     total_companies = len(mcap_map)
     if total_companies < 2:
         raise ValueError("市值公司数量不足（至少需要2个 McapUsd_XXX 字段）")
+
     target_rank = _to_int(rank_position, default=3)
     if target_rank < 1:
         target_rank = 1
     if target_rank > total_companies:
         target_rank = total_companies
+
     anchor_mcap = _to_float(mcap_map.get(anchor, 0.0), default=0.0)
 
     Print("now_time=missing")
@@ -409,12 +495,15 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         Print("McapUsd_" + str(c) + "=" + str(v))
     Print("Yes_Now_Pos=" + str(Yes_Now_Pos) + " No_Now_Pos=" + str(No_Now_Pos))
 
+    # =========================
+    # 排名事实计算
+    # =========================
     higher_count = 0
     for c, v in mcap_map.items():
         if c == anchor:
             continue
         if v > anchor_mcap:
-            higher_count = higher_count + 1
+            higher_count += 1
 
     tie_flag = 0
     for c, v in mcap_map.items():
@@ -434,198 +523,133 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         if v < anchor_mcap and v > closest_below:
             closest_below = v
 
-    gap_up = 0
-    gap_down = 0
+    gap_up = 0.0
+    gap_down = 0.0
     if closest_above < BIG:
-        gap_up = closest_above - anchor_mcap
+        gap_up = float(closest_above - anchor_mcap)
     if closest_below > 0:
-        gap_down = anchor_mcap - closest_below
-
-    edge_margin = gap_up
-    if gap_down < edge_margin:
-        edge_margin = gap_down
-
-    Print("higher_count=" + str(higher_count))
-    Print("tie_flag=" + str(tie_flag))
-    Print("gap_up=" + str(gap_up))
-    Print("gap_down=" + str(gap_down))
-    Print("edge_margin=" + str(edge_margin))
-
-    UP_Y1 = 90000000000
-    DOWN_Y1 = 50000000000
-    TO_NO_HALF_MARGIN = 20000000000
-    TO_YES_HALF_MARGIN = 30000000000
-    DOWN_N1_MARGIN = 10000000000
-    UP_N1_MARGIN = 25000000000
-
-    if Yes_Now_Pos >= 0.75 and No_Now_Pos <= 0.25:
-        state = "S1"
-    elif Yes_Now_Pos > No_Now_Pos:
-        state = "S2"
-    elif No_Now_Pos >= 0.75 and Yes_Now_Pos <= 0.25:
-        state = "S4"
-    else:
-        state = "S3"
-    Print("state=" + str(state))
+        gap_down = float(anchor_mcap - closest_below)
 
     is_target_rank = 0
     if rank_ok and higher_count == (target_rank - 1) and tie_flag == 0:
         is_target_rank = 1
+
+    # hold_buffer_yes：
+    #   当前就在目标名次时，守住当前名次的缓冲
+    # recover_buffer_no：
+    #   当前不在目标名次时，回到目标名次还差多少
+    hold_buffer_yes = 0.0
+    recover_buffer_no = 0.0
+
+    current_rank = higher_count + 1
+
+    if is_target_rank == 1:
+        # 在目标名次上时，看更容易被谁挤掉
+        # 对“是否排第2”来说，本质更看 gap_down（领先下一个的缓冲）
+        hold_buffer_yes = gap_down
+    else:
+        # 不在目标名次上时，分方向看还差多少
+        if current_rank > target_rank:
+            # 当前名次更靠后，比如第3想回到第2，看 gap_up（离上面最近一名的差距）
+            recover_buffer_no = gap_up
+        elif current_rank < target_rank:
+            # 当前名次更靠前，比如第1而目标第2，这类题严格讲也不满足
+            # 这里按“不在目标位，偏 No”处理，但给一个较高置信的 no_fact
+            recover_buffer_no = 0.0
+        else:
+            # 有 tie 导致未满足目标位
+            recover_buffer_no = 0.0
+
+    Print("higher_count=" + str(higher_count))
+    Print("tie_flag=" + str(tie_flag))
+    Print("current_rank=" + str(current_rank))
+    Print("gap_up=" + str(gap_up))
+    Print("gap_down=" + str(gap_down))
+    Print("hold_buffer_yes=" + str(hold_buffer_yes))
+    Print("recover_buffer_no=" + str(recover_buffer_no))
     Print("rank_ok=" + str(rank_ok) + " missing_rank_symbols=" + ",".join(missing_rank_symbols))
     Print("is_target_rank=" + str(is_target_rank))
 
+    # =========================
+    # 防抖阈值（无历史版）
+    # =========================
+    # 你后续可直接调这些数字
+    YES_FULL_ON = 120000000000.0   # 在目标位且领先缓冲很大，偏 Yes
+    YES_OFF = 60000000000.0        # 低于此值就不再认为 Yes 强
+
+    NO_FULL_ON = 250000000000.0    # 不在目标位且距离回归很远，偏 No
+    NO_OFF = 120000000000.0        # 小于此值说明“不在目标位但很接近”，进入中性观察
+
+    # 临近结算时更保守
+    if day_to_end <= 1.0:
+        YES_FULL_ON = YES_FULL_ON * 1.20
+        YES_OFF = YES_OFF * 1.10
+        NO_FULL_ON = NO_FULL_ON * 0.85
+        NO_OFF = NO_OFF * 0.85
+
+    # =========================
+    # 事实判定
+    # =========================
+    if not rank_ok:
+        fact_state = "F_NEUTRAL"
+        fact_reason = "rank_data_incomplete"
+    else:
+        if is_target_rank == 1:
+            if hold_buffer_yes >= YES_FULL_ON:
+                fact_state = "F_YES"
+                fact_reason = f"target_rank_ok_and_hold_buffer_large({hold_buffer_yes} >= {YES_FULL_ON})"
+            elif hold_buffer_yes <= YES_OFF:
+                fact_state = "F_NEUTRAL"
+                fact_reason = f"target_rank_ok_but_hold_buffer_not_enough({hold_buffer_yes} <= {YES_OFF})"
+            else:
+                fact_state = "F_NEUTRAL"
+                fact_reason = f"target_rank_ok_but_mid_zone({YES_OFF} < {hold_buffer_yes} < {YES_FULL_ON})"
+        else:
+            # 不在目标名次时，先偏向 No；但如果非常接近目标位，则只给中性
+            if recover_buffer_no >= NO_FULL_ON:
+                fact_state = "F_NO"
+                fact_reason = f"not_target_rank_and_far_from_recover({recover_buffer_no} >= {NO_FULL_ON})"
+            elif recover_buffer_no <= NO_OFF:
+                fact_state = "F_NEUTRAL"
+                fact_reason = f"not_target_rank_but_recover_gap_small({recover_buffer_no} <= {NO_OFF})"
+            else:
+                fact_state = "F_NO"
+                fact_reason = f"not_target_rank_mid_to_far({NO_OFF} < {recover_buffer_no} < {NO_FULL_ON})"
+
+    # =========================
+    # 仓位状态识别 + 目标状态 + 单步迁移
+    # =========================
+    pos_state = detect_pos_state(Yes_Now_Pos, No_Now_Pos)
+    target_state = target_state_from_fact(fact_state)
+    next_state = step_towards(pos_state, target_state)
+
+    Print("pos_state=" + str(pos_state))
+    Print("fact_state=" + str(fact_state))
+    Print("fact_reason=" + str(fact_reason))
+    Print("target_state=" + str(target_state))
+    Print("next_state=" + str(next_state))
+
+    # =========================
+    # 执行动作
+    # =========================
     if not rank_ok:
         Print("decision=HOLD")
-        Print("reason=rank_data_incomplete: 市值数据不完整（缺失: " + ",".join(missing_rank_symbols) + "），不执行任何仓位变动")
-    elif day_to_end <= 0.25:
-        if state == "S1":
-            if is_target_rank == 0 or edge_margin <= DOWN_Y1:
-                SetPos("No", 0.0)
-                SetPos("Yes", 0.5)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=final_window S1->S2: 目标排名稳定性下降，先降仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=Yes")
-                Print("pct=1.0")
-                Print("reason=final_window hold S1")
-        elif state == "S2":
-            if is_target_rank == 1 and edge_margin >= UP_Y1:
-                SetPos("No", 0.0)
-                SetPos("Yes", 1.0)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=1.0")
-                Print("reason=final_window S2->S1: 目标排名稳固，回Yes满仓")
-            elif is_target_rank == 0 and edge_margin <= TO_NO_HALF_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 0.5)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=final_window S2->S3: 偏离目标排名且边界变窄，慢换No")
-            else:
-                Print("decision=HOLD")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=final_window hold S2")
-        elif state == "S3":
-            if is_target_rank == 1 and edge_margin >= TO_YES_HALF_MARGIN:
-                SetPos("No", 0.0)
-                SetPos("Yes", 0.5)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=final_window S3->S2: 回到目标排名并恢复缓冲，回Yes半仓")
-            elif is_target_rank == 0 and edge_margin <= DOWN_N1_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 1.0)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=1.0")
-                Print("reason=final_window S3->S4: 明确非目标排名且边界极窄，No满仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=final_window hold S3")
-        else:
-            if is_target_rank == 1 or edge_margin >= UP_N1_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 0.5)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=final_window S4->S3: No极端缓和，先降到No半仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=No")
-                Print("pct=1.0")
-                Print("reason=final_window hold S4")
+        Print("reason=rank_data_incomplete: 市值数据不完整，不执行任何仓位变动")
+    elif next_state == pos_state:
+        Print("decision=HOLD")
+        Print("reason=hold: 当前仓位状态已与事实判定匹配，无需迁移")
     else:
-        if state == "S1":
-            if is_target_rank == 0 or edge_margin <= DOWN_Y1:
-                SetPos("No", 0.0)
-                SetPos("Yes", 0.5)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=S1->S2: 目标排名稳定性下降，先减仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=Yes")
-                Print("pct=1.0")
-                Print("reason=hold S1")
-        elif state == "S2":
-            if is_target_rank == 1 and edge_margin >= UP_Y1:
-                SetPos("No", 0.0)
-                SetPos("Yes", 1.0)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=1.0")
-                Print("reason=S2->S1: 目标排名稳固，升到Yes满仓")
-            elif is_target_rank == 0 and edge_margin <= TO_NO_HALF_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 0.5)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=S2->S3: 偏离目标排名且边界窄，慢换No")
-            else:
-                Print("decision=HOLD")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=hold S2")
-        elif state == "S3":
-            if is_target_rank == 1 and edge_margin >= TO_YES_HALF_MARGIN:
-                SetPos("No", 0.0)
-                SetPos("Yes", 0.5)
-                Print("decision=SET")
-                Print("side=Yes")
-                Print("pct=0.5")
-                Print("reason=S3->S2: 回归目标排名且边界恢复，回Yes半仓")
-            elif is_target_rank == 0 and edge_margin <= DOWN_N1_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 1.0)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=1.0")
-                Print("reason=S3->S4: 非目标排名状态强化，No满仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=hold S3")
-        else:
-            if is_target_rank == 1 or edge_margin >= UP_N1_MARGIN:
-                SetPos("Yes", 0.0)
-                SetPos("No", 0.5)
-                Print("decision=SET")
-                Print("side=No")
-                Print("pct=0.5")
-                Print("reason=S4->S3: No极端缓和，先降No半仓")
-            else:
-                Print("decision=HOLD")
-                Print("side=No")
-                Print("pct=1.0")
-                Print("reason=hold S4")
+        reason = f"{pos_state}->{next_state} | fact={fact_state} | {fact_reason}"
+        apply_state(next_state, reason)
+        Print("decision=SET")
+        Print("reason=" + reason)
 
+    # =========================
+    # 汇总输出
+    # =========================
     ts = _pick_ts(usedata)
-    metrics = {
-        "ts": ts or "missing",
-        "state": state,
-        "day_to_end": day_to_end,
-        "anchor_company": anchor,
-        "target_rank": target_rank,
-        "higher_count": higher_count,
-        "tie_flag": tie_flag,
-        "is_target_rank": is_target_rank,
-        "edge_margin": edge_margin,
-        "anchor_mcap": anchor_mcap,
-    }
     decision = "SETPOS" if len(actions) > 0 else "HOLD"
+
     reason_line = ""
     for line in reversed(logs):
         s = str(line)
@@ -634,7 +658,36 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
             break
     if not reason_line:
         reason_line = "no_rule_triggered"
-    metrics["decision"] = decision
+
+    metrics = {
+        "ts": ts or "missing",
+        "decision": decision,
+        "anchor_company": anchor,
+        "target_rank": target_rank,
+        "current_rank": current_rank,
+        "higher_count": higher_count,
+        "tie_flag": tie_flag,
+        "is_target_rank": is_target_rank,
+        "gap_up": gap_up,
+        "gap_down": gap_down,
+        "hold_buffer_yes": hold_buffer_yes,
+        "recover_buffer_no": recover_buffer_no,
+        "day_to_end": day_to_end,
+        "anchor_mcap": anchor_mcap,
+        "fact_state": fact_state,
+        "fact_reason": fact_reason,
+        "pos_state": pos_state,
+        "target_state": target_state,
+        "next_state": next_state,
+        "yes_now_pos": Yes_Now_Pos,
+        "no_now_pos": No_Now_Pos,
+        "rank_ok": rank_ok,
+        "missing_rank_symbols": ",".join(missing_rank_symbols),
+        "yes_full_on": YES_FULL_ON,
+        "yes_off": YES_OFF,
+        "no_full_on": NO_FULL_ON,
+        "no_off": NO_OFF,
+    }
 
     summary_inputs = [
         "[INPUT]",
@@ -642,22 +695,34 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         f"day_to_end={day_to_end}",
         f"Yes_bid={Yes_now_bid} No_bid={No_now_bid}",
         "[CALC]",
-        f"state={state}",
+        f"current_rank={current_rank}",
         f"is_target_rank={is_target_rank}",
-        f"edge_margin={edge_margin}",
+        f"gap_up={gap_up}",
+        f"gap_down={gap_down}",
+        f"hold_buffer_yes={hold_buffer_yes}",
+        f"recover_buffer_no={recover_buffer_no}",
+        f"fact_state={fact_state}",
+        f"pos_state={pos_state}",
+        f"target_state={target_state}",
+        f"next_state={next_state}",
         "[RULE]",
     ]
-    if not rank_ok:
-        summary_inputs.append("⚠️ 市值数据不完整（可能触发 429/超时），本轮排名判断已降级为不可信。缺失: " + ",".join(missing_rank_symbols))
 
-    if is_target_rank == 1:
-        summary_inputs.append("目标名次满足，允许偏向 Yes 侧决策。")
+    if not rank_ok:
+        summary_inputs.append("⚠️ 市值数据不完整，本轮不执行。缺失: " + ",".join(missing_rank_symbols))
     else:
-        summary_inputs.append("目标名次不满足，策略更偏向防守或保持。")
+        if fact_state == "F_YES":
+            summary_inputs.append("事实判定偏 Yes：当前在目标名次且领先缓冲足够。")
+        elif fact_state == "F_NO":
+            summary_inputs.append("事实判定偏 No：当前不在目标名次，且回归目标名次难度较高。")
+        else:
+            summary_inputs.append("事实判定中性：暂不支持激进押注，优先向空仓或轻仓靠拢。")
+
     if decision == "HOLD":
-        summary_inputs.append("本轮未触发仓位切换条件。")
+        summary_inputs.append("本轮未触发仓位迁移。")
     else:
-        summary_inputs.append("本轮触发仓位切换条件，已下发 SetPos。")
+        summary_inputs.append("本轮触发单步仓位迁移，已下发 SetPos。")
+
     summary_inputs.append("[RESULT]")
     summary_inputs.append(f"Decision={decision}")
     summary_inputs.append(f"Reason={reason_line}")
@@ -675,6 +740,7 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
         "NowTime": ts,
         "Enddate": Enddate,
     }
+
     db_logs = []
 
     def DBPrint(text):
@@ -682,7 +748,6 @@ def _run_strategy(usedata: _UseDataProxy, anchor_company: str, rank_position: in
 
     _emit_db_json(DBPrint, ts, inputs_payload, actions, calc=metrics)
     return {"actions": actions, "metrics": metrics, "print": summary_inputs, "wake_reason": wake_reason}
-
 
 def run_node(node):
     try:

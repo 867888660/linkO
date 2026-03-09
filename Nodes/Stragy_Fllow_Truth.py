@@ -69,7 +69,7 @@ FunctionIntroduction = (
     "    type: number\n"
     "    required: true\n"
     "    description: |\n"
-    "      参考 ask（0~1）。用于比较当前 F_ask 的高低并触发：\n"
+    "      参考 ask，取值范围 0~1。用于比较当前 F_ask 的高低并触发：\n"
     "      - 先手反买（F_ask > ref_ask + 0.05）\n"
     "      - 趋势加仓（F_ask < ref_ask）\n"
     "      建议：填你认为“公平或可接受”的中枢价格（例如开仓参考价/模型参考价）。\n"
@@ -77,31 +77,40 @@ FunctionIntroduction = (
     "    type: number\n"
     "    required: true\n"
     "    description: |\n"
-    "      不确定性（建议 0~1）。用于决定 TP/CORE 拆分：tp_ratio=0.5+0.5*risk，core_ratio=1-tp_ratio。\n"
+    "      不确定性，取值范围 0~1。用于决定 TP/CORE 拆分：tp_ratio=0.5+0.5*risk，core_ratio=1-tp_ratio。\n"
     "      - risk=0 -> TP 50%, CORE 50%\n"
     "      - risk=1 -> TP 100%, CORE 0%\n"
-    "      越大表示越偏向“必须止盈止损”的主动管理。\n"
+    "      建议：这是时间与不确定性的关联程度的反向值，当你认为“即使时间推进，反转的可能也没有明显减少”时数值就大，如果认为时间推进能显著降低不确定性，数值就小。\n"
     "  - name: hedge_sell_bias\n"
     "    type: number\n"
     "    required: true\n"
     "    description: |\n"
-    "      反买止损偏好（建议 0~1）。越大，OppSide 反买仓止损线越严格。\n"
-    "      通过 HEDGE_LINE = hedge_sell_bias + (1-hedge_sell_bias)*A(e) 参与计算。\n"
-    "      - 越接近结算（time_ratio 越小），A(e) 越大，止损更严格。\n"
+    "      反买止损偏好，取值范围 0~1。\n"
+    "      数值越大，允许的亏损幅度越小，越偏向卖出 OppSide。\n"
+    "      本参数参与计算 HEDGE_LINE。\n"
+    "      time_ratio 越大，HEDGE_LINE 越低，越不容易卖；time_ratio 越小，HEDGE_LINE 越高，越容易卖。\n"
     "  - name: trend_sell_bias\n"
     "    type: number\n"
     "    required: true\n"
     "    description: |\n"
-    "      趋势止盈偏好（建议 0~1）。越大，前期越不容易止盈；后期会随时间自动降低门槛。\n"
-    "      通过 TREND_TP_LINE = trend_sell_bias*(1-A(e)) 参与计算。\n"
+    "      趋势止盈偏好，取值范围 0~1。\n"
+    "      先计算 FactSide 相对全胜价格的剩余利润空间：remaining_profit_space = 1 - F_now_avgPrice。\n"
+    "      本参数表示对该剩余利润空间的放弃倾向，属于反向值：\n"
+    "      - 越接近 1，越容易接受放弃更多剩余利润，目标盈利越小，越容易提早卖出\n"
+    "      - 越接近 0，越倾向继续保留更多剩余利润空间，目标盈利越大，越不容易卖出\n"
+    "      本参数参与计算 TREND_TP_LINE。\n"
+    "      time_ratio 越大，TREND_TP_LINE 越高，越不容易卖；time_ratio 越小，TREND_TP_LINE 越低，越容易卖。\n"
     "  - name: core_sell_bias\n"
     "    type: number\n"
     "    required: true\n"
     "    description: |\n"
-    "      CORE 止损偏好（建议 0~1），一个输入生成两条线：\n"
-    "      - CORE_STRICT_LINE：用于“退回 CORE”轻动作（规则7/8）\n"
-    "      - CORE_LOOSE_LINE：用于“FactSide 全清”重动作（规则9）\n"
-    "      其中 LOOSE < STRICT，保证 CORE 的最终防线更宽松、更能拿住。\n"
+    "      CORE 止损偏好，取值范围 0~1。\n"
+    "      数值越大，允许的亏损幅度越小，越偏向卖出 FactSide。\n"
+    "      本参数生成两条止损线：\n"
+    "      - CORE_STRICT_LINE：用于 TP 仓撤出，仅保留 CORE 仓\n"
+    "      - CORE_LOOSE_LINE：用于 CORE 仓撤出；触发该线时，TP 仓应已更早撤出\n"
+    "      其中 CORE_LOOSE_LINE < CORE_STRICT_LINE。\n"
+    "      time_ratio 越大，两条止损线越低，越不容易卖；time_ratio 越小，两条止损线越高，越容易卖。\n"
     "  - name: start_day\n"
     "    type: number\n"
     "    required: true\n"
@@ -1208,6 +1217,8 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     e = _clamp(1.0 - time_ratio, 0.0, 1.0)
     A = 3.0 * e * e - 2.0 * e * e * e
 
+    # ===== TREND_TP_LINE：阈值独立计算；remaining_profit_space 单独比较 =====
+    remaining_profit_space = _clamp(1.0 - F_avg, 0.0, 1.0) if F_avg > eps else None
     trend_tp_line = _clamp(trend_sell_bias * (1.0 - A), 0.0, 1.0)
     hedge_line = _clamp(hedge_sell_bias + (1.0 - hedge_sell_bias) * A, 0.0, 1.0)
     core_strict_line = _clamp(core_sell_bias + (1.0 - core_sell_bias) * A, 0.0, 1.0)
@@ -1295,7 +1306,7 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
             reduced_this_tick = True
             Print("rule9: core stop-loss all clear")
         else:
-            if (profit_F is not None and profit_F > trend_tp_line) or (RR_F is not None and RR_F < core_strict_line):
+            if (remaining_profit_space is not None and trend_tp_line is not None and remaining_profit_space < trend_tp_line) or (RR_F is not None and RR_F < core_strict_line):
                 fact_target = _clamp(core_ratio, 0.0, F_cap)
                 reduced_this_tick = True
                 Print("rule7/8: fallback to core target")
