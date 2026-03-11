@@ -172,6 +172,15 @@ def _read_str(node: Dict[str, Any], idx: int, default: str = "") -> str:
     return s if s is not None else default
 
 
+def _preview_text(s: Any, limit: int = 1200) -> str:
+    if s is None:
+        return ""
+    text = str(s)
+    if len(text) <= limit:
+        return text
+    return text[:limit] + f"\n...[truncated {len(text) - limit} chars]"
+
+
 def _parse_function_json(s: str) -> Tuple[Dict[str, Any], str]:
     """
     returns: (obj, err)
@@ -242,7 +251,7 @@ def _mode_and_qty_by_budget(
     target_pct: Optional[float],
     rebalance_hi: float,
     min_notional: float,
-) -> Tuple[str, float]:
+) -> Tuple[str, float, Dict[str, Any]]:
     """
     按预算口径执行仓位调整：
     - NowCost = AvgPrice * now_qty + AskPrice * open_orders_qty
@@ -280,14 +289,30 @@ def _mode_and_qty_by_budget(
         min_n = Decimal("0")
 
     # 如果策略未给该 side 目标 pct，则该 side 不调整。
+    debug_info: Dict[str, Any] = {
+        "now_qty": float(now_q),
+        "open_orders_qty": float(open_q),
+        "avg_price": float(avg_p),
+        "ask_price": float(ask_p),
+        "bid_price": float(bid_p),
+        "min_budget_cap": float(min_cap),
+        "max_budget_cap": float(budget_cap),
+        "rebalance_hi": float(hi),
+        "min_notional": float(min_n),
+        "target_pct_input": target_pct,
+    }
+
     if target_pct is None:
-        return "Wait", 0.0
+        debug_info["reason"] = "target_pct_missing"
+        return "Wait", 0.0, debug_info
 
     if budget_cap <= 0:
-        return "Wait", 0.0
+        debug_info["reason"] = "budget_cap_le_zero"
+        return "Wait", 0.0, debug_info
 
     pct_d = _to_decimal(target_pct, Decimal("0"))
     pct_d = _clamp_decimal(pct_d, Decimal("0"), Decimal("1"))
+    debug_info["target_pct"] = float(pct_d)
 
     used_cost = avg_p * now_q
     reserved_buy_cost = ask_p * open_q
@@ -302,37 +327,63 @@ def _mode_and_qty_by_budget(
 
     now_pct = now_cost / (budget_cap + EPSILON)
     diff = pct_d - now_pct
+    delta_cost = target_cost - now_cost
+    debug_info.update(
+        {
+            "used_cost": float(used_cost),
+            "reserved_buy_cost": float(reserved_buy_cost),
+            "now_cost": float(now_cost),
+            "target_cost": float(target_cost),
+            "now_pct": float(now_pct),
+            "diff": float(diff),
+            "delta_cost": float(delta_cost),
+        }
+    )
 
     abs_diff = abs(diff)
     if abs_diff <= hi:
-        return "Wait", 0.0
+        debug_info["reason"] = "rebalance_hi_blocked"
+        return "Wait", 0.0, debug_info
 
-    delta_cost = target_cost - now_cost
     if abs(delta_cost) < min_n:
-        return "Wait", 0.0
+        debug_info["reason"] = "min_notional_blocked"
+        return "Wait", 0.0, debug_info
 
     if delta_cost > 0:
         if ask_p <= 0:
-            return "Wait", 0.0
+            debug_info["reason"] = "ask_price_invalid"
+            return "Wait", 0.0, debug_info
         qty_buy = (delta_cost / ask_p).to_integral_value(rounding=ROUND_DOWN)
+        debug_info["qty_buy_raw"] = float(delta_cost / ask_p)
+        debug_info["qty_buy_floor"] = float(qty_buy)
         if qty_buy < 1:
-            return "Wait", 0.0
-        return "BUY", float(qty_buy)
+            debug_info["reason"] = "buy_qty_lt_1"
+            return "Wait", 0.0, debug_info
+        debug_info["reason"] = "buy"
+        return "BUY", float(qty_buy), debug_info
 
     if delta_cost < 0:
         if bid_p <= 0:
-            return "Wait", 0.0
+            debug_info["reason"] = "bid_price_invalid"
+            return "Wait", 0.0, debug_info
         qty_sell = ((-delta_cost) / bid_p).to_integral_value(rounding=ROUND_DOWN)
+        debug_info["qty_sell_raw"] = float((-delta_cost) / bid_p)
         if qty_sell > now_q:
             qty_sell = now_q.to_integral_value(rounding=ROUND_DOWN)
+        debug_info["qty_sell_floor"] = float(qty_sell)
         if qty_sell < 1:
-            return "Wait", 0.0
-        return "SELL", float(qty_sell)
+            debug_info["reason"] = "sell_qty_lt_1"
+            return "Wait", 0.0, debug_info
+        debug_info["reason"] = "sell"
+        return "SELL", float(qty_sell), debug_info
 
-    return "Wait", 0.0
+    debug_info["reason"] = "delta_cost_zero"
+    return "Wait", 0.0, debug_info
 
 
 def run_node(node: Dict[str, Any]):
+    debug_lines = []
+
     # Inputs:
     # 0  Yes_now_Qty
     # 1  Yes_OpenOrdersQty
@@ -369,6 +420,14 @@ def run_node(node: Dict[str, Any]):
     rebalance_hi = _read_num(node, 15, float(DEFAULT_REBALANCE_HI))
     min_notional = _read_num(node, 16, float(DEFAULT_MIN_NOTIONAL))
 
+    debug_lines.append("[INPUT] FunctionJson raw:")
+    debug_lines.append(_preview_text(func_json_s, 2000) or "<empty>")
+    debug_lines.append(
+        "[INPUT] Params: "
+        f"rebalance_hi={rebalance_hi}, min_notional={min_notional}, "
+        f"yes_max_cap={yes_max_cap}, no_max_cap={no_max_cap}"
+    )
+
     # Hard stop: if any numeric input is -999, do NOT trade.
     # This prevents downstream from treating "failed fetch" as "0 position".
     numeric_inputs = (
@@ -395,17 +454,26 @@ def run_node(node: Dict[str, Any]):
         Outputs[2]["Num"] = 0.0
         Outputs[3]["Num"] = 0.0
         Outputs[4]["Boolean"] = False
-        return Outputs
+        debug_lines.append("[BLOCK] 检测到 -999 sentinel，直接停止交易。")
+        return {"outputs": Outputs, "debug": "\n".join(debug_lines)}
 
     obj, _err = _parse_function_json(func_json_s)
+    if _err:
+        debug_lines.append(f"[PARSE] ERROR: {_err}")
+    else:
+        debug_lines.append("[PARSE] OK")
     actions = obj.get("actions", [])
     wake_reason = obj.get("wake_reason")
+    debug_lines.append(f"[PARSE] actions_count={len(actions) if isinstance(actions, list) else 0}")
+    debug_lines.append(f"[PARSE] wake_reason={repr(wake_reason)}")
 
     setpos = _extract_setpos(actions)
     yes_pct = setpos.get("Yes")
     no_pct = setpos.get("No")
+    debug_lines.append(f"[SETPOS] extracted={json.dumps(setpos, ensure_ascii=False)}")
+    debug_lines.append(f"[SETPOS] yes_pct={yes_pct}, no_pct={no_pct}")
 
-    yes_mode, yes_qty = _mode_and_qty_by_budget(
+    yes_mode, yes_qty, yes_debug = _mode_and_qty_by_budget(
         yes_now,
         yes_open,
         yes_avg,
@@ -417,7 +485,7 @@ def run_node(node: Dict[str, Any]):
         rebalance_hi,
         min_notional,
     )
-    no_mode, no_qty = _mode_and_qty_by_budget(
+    no_mode, no_qty, no_debug = _mode_and_qty_by_budget(
         no_now,
         no_open,
         no_avg,
@@ -431,6 +499,11 @@ def run_node(node: Dict[str, Any]):
     )
 
     is_awake = _is_awake(actions, wake_reason)
+    debug_lines.append(f"[YES_CALC] {json.dumps(yes_debug, ensure_ascii=False, sort_keys=True)}")
+    debug_lines.append(f"[NO_CALC] {json.dumps(no_debug, ensure_ascii=False, sort_keys=True)}")
+    debug_lines.append(
+        f"[RESULT] YesMode={yes_mode}, YesQty={yes_qty}, NoMode={no_mode}, NoQty={no_qty}, IsAwake={is_awake}"
+    )
 
     # Outputs: YesMode, NoMode, YesQty, NoQty, IsAwake
     Outputs[0]["Context"] = str(yes_mode)
@@ -438,7 +511,7 @@ def run_node(node: Dict[str, Any]):
     Outputs[2]["Num"] = float(yes_qty)
     Outputs[3]["Num"] = float(no_qty)
     Outputs[4]["Boolean"] = bool(is_awake)
-    return Outputs
+    return {"outputs": Outputs, "debug": "\n".join(debug_lines)}
 
 
 # ---- Port definitions ----

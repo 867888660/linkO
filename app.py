@@ -373,7 +373,10 @@ def _split_history_stem(stem: str):
 # 历史记录路径安全化（项目名转文件夹名）
 def _safe_project_dir(name: str) -> str:
     try:
-        safe = re.sub(r"[^\w\.\-]+", "_", str(name)).strip("._")
+        raw = str(name or "").strip()
+        if raw.lower().endswith('.json'):
+            raw = raw[:-5].strip()
+        safe = re.sub(r"[^\w\.\-]+", "_", raw).strip("._")
         return safe or "default"
     except Exception:
         return "default"

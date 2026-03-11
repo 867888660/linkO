@@ -250,7 +250,7 @@ def retrieve_content_within_braces(text):
 
 def _history_jsonl_path(base_dir: Path, day: datetime = None) -> Path:
     d = (day or datetime.utcnow()).strftime("%Y%m%d")
-    p = Path(base_dir) / "workflow_history"
+    p = Path(base_dir)
     p.mkdir(parents=True, exist_ok=True)
     return p / f"history-{d}.jsonl"
 
@@ -371,6 +371,8 @@ class WorkflowEngine:
         # would otherwise be lost between polls. We persist it here by (workflow_id, node_id).
         self._node_state_store = {}   # { (workflow_id, node_id): dict_state }
         self._node_state_lock = threading.Lock()
+        # 运行期快照节流：用于 passivityTrigger 这类长运行工作流的历史落盘防抖
+        self._history_snapshot_last_ts = {}
 
         # 兼容旧的 DEBUG_PRINT：统一用 enable_debug_print 控制（不删旧逻辑）
         try:
@@ -476,6 +478,42 @@ class WorkflowEngine:
         except Exception:
             pass
 
+    def _maybe_save_simple_history(self, graph_data, workflow_id: str = None, min_interval_s: float = None):
+        """在长运行工作流里按节流策略保存一份简单快照，避免 passivityTrigger 完全不落历史。"""
+        try:
+            if not isinstance(graph_data, dict):
+                return False
+            wid = str(workflow_id or "")
+            if min_interval_s is None:
+                try:
+                    min_interval_s = float(os.getenv("WF_HISTORY_SNAPSHOT_MIN_INTERVAL_S", "1.0") or 1.0)
+                except Exception:
+                    min_interval_s = 1.0
+            now_ts = time.time()
+            if wid and min_interval_s > 0:
+                last_ts = float(self._history_snapshot_last_ts.get(wid, 0.0) or 0.0)
+                if (now_ts - last_ts) < min_interval_s:
+                    return False
+            self._save_simple_history(graph_data)
+            if wid:
+                self._history_snapshot_last_ts[wid] = now_ts
+            return True
+        except Exception:
+            return False
+
+    def _graph_has_non_trigger_nodes(self, graph_data) -> bool:
+        """是否包含非 trigger 节点；用于决定应在 trigger 后立即保存还是等待整轮处理完成后保存。"""
+        try:
+            nodes = graph_data.get("nodes", []) if isinstance(graph_data, dict) else []
+            for node in nodes or []:
+                if not isinstance(node, dict):
+                    continue
+                if "trigger" not in str(node.get("NodeKind", "")).lower():
+                    return True
+            return False
+        except Exception:
+            return False
+
     def _mark_cache_touch(self, cache_name, key, now_ts=None):
         if now_ts is None:
             now_ts = time.time()
@@ -525,6 +563,7 @@ class WorkflowEngine:
 
         # 2) 缓存/节流
         self._history_buffer.pop(workflow_id, None)
+        self._history_snapshot_last_ts.pop(workflow_id, None)
         self._event_throttle_last_ts.pop(workflow_id, None)
         self._array_queue_last_index.pop(workflow_id, None)
         # 2.1) per-node persisted state
@@ -635,17 +674,18 @@ class WorkflowEngine:
 
     def _flush_history_items_to_file(self, file_path: Path, items: list):
         """
-        ✅ 改为 JSONL append（关键提速点）：
-        - 不再读整文件/重写整文件
+        ✅ 改为按项目目录 JSONL append：
+        - 落盘到 History/<project>/history-YYYYMMDD.jsonl
+        - 不再把 workflow 历史散落到全局 workflow_history/
         - 保留函数名与签名，避免大范围改动调用点
         """
         if not items:
             return
-        # file_path 参数保留兼容旧调用点（旧模式写 History/<project>/<workflow_id>.json）
         try:
-            p = _history_jsonl_path(Path(self.BASE_DIR))
+            base_dir = Path(file_path).parent if file_path else (Path(self.BASE_DIR) / "History" / "workflow")
         except Exception:
-            p = _history_jsonl_path(Path(self.base_dir))
+            base_dir = Path(self.base_dir) / "History" / "workflow"
+        p = _history_jsonl_path(base_dir)
         # 串行化 append（避免多线程写入行交错）
         with self._history_lock:
             try:
@@ -694,22 +734,39 @@ class WorkflowEngine:
         except Exception:
             n_days = 7
         now = datetime.utcnow()
+        history_root = Path(self.BASE_DIR) / "History"
         for i in range(n_days):
             dd = now - timedelta(days=i)
+            jsonl_name = f"history-{dd.strftime('%Y%m%d')}.jsonl"
+            candidate_paths = []
             try:
-                p = _history_jsonl_path(Path(self.BASE_DIR), dd)
+                candidate_paths.extend(history_root.rglob(jsonl_name))
             except Exception:
-                p = _history_jsonl_path(Path(self.base_dir), dd)
-            for it in _iter_jsonl_records(p):
-                if not isinstance(it, dict):
+                pass
+            try:
+                candidate_paths.append(_history_jsonl_path(Path(self.BASE_DIR) / "workflow_history", dd))
+            except Exception:
+                candidate_paths.append(_history_jsonl_path(Path(self.base_dir) / "workflow_history", dd))
+
+            seen_paths = set()
+            for p in candidate_paths:
+                try:
+                    ps = str(p.resolve())
+                except Exception:
+                    ps = str(p)
+                if ps in seen_paths:
                     continue
-                if str(it.get("workflow_id", "")) != wid:
-                    continue
-                k = _event_dedupe_key(it)
-                if k in seen:
-                    continue
-                seen.add(k)
-                all_items.append(it)
+                seen_paths.add(ps)
+                for it in _iter_jsonl_records(p):
+                    if not isinstance(it, dict):
+                        continue
+                    if str(it.get("workflow_id", "")) != wid:
+                        continue
+                    k = _event_dedupe_key(it)
+                    if k in seen:
+                        continue
+                    seen.add(k)
+                    all_items.append(it)
 
         # B) 回退读旧 JSON（兼容老数据：History/**/<workflow_id>.json）
         old_p = self._find_legacy_history_file_by_workflow(wid)
@@ -1113,10 +1170,30 @@ class WorkflowEngine:
     def _safe_project_dir(self, name: str) -> str:
         """将项目名转为安全的目录名"""
         try:
-            safe = re.sub(r"[^\w\.\-]+", "_", str(name)).strip("._")
+            raw = str(name or "").strip()
+            if raw.lower().endswith(".json"):
+                raw = raw[:-5].strip()
+            safe = re.sub(r"[^\w\.\-]+", "_", raw).strip("._")
             return safe or "workflow"
         except Exception:
             return "workflow"
+
+    def _get_history_project_dir(self, project_name=None, workflow_id=None, graph_data=None) -> Path:
+        """统一历史目录：始终使用 History/<project>/，并去掉项目名里的 .json 后缀。"""
+        try:
+            if project_name is None and isinstance(graph_data, dict):
+                project_name = graph_data.get("ProjectName") or graph_data.get("name")
+            if project_name is None and workflow_id:
+                wf_meta = self.workflows.get(workflow_id) or {}
+                wf_graph = wf_meta.get("graph_data") if isinstance(wf_meta, dict) else {}
+                if isinstance(wf_graph, dict):
+                    project_name = wf_graph.get("ProjectName") or wf_graph.get("name")
+        except Exception:
+            project_name = project_name or "workflow"
+        project_dir = self._safe_project_dir(project_name or "workflow")
+        history_dir = self.BASE_DIR / "History" / project_dir
+        history_dir.mkdir(parents=True, exist_ok=True)
+        return history_dir
     
     def _add_history(self, workflow_id, node_data):
         """添加历史记录（与前端addHistory逻辑对齐）"""
@@ -1191,14 +1268,11 @@ class WorkflowEngine:
                 project_name = None
                 if isinstance(graph_data, dict):
                     project_name = graph_data.get("ProjectName") or graph_data.get("name")
-                project_dir = self._safe_project_dir(project_name or "workflow")
+                history_dir = self._get_history_project_dir(project_name=project_name)
             except Exception:
-                project_dir = "workflow"
+                history_dir = self._get_history_project_dir(project_name="workflow")
 
             # 保存到历史文件（串行化读改写，避免高并发下记录丢失）
-            history_root = self.BASE_DIR / "History"
-            history_dir = history_root / project_dir
-            history_dir.mkdir(parents=True, exist_ok=True)
             file_path = history_dir / f'{workflow_id}.json'
             # ✅ 最小修改：改为缓冲 + 批量落盘，减少“读-改-写整文件”的频率与锁竞争
             now_ts = time.time()
@@ -1297,14 +1371,7 @@ class WorkflowEngine:
             except Exception:
                 pass
             try:
-                import re
-                # 允许 Unicode 单词字符（含中文）+ . 与 -，其余替换为 _
-                comp_safe = re.sub(r"[^\w\.\-]+", "_", str(comp)).strip("._")
-                # 若包含 .json 后缀，移除以避免生成“.json_时间”
-                if comp_safe.lower().endswith(".json"):
-                    comp_safe = comp_safe[:-5].strip("._")
-                if not comp_safe:
-                    comp_safe = "workflow"
+                comp_safe = self._safe_project_dir(comp)
             except Exception:
                 comp_safe = "workflow"
             ts = time.strftime("%Y%m%d_%H%M%S")
@@ -2919,11 +2986,20 @@ class WorkflowEngine:
                         except Exception:
                             pass
                     # 最后兜底保存一次：
-                    # - 仅针对“普通工作流”（没有 passivity / ArrayTrigger）
-                    # - 避免在数组模式下多出一条“父级总览”，保证“按条数保存”的直觉一致
-                    if not saved_once and not saved_by_array and not has_passivity_trigger and not has_array_trigger:
+                    # - 普通工作流：仍保持结束时保存
+                    # - 仅 passivityTrigger 的长运行工作流：在 stop/异常收尾时也补一份快照
+                    # - ArrayTrigger 父流程仍不额外保存，避免出现“父级总览”干扰按条数统计
+                    should_save_fallback = (
+                        (not has_passivity_trigger and not has_array_trigger)
+                        or (has_passivity_trigger and not has_array_trigger)
+                    )
+                    if not saved_once and not saved_by_array and should_save_fallback:
                         try:
-                            self._save_simple_history(self.workflows[workflow_id].get("graph_data"))
+                            saved_once = self._maybe_save_simple_history(
+                                self.workflows[workflow_id].get("graph_data"),
+                                workflow_id=workflow_id,
+                                min_interval_s=0.0
+                            )
                         except Exception:
                             pass
                     status_for_cleanup = self.workflows[workflow_id].get("status")
@@ -3034,6 +3110,8 @@ class WorkflowEngine:
                         }
                         passivity_trigger_array.append(item)
                         self._log_event(workflow_id, f"⏰ [TICK] passivityTrigger(no-outputs) enqueue → Pq={len(passivity_trigger_array)} node={node.get('label', node.get('id'))}")
+                        if not self._graph_has_non_trigger_nodes(data_temp):
+                            self._maybe_save_simple_history(data_temp, workflow_id=workflow_id)
                         # 刷新队列长度，前端可见
                         self._update_workflow_state(workflow_id, data_temp, local_passivity_array=passivity_trigger_array)
                         continue
@@ -3084,6 +3162,8 @@ class WorkflowEngine:
 
                     # 加载到 passivityTriggerArray（模拟前端 LoadInPassivityTriggerArray）
                     self._load_in_passivity_trigger_array(workflow_id, data_temp, result, node, passivity_trigger_array)
+                    if not self._graph_has_non_trigger_nodes(data_temp):
+                        self._maybe_save_simple_history(data_temp, workflow_id=workflow_id)
                     self._log_event(workflow_id, f"   └─ after load → Pq={len(passivity_trigger_array)}")
                 else:
                     self._log_event(workflow_id, f"⚠️ [WARNING] passivityTrigger 节点没有生成有效输出，跳过处理")
@@ -4114,14 +4194,17 @@ class WorkflowEngine:
                 return
             else:
                 # 原有串行处理逻辑
+                graph_to_save = None
                 if array_data.get("nodeId") is None:
                     # 没有 nodeId，检查是否有 graph_data
                     if "graph_data" in array_data:
                         self._log_event(workflow_id, "   └─ process graph_data → run normal nodes")
                         self._process_normal_nodes(array_data["graph_data"], workflow_state)
+                        graph_to_save = array_data["graph_data"]
                     else:
                         self._log_event(workflow_id, "   └─ treat as graph_data → run normal nodes")
                         self._process_normal_nodes(array_data, workflow_state)
+                        graph_to_save = array_data
                 else:
                     # 找到对应的 ArrayTrigger 节点
                     # 优先使用队列项中附带的 graph_data（包含 passivity 路由后的最新输入状态）
@@ -4147,6 +4230,7 @@ class WorkflowEngine:
                             self._log_event(workflow_id, f"🔴 [DEBUG] 开始处理普通节点，图中有 {len(processed_data_temp.get('nodes', []))} 个节点")
                             # 处理节点
                             self._process_normal_nodes(processed_data_temp, workflow_state)
+                            graph_to_save = processed_data_temp
                             if getattr(self, "DEBUG_PRINT", False):
                                 print(f"[ARRAY-DEBUG] 普通节点处理完成")
                             self._log_event(workflow_id, f"🔴 [DEBUG] 普通节点处理完成")
@@ -4160,6 +4244,9 @@ class WorkflowEngine:
                         if getattr(self, "DEBUG_PRINT", False):
                             print(f"[ARRAY-DEBUG] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
                         self._log_event(workflow_id, f"❌ [ERROR] 找不到 ArrayTrigger 节点: {array_data.get('nodeId')}")
+
+                if graph_to_save is not None and self._graph_has_non_trigger_nodes(graph_to_save):
+                    self._maybe_save_simple_history(graph_to_save, workflow_id=workflow_id)
                 
                 # 处理完成后，才从队列中移除并更新队列长度
                 try:

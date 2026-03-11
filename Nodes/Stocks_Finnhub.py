@@ -297,7 +297,7 @@ def run_node(node):
         def _fetch_one(sym):
             row = {
                 "symbol": sym,
-                "ts_utc": ts_now,
+                "ts_utc": None,
                 "source": "finnhub_quote_profile2"
             }
 
@@ -320,7 +320,7 @@ def run_node(node):
                 row["error_quote"] = repr(e)
                 return row
 
-            # profile2 for market cap (restore 市值)
+            # profile2 for shares outstanding / fallback market cap
             try:
                 p = _request_json(
                     base.rstrip("/") + "/stock/profile2",
@@ -332,14 +332,26 @@ def run_node(node):
                     jitter_s=req_jitter_s,
                     min_interval_ms=min_interval_ms,
                 )
-                market_cap_musd = _safe_float(p.get("marketCapitalization"))
-                # Finnhub profile2 的 marketCapitalization 常见口径是 “百万美元” 级别（按其示例字段量级推断）
-                row["market_cap_musd"] = market_cap_musd
-                row["market_cap_usd"] = market_cap_musd * 1_000_000 if market_cap_musd is not None else None
+                shares_outstanding_m = _safe_float(p.get("shareOutstanding"))
+                market_cap_musd_api = _safe_float(p.get("marketCapitalization"))
+                price = row.get("price")
+
+                row["shares_outstanding_m"] = shares_outstanding_m
+
+                if price is not None and shares_outstanding_m is not None:
+                    market_cap_usd = price * shares_outstanding_m * 1_000_000
+                    row["market_cap_usd"] = market_cap_usd
+                    row["market_cap_musd"] = market_cap_usd / 1_000_000
+                    row["market_cap_source"] = "price_x_shareOutstanding"
+                else:
+                    row["market_cap_musd"] = market_cap_musd_api
+                    row["market_cap_usd"] = market_cap_musd_api * 1_000_000 if market_cap_musd_api is not None else None
+                    row["market_cap_source"] = "profile2_marketCapitalization"
             except Exception as e:
                 # profile2 失败不影响现价输出
                 row["error_profile2"] = repr(e)
 
+            row["ts_utc"] = datetime.now(timezone.utc).isoformat()
             return row
 
         t0 = time.time()
