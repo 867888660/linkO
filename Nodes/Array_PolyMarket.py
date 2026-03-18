@@ -37,7 +37,7 @@ NDIGITS_USD   = 2   # 美元金额/深度/数量类（>=0）
 # ====================================================================
 
 # -------------------------
-# 配置：输入 2 个（JSON 路径 + size限制），输出槽= 1(聚合Json_Save) + 字段清单长度
+# 配置：输入 1 个（JSON 路径），输出槽= 1(聚合Json_Save) + 字段清单长度
 # -------------------------
 InPutNum = 1
 
@@ -96,6 +96,9 @@ FIELD_NAMES = [
     'size',  # 仓位大小/份额（兼容 size/shares/quantity/amount/balance）
     # ArrayTrigger 控制字段：是否为最后一条（布尔）
     'Islast',
+    'avgPrice',
+    # 新增字段：务必追加在末尾，避免改变既有输出槽编号导致工作流"错位"
+    'EventID',
 ]
 
 # 额外 +1 个聚合输出槽：Json_Save
@@ -168,6 +171,23 @@ def _get(d: dict, *keys, default=''):
         if isinstance(d, dict) and k in d and d[k] is not None:
             return d[k]
     return default
+
+def _extract_event_id(obj: dict) -> str:
+    """从 market/option/条目中提取 EventID（Gamma Events API 的 event.id）。"""
+    if not isinstance(obj, dict):
+        return ''
+    for k in ('event_id', 'eventId', 'eventID', 'EventID'):
+        v = obj.get(k)
+        if v:
+            return str(v).strip()
+    evs = obj.get('events')
+    if isinstance(evs, list) and evs:
+        first = evs[0]
+        if isinstance(first, dict) and first.get('id'):
+            return str(first.get('id')).strip()
+        if isinstance(first, str):
+            return first.strip()
+    return ''
 
 def _num(value, ndigits=NDIGITS_PRICE, lo=None, hi=None):
     """
@@ -395,7 +415,7 @@ def run_node(node):
     Array = []
     all_records = []  # 用于 Json_Save 的聚合数组
 
-    # 1) 读取输入文件路径和 size 参数
+    # 1) 读取输入文件路径
     json_path = node['Inputs'][0]['Context']
 
     if not json_path or not os.path.exists(json_path):
@@ -498,6 +518,8 @@ def run_node(node):
                 # currentValue：USD 金额（>=0）；兼容 currentValue / CUR_VALUE / value
                 'currentValue': _num(_get(src, 'currentValue', 'current_value', 'CUR_VALUE', 'curValue', 'cur_value', 'value'), ndigits=NDIGITS_USD, lo=0),
                 # size：仓位大小/份额（>=0）；兼容 size / shares / quantity / amount / balance
+                'avgPrice': _num(_get(src, 'avgPrice'), ndigits=NDIGITS_PRICE, lo=0, hi=1),
+                
                 'size': _num(_get(src, 'size', 'shares', 'quantity', 'amount', 'balance'), ndigits=NDIGITS_USD, lo=0),
                 # ArrayTrigger 控制字段：默认 false，最后一条会在循环结束后统一置 true
                 'Islast': False,
@@ -528,6 +550,9 @@ def run_node(node):
                 'apr_eff_if_win': apr_eff,
 
                 'query_time_beijing': query_time_beijing,
+
+                # EventID：优先 option/条目自身，其次 market 层
+                'EventID': _extract_event_id(src) or _extract_event_id(m),
             }
             # 仅保留定义字段，避免脏键
             return {k: rec.get(k, '') for k in FIELD_NAMES}

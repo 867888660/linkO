@@ -4,6 +4,8 @@ import http.client
 import base64
 from openai import OpenAI
 import unicodedata
+import os
+from pathlib import Path
 #**Define the number of outputs and inputs
 OutPutNum = 1
 InPutNum = 0
@@ -30,15 +32,41 @@ def image_to_base64(image_path):
     with open(image_path, "rb") as image_file:
         encoded_image = base64.b64encode(image_file.read())
         return encoded_image.decode('utf-8')
+def get_llm_api_key():
+    """从环境变量读取当前组件的 API 密钥"""
+    component_name = Path(__file__).stem
+    try:
+        edit_path = Path(__file__).parent.parent / "Edit" / "Edit.json"
+        if edit_path.exists():
+            with open(edit_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                llm_mappings = config.get('llmMappings', {})
+                key_name = None
+                for k, v in llm_mappings.items():
+                    if k.lower() == component_name.lower():
+                        key_name = v
+                        break
+                if key_name:
+                    api_key = os.getenv(key_name, "")
+                    if api_key:
+                        return api_key
+                    else:
+                        raise ValueError(f"环境变量 '{key_name}' 未设置，组件: {component_name}")
+                else:
+                    raise ValueError(f"组件 '{component_name}' 未在 llmMappings 中配置")
+    except Exception as e:
+        raise ValueError(f"读取密钥配置失败: {e}")
+    raise ValueError(f"无法获取组件 '{component_name}' 的 API 密钥")
 
 def run_node(node):
     Outputs.clear()
     for i in range(len(node['Outputs'])):
         Outputs.append(node['Outputs'][i])
     messages = node["messages"]
-    print('Test 1测试', node,'/n测试/n',messages)
+    print('Test 1测试', node, '\n测试\n', messages)
     # Initialize the OpenAI client with DeepSeek API
-    client = OpenAI(api_key="sk-194e194cc95a4951a33d8666a6fffa80", base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+    api_key = get_llm_api_key()
+    client = OpenAI(api_key=api_key, base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
     if node['max_tokens'] >8192:
         node['max_tokens'] = 8192
 
@@ -140,10 +168,7 @@ def run_node(node):
         json_part = _escape_newlines_inside_strings(json_part)
         obj       = json.loads(json_part)         # 这里如有语法问题会直接抛错
         return json.dumps(obj, ensure_ascii=False, indent=indent)
-    print('Test 1 Temp', Temp)
-    if node['OriginalTextSelector'] == 'Json':
-        Temp_dict = json.loads(string_to_json(Temp))
-        print('Test 2', Temp_dict)
+    Temp_dict = None
     print('Test 1 Temp', Temp)
     if node['OriginalTextSelector'] == 'Json':
         Temp_dict = json.loads(string_to_json(Temp))
@@ -166,6 +191,6 @@ def run_node(node):
         Outputs[0]['completion_tokens'] = response.usage.completion_tokens
         Outputs[0]['total_tokens'] = response.usage.total_tokens
     except Exception as e:
-        raise Exception(f"An error occurred: {e}. Temp_dict: {Temp_dict}")
+        raise Exception(f"An error occurred: {e}. Temp_dict: {Temp_dict!r}")
 
     return Outputs

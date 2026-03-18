@@ -1,7 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(git commit:*)",
+      "Bash(where claude)",
+      "Bash(node --version)",
+      "Bash(npm --version)",
+      "Bash(npm install -g @anthropic-ai/claude-code)",
+      "Bash(claude --version)",
+      "Bash(pip install PyQt6)",
+      "Bash(PYTHONIOENCODING=utf-8 python -c \":*)"
     ]
   }
 }

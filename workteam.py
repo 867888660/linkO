@@ -1285,67 +1285,173 @@ def get_excel_column_label(index):
 def read_data():
     try:
         # 获取文件路径
-        data = request.get_json()
+        data = request.get_json() or {}
         if 'file_path' not in data:
             return jsonify({'status': 'fail', 'message': 'No file path provided in the request'})
 
         file_path = data['file_path']
+        include_rows = int(data.get('include_rows', 0) or 0)  # 0 = 仅返回表名/列名；>0 = 每个表/Sheet 额外返回前 N 行预览
+        max_json_records = int(data.get('max_json_records', 5000) or 5000)
+        schema_only = include_rows <= 0
 
         # 检查文件是否存在
         if not os.path.exists(file_path):
             return jsonify({'status': 'fail', 'message': 'File not found'})
 
         response_data = {}
+        columns_data = {}
+        file_ext = os.path.splitext(file_path)[1].lower()
 
-        # 根据文件类型进行处理
-        if file_path.endswith('.xlsx'):
-            # 处理 Excel 文件
+        # 根据文件类型进行处理（默认只读“表名/列名”，避免不科学的全量读表）
+        if file_ext in ['.xlsx', '.xls']:
             try:
                 excel_data = pd.ExcelFile(file_path)
                 for sheet_name in excel_data.sheet_names:
-                    df = excel_data.parse(sheet_name)
-
-                    # 替换未命名的列，添加序号和列标签
-                    df.columns = [
+                    df_head = excel_data.parse(sheet_name, nrows=0)
+                    formatted_cols = [
                         f"{i+1}/{get_excel_column_label(i)}/{col if 'Unnamed' not in str(col) else 'Unnamed'}"
-                        for i, col in enumerate(df.columns)
+                        for i, col in enumerate(df_head.columns)
                     ]
-
-                    # 自定义排序规则
-                    def sort_key(col_name):
-                        parts = col_name.split('/')
-                        num_part = int(parts[0])  # 序号作为整数
-                        letter_part = parts[1]  # Excel 样式的列标
-                        name_part = parts[2]  # 原始名称或 'Unnamed'
-                        return num_part, letter_part, name_part
-
-                    # 对列进行排序
-                    sorted_columns = sorted(df.columns, key=sort_key)
-                    df = df[sorted_columns]
-
-                    # 将 DataFrame 中的 NaN 值替换为 "Empty" 字符串，以避免 JSON 转换问题
-                    df = df.fillna("Empty")
-
-                    # 将 DataFrame 转换为字典格式
-                    response_data[sheet_name] = df.to_dict(orient='records')
-
+                    columns_data[sheet_name] = formatted_cols
+                    if not schema_only:
+                        df = excel_data.parse(sheet_name, nrows=include_rows)
+                        df.columns = formatted_cols
+                        df = df.fillna("Empty")
+                        response_data[sheet_name] = df.to_dict(orient='records')
             except Exception as e:
                 return jsonify({'status': 'fail', 'message': f'Error processing Excel file: {str(e)}'})
 
-        elif file_path.endswith('.json'):
-            # 处理 JSON 文件
+        elif file_ext in ['.json', '.jsonl']:
             try:
-                with open(file_path, 'r', encoding='utf-8') as json_file:
-                    response_data['DataBase1'] = json.load(json_file)
+                sheet_name = 'default'
+                all_columns = set()
+                json_data = []
+
+                if file_ext == '.jsonl':
+                    limit = include_rows if not schema_only else max_json_records
+                    with open(file_path, 'r', encoding='utf-8') as jsonl_file:
+                        for line in jsonl_file:
+                            if limit <= 0:
+                                break
+                            line = line.strip()
+                            if not line:
+                                continue
+                            try:
+                                obj = json.loads(line)
+                            except json.JSONDecodeError as line_error:
+                                logging.warning(f'Skipping invalid JSON line: {line}, Error: {str(line_error)}')
+                                continue
+                            if isinstance(obj, dict):
+                                all_columns.update(obj.keys())
+                            if not schema_only:
+                                json_data.append(obj)
+                            limit -= 1
+                else:
+                    streamed = False
+                    if schema_only:
+                        try:
+                            import ijson  # type: ignore
+                            with open(file_path, 'rb') as f:
+                                seen_any = False
+                                count = 0
+                                for obj in ijson.items(f, 'item'):
+                                    seen_any = True
+                                    if isinstance(obj, dict):
+                                        all_columns.update(obj.keys())
+                                    count += 1
+                                    if count >= max_json_records:
+                                        break
+                            streamed = seen_any
+                        except Exception:
+                            streamed = False
+
+                    if not streamed:
+                        with open(file_path, 'r', encoding='utf-8') as json_file:
+                            data_content = json.load(json_file)
+                        if isinstance(data_content, list):
+                            iterable = data_content[:include_rows] if not schema_only else data_content[:max_json_records]
+                        else:
+                            iterable = [data_content]
+                        for item in iterable:
+                            if isinstance(item, dict):
+                                all_columns.update(item.keys())
+                            if not schema_only:
+                                json_data.append(item)
+
+                columns_data[sheet_name] = sorted(list(all_columns))
+                if not schema_only:
+                    response_data[sheet_name] = json_data
             except json.JSONDecodeError as json_error:
                 return jsonify({'status': 'fail', 'message': f'Invalid JSON format: {str(json_error)}'})
             except Exception as e:
-                return jsonify({'status': 'fail', 'message': f'Error reading JSON file: {str(e)}'})
+                return jsonify({'status': 'fail', 'message': f'Error reading JSON/JSONL file: {str(e)}'})
+
+        elif file_ext in ['.db', '.sqlite']:
+            try:
+                import sqlite3
+                from pathlib import Path
+
+                conn = None
+                try:
+                    p = Path(file_path).resolve()
+                    db_uri = f"file:{p.as_posix()}?mode=ro"
+                    conn = sqlite3.connect(db_uri, uri=True, timeout=5.0)
+                except Exception:
+                    conn = sqlite3.connect(file_path, timeout=5.0)
+
+                cur = conn.cursor()
+                cur.execute("PRAGMA query_only=ON;")
+                cur.execute("PRAGMA busy_timeout=5000;")
+
+                def _quote_ident(name: str) -> str:
+                    return '"' + str(name).replace('"', '""') + '"'
+
+                table_rows = cur.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+                ).fetchall()
+                table_names = [r[0] for r in table_rows]
+
+                for table_name in table_names:
+                    try:
+                        pragma_sql = f"PRAGMA table_info({_quote_ident(table_name)})"
+                        info_rows = cur.execute(pragma_sql).fetchall()
+                        columns_data[table_name] = [r[1] for r in info_rows]
+
+                        if not schema_only:
+                            q = f"SELECT * FROM {_quote_ident(table_name)} LIMIT ?"
+                            cur2 = conn.cursor()
+                            cur2.execute(q, (include_rows,))
+                            col_names = [d[0] for d in cur2.description] if cur2.description else []
+                            rows = cur2.fetchall()
+                            response_data[table_name] = [
+                                {col_names[i]: ("Empty" if v is None else v) for i, v in enumerate(row)}
+                                for row in rows
+                            ]
+                    except Exception as table_e:
+                        if not schema_only:
+                            response_data[table_name] = []
+                        columns_data[table_name] = []
+                        logging.warning(f"SQLite table schema/read failed: {table_name}: {table_e}")
+
+                conn.close()
+            except Exception as e:
+                try:
+                    if conn is not None:
+                        conn.close()
+                except Exception:
+                    pass
+                return jsonify({'status': 'fail', 'message': f'Error processing SQLite file: {str(e)}'})
 
         else:
-            return jsonify({'status': 'fail', 'message': 'Invalid file type. Only .xlsx and .json are allowed.'})
+            return jsonify({'status': 'fail', 'message': 'Invalid file type. Only .xlsx, .json, .jsonl, .db and .sqlite are allowed.'})
 
-        return jsonify({'status': 'success', 'data': response_data})
+        return jsonify({
+            'status': 'success',
+            'resolved_path': file_path,
+            'tables': list(columns_data.keys()),
+            'columns': columns_data,
+            'data': response_data,
+        })
 
     except Exception as e:
         return jsonify({'status': 'fail', 'message': str(e)})
@@ -1468,6 +1574,14 @@ def browse_directory():
 def add_history():
     data = request.json
     project_name = request.args.get('ProjectName')
+
+    # 兼容前端开关：RecordHistory=0 时不落盘
+    try:
+        rh = request.args.get('RecordHistory')
+        if rh is not None and str(rh).strip().lower() in ('0', 'false', 'no', 'off', 'disabled', 'disable'):
+            return jsonify({'message': 'History recording disabled'}), 200
+    except Exception:
+        pass
     
     if not project_name:
         return jsonify({'error': 'ProjectName is required'}), 400
@@ -1485,14 +1599,42 @@ def add_history():
     else:
         json_data = []
 
-    # 将数据添加到现有的最后一个数组中
+    # 保护：截断超长字符串，避免单条记录撑爆文件
+    def _trunc(obj, max_chars: int = 20000, _depth: int = 0):
+        if _depth > 6:
+            return obj
+        try:
+            if isinstance(obj, str):
+                if max_chars and len(obj) > max_chars:
+                    return obj[:max_chars] + f"\n...[truncated {len(obj) - max_chars} chars]"
+                return obj
+            if isinstance(obj, list):
+                return [_trunc(x, max_chars=max_chars, _depth=_depth + 1) for x in obj]
+            if isinstance(obj, dict):
+                return {k: _trunc(v, max_chars=max_chars, _depth=_depth + 1) for k, v in obj.items()}
+        except Exception:
+            return obj
+        return obj
+    if isinstance(data, dict):
+        data = _trunc(data)
+
+    # 将数据添加到现有的最后一个数组中（并做裁剪）
     if not json_data or not isinstance(json_data[-1], list):
         json_data.append([])
-
     json_data[-1].append(data)
+    try:
+        if isinstance(json_data[-1], list) and len(json_data[-1]) > 500:
+            json_data[-1] = json_data[-1][-500:]
+    except Exception:
+        pass
+    try:
+        if isinstance(json_data, list) and len(json_data) > 30:
+            json_data = json_data[-30:]
+    except Exception:
+        pass
 
     with open(file_path, 'w', encoding='utf-8') as f:
-        json.dump(json_data, f, ensure_ascii=False, indent=2)
+        json.dump(json_data, f, ensure_ascii=False, separators=(',', ':'))
 
     return jsonify({'message': 'Data added successfully'}), 200
 def is_process_running(script_name):

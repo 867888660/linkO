@@ -11,6 +11,8 @@ let isDragging = false;
 let fileList;
 let FilePath='WorkFlow'
 let CopyNodeTemp;
+// Ctrl+C 复制的“输入入边”（target 为该节点、且 targetAnchorID 对应 Inputs）
+let CopyInputEdgesTemp = [];
 let FileName='';
 let Callsign='';
 let HostPost='localhost:8000';//默认的主机地址
@@ -34,10 +36,57 @@ let recordPanelButtonMap = new Map(); // filename -> button element
 // 记录列表后台标注任务：用于取消/防止并发把前后端拖慢
 let recordAnnotateController = null;
 let recordAnnotateToken = 0;
-const RECORD_ANNOTATE_CONCURRENCY = 2;        // 并发过高会把 /history/run 与 UI 都拖慢
-const RECORD_ANNOTATE_MAX_ITEMS = 200;        // 记录太多时不做全量标注，避免“越多越卡”
-const RECORD_DEEP_SEARCH_MAX_ITEMS = 50;      // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+const RECORD_ANNOTATE_CONCURRENCY = 5;        // 并发过高会把 /history/run 与 UI 都拖慢
+const RECORD_ANNOTATE_MAX_ITEMS = 1000;       // 记录太多时不做全量标注，避免“越多越卡”
+const RECORD_DEEP_SEARCH_MAX_ITEMS = 1000;    // 只有少量记录时才构建 Inputs/Outputs 的深度搜索文本
+// 深度搜索文本索引版本：当构建策略变化时递增，强制重建缓存，避免“修了但不生效”
+const RECORD_SEARCH_TEXT_VERSION = 2;
 let recordSearchRefilterTimer = null;
+
+// ==================== 历史记录开关（本地设置） ====================
+const WORKFLOW_LS_RECORD_HISTORY_ENABLED = 'workflow_record_history_enabled';
+// 记录列表（History/项目/时间戳_随机.json）最大保留文件数：0 表示不限制
+const WORKFLOW_LS_RECORD_HISTORY_MAX_FILES = 'workflow_record_history_max_files';
+const WORKFLOW_HISTORY_FETCH_LIMIT_DEFAULT = 200;
+
+function getWorkflowRecordHistoryEnabled() {
+  try {
+    const v = localStorage.getItem(WORKFLOW_LS_RECORD_HISTORY_ENABLED);
+    if (v === null || v === undefined || v === '') return true; // 默认开启
+    return !(String(v).toLowerCase() === 'false' || String(v) === '0');
+  } catch (_) {
+    return true;
+  }
+}
+
+function setWorkflowRecordHistoryEnabled(enabled) {
+  try {
+    localStorage.setItem(WORKFLOW_LS_RECORD_HISTORY_ENABLED, enabled ? '1' : '0');
+  } catch (_) {}
+}
+
+function getWorkflowRecordHistoryMaxFiles() {
+  // 0 = 不限制；默认给一个比较保守的上限，避免历史无限增长拖慢 UI
+  const DEFAULT_MAX = 200;
+  try {
+    const v = localStorage.getItem(WORKFLOW_LS_RECORD_HISTORY_MAX_FILES);
+    if (v === null || v === undefined || v === '') return DEFAULT_MAX;
+    const n = parseInt(String(v), 10);
+    if (!Number.isFinite(n) || isNaN(n)) return DEFAULT_MAX;
+    // 上限保护：防止误填一个特别离谱的数字导致磁盘爆炸
+    return Math.max(0, Math.min(n, 5000));
+  } catch (_) {
+    return DEFAULT_MAX;
+  }
+}
+
+function setWorkflowRecordHistoryMaxFiles(maxFiles) {
+  try {
+    const n = parseInt(String(maxFiles), 10);
+    if (!Number.isFinite(n) || isNaN(n)) return;
+    localStorage.setItem(WORKFLOW_LS_RECORD_HISTORY_MAX_FILES, String(Math.max(0, Math.min(n, 5000))));
+  } catch (_) {}
+}
 
 function cancelRecordAnnotation(reason = '') {
   // 递增 token 使已排队/延迟启动的任务自动失效
@@ -54,7 +103,38 @@ function scheduleRecordSearchIndexBuild(query, refilterFn) {
   const q = (query || '').trim().toLowerCase();
   if (!q) return;
   if (!Array.isArray(recordItemsCache) || !recordItemsCache.length) return;
-  // 搜索时优先级最高：取消正在进行的后台标注，避免占用网络/主线程
+
+  // 检查是否所有记录都已经有深度搜索文本
+  const allIndexed = recordItemsCache.every(item =>
+    !item || !item.filename ||
+    (typeof item.__searchText === 'string' && item.__searchTextVersion === RECORD_SEARCH_TEXT_VERSION)
+  );
+
+  // 如果已全部索引完毕，仅触发一次 refilter 即可
+  if (allIndexed) {
+    if (typeof refilterFn === 'function') {
+      try { refilterFn(); } catch (_) {}
+    }
+    return;
+  }
+
+  // 如果后台标注仍在运行（controller 未 abort），不要取消它——
+  // 让后台继续构建索引，我们只需要挂上 refilter 回调
+  const bgStillRunning = recordAnnotateController && !recordAnnotateController.signal.aborted;
+  if (bgStillRunning) {
+    // 后台正在运行，先用当前已有数据做一次 refilter
+    if (typeof refilterFn === 'function') {
+      try {
+        if (recordSearchRefilterTimer) clearTimeout(recordSearchRefilterTimer);
+        recordSearchRefilterTimer = setTimeout(() => {
+          try { refilterFn(); } catch(_) {}
+        }, 80);
+      } catch(_) {}
+    }
+    return;
+  }
+
+  // 后台已停止或不存在，启动新的索引构建
   cancelRecordAnnotation('search build');
   const token = ++recordAnnotateToken;
   recordAnnotateController = new AbortController();
@@ -63,7 +143,7 @@ function scheduleRecordSearchIndexBuild(query, refilterFn) {
     token,
     signal: recordAnnotateController?.signal,
     enableDeepSearch: true,
-    // 搜索索引比错误标记更“有用”，这里允许多处理一些（仍然要限流）
+    // 搜索索引比错误标记更"有用"，这里允许多处理一些（仍然要限流）
     maxItems: Math.max(RECORD_ANNOTATE_MAX_ITEMS, 600),
     onItemUpdated: () => {
       if (typeof refilterFn !== 'function') return;
@@ -506,7 +586,20 @@ const addcombo = (item,x,y) => {
   }
   graph.addItem('combo', combo);
 }
-const copyNode = (node, x, y) => {
+
+// 生成一个不与当前图中任何 edge id 冲突的新 id
+function genUniqueEdgeId(existingIds, prefix = 'edge') {
+  const exists = (id) => existingIds && typeof existingIds.has === 'function' && existingIds.has(String(id));
+  let id = '';
+  for (let i = 0; i < 50; i++) {
+    id = `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e9)}_${i}`;
+    if (!exists(id)) return id;
+  }
+  return `${prefix}_${Date.now()}_${Math.floor(Math.random() * 1e12)}`;
+}
+
+const copyNode = (node, x, y, options = {}) => {
+  const { cloneInputEdges = false, inputEdges = [] } = options || {};
   const n = node.name.split('.py')[0];
 
   requestNodeInfo(n).then((nodeInfo) => {
@@ -570,6 +663,30 @@ const copyNode = (node, x, y) => {
     };
 
       graph.addItem('node', TempNode);
+
+      // ✅ 全面复制：把原节点 Inputs 的入边也一并复制到新节点（edge.id 必须重新命名避免撞名）
+      try {
+        if (cloneInputEdges && Array.isArray(inputEdges) && inputEdges.length) {
+          const g = graph.save();
+          const existingIds = new Set((g.edges || []).map(e => String(e.id)));
+          inputEdges.forEach((edgeModel) => {
+            if (!edgeModel) return;
+            const newEdge = structuredClone(edgeModel);
+            // 重新命名 edge id，避免与现有边撞名
+            newEdge.id = genUniqueEdgeId(existingIds, 'edgeCopy');
+            existingIds.add(String(newEdge.id));
+            // 把该入边“接入”到新节点相同的 Inputs 端口
+            newEdge.target = TempId1;
+            // 保留 sourceAnchorID / targetAnchorID，交给 RefreshEdge 统一回算 sourceAnchor/targetAnchor
+            graph.addItem('edge', newEdge);
+          });
+          setTimeout(() => {
+            try { RefreshEdge(); } catch (_) {}
+          }, 10);
+        }
+      } catch (e) {
+        console.warn('[CopyFull] clone input edges failed:', e);
+      }
 
   });
 
@@ -1816,11 +1933,166 @@ const initGraph = async (id = null) => {
       return tip;
     })();
 
+    /* ========= Ctrl + A：悬停聚焦（其它全部半透明） ========= */
+    // 需求：同时按住 Ctrl+A 时，鼠标悬停的 node/edge 保持正常，其它 node/edge 全部半透明；松开按键或移出则恢复。
+    // 这里做最小实现：只控制 opacity，不动你现有的 linkBlue/linkRed 等状态逻辑。
+    const DIM_OPACITY = 0.15;
+    const RELATED_OPACITY = 0.55; // 第三种状态：与悬浮对象“相关”的 node/edge（介于半透明与实体之间）
+    const mountNodeEl = document.getElementById('mountNode');
+    const focusState = (window.__linkO_focusState = window.__linkO_focusState || { ctrlAActive: false, inited: false });
+    // 每次 initGraph 都更新当前 graph 引用，避免键盘监听引用旧 graph 导致无法恢复
+    focusState.graph = graph;
+    if (typeof focusState.isMouseInCanvas !== 'boolean') focusState.isMouseInCanvas = false;
+    // 记录当前悬停对象（用于：先悬停，再按 Ctrl+A 的场景）
+    focusState.hoveredItem = focusState.hoveredItem || null; // G6 item
+    focusState.hoveredKind = focusState.hoveredKind || null; // 'node' | 'edge'
+
+    const isEditableTarget = (t) => {
+      if (!t) return false;
+      const tag = (t.tagName || '').toUpperCase();
+      return tag === 'INPUT' || tag === 'TEXTAREA' || t.isContentEditable === true;
+    };
+
+    const getFocusGraph = () => focusState.graph;
+
+    const setItemOpacity = (item, opacity) => {
+      if (!item || item.destroyed) return;
+      const container = item.getContainer && item.getContainer();
+      if (container && container.getChildren) {
+        container.getChildren().forEach((shape) => {
+          if (shape && shape.attr) shape.attr('opacity', opacity);
+        });
+      }
+      const keyShape = item.getKeyShape && item.getKeyShape();
+      if (keyShape && keyShape.attr) keyShape.attr('opacity', opacity);
+    };
+
+    const clearCtrlAFocus = () => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      console.warn('[CtrlA] clear focus');
+      g.getNodes().forEach((n) => setItemOpacity(n, 1));
+      g.getEdges().forEach((e) => setItemOpacity(e, 1));
+    };
+
+    const applyCtrlAFocusForNode = (nodeItem) => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      const nodeId = nodeItem.getID();
+      console.warn('[CtrlA] focus node', nodeId);
+      // 先全部压暗
+      g.getNodes().forEach((n) => setItemOpacity(n, DIM_OPACITY));
+      g.getEdges().forEach((e) => setItemOpacity(e, DIM_OPACITY));
+      // 悬停节点：实体
+      setItemOpacity(nodeItem, 1);
+      // 相关边/相关节点：第三种状态（更优雅地区分层次）
+      g.getEdges().forEach((edgeItem) => {
+        const { source, target } = edgeItem.getModel();
+        if (source === nodeId || target === nodeId) {
+          setItemOpacity(edgeItem, RELATED_OPACITY);
+          const otherId = source === nodeId ? target : source;
+          const otherNode = g.findById(otherId);
+          if (otherNode) setItemOpacity(otherNode, RELATED_OPACITY);
+        }
+      });
+    };
+
+    const applyCtrlAFocusForEdge = (edgeItem) => {
+      const g = getFocusGraph();
+      if (!g || g.destroyed) return;
+      const m = edgeItem.getModel();
+      console.warn('[CtrlA] focus edge', { id: edgeItem.getID && edgeItem.getID(), source: m.source, target: m.target });
+      // 先全部压暗
+      g.getNodes().forEach((n) => setItemOpacity(n, DIM_OPACITY));
+      g.getEdges().forEach((e) => setItemOpacity(e, DIM_OPACITY));
+      // 悬停边：实体
+      setItemOpacity(edgeItem, 1);
+      // 两端节点：第三种状态
+      const s = g.findById(m.source);
+      const t = g.findById(m.target);
+      if (s) setItemOpacity(s, RELATED_OPACITY);
+      if (t) setItemOpacity(t, RELATED_OPACITY);
+    };
+
+    // 只初始化一次（initGraph 可能会被多次调用）
+    if (!focusState.inited) {
+      focusState.inited = true;
+      if (mountNodeEl) {
+        mountNodeEl.addEventListener('mouseenter', () => {
+          focusState.isMouseInCanvas = true;
+          console.warn('[CtrlA] mouse enter canvas');
+        });
+        mountNodeEl.addEventListener('mouseleave', () => {
+          focusState.isMouseInCanvas = false;
+          console.warn('[CtrlA] mouse leave canvas');
+          if (focusState.ctrlAActive) clearCtrlAFocus();
+        });
+      } else {
+        console.warn('[CtrlA] mountNode not found');
+      }
+      document.addEventListener(
+        'keydown',
+        (evt) => {
+          // 只在画布区域内生效，避免影响其它输入框
+          console.warn('[CtrlA] keydown', {
+            key: evt.key,
+            ctrlKey: evt.ctrlKey,
+            target: evt.target && evt.target.tagName,
+            isMouseInCanvas: focusState.isMouseInCanvas
+          });
+          if (isEditableTarget(evt.target)) {
+            console.warn('[CtrlA] ignore: editable target');
+            return;
+          }
+          if (!focusState.isMouseInCanvas) {
+            console.warn('[CtrlA] ignore: mouse not in canvas');
+            return;
+          }
+          if ((evt.key === 'a' || evt.key === 'A') && evt.ctrlKey) {
+            focusState.ctrlAActive = true;
+            console.warn('[CtrlA] active = true');
+            evt.preventDefault(); // 避免浏览器 Ctrl+A 全选页面文字
+            // 关键修复：如果已经悬停在 node/edge 上，再按 Ctrl+A 时立刻对当前悬停对象应用聚焦
+            if (!isRunning() && focusState.hoveredItem && !focusState.hoveredItem.destroyed) {
+              console.warn('[CtrlA] apply focus immediately (already hovering)', focusState.hoveredKind);
+              if (focusState.hoveredKind === 'node') applyCtrlAFocusForNode(focusState.hoveredItem);
+              else if (focusState.hoveredKind === 'edge') applyCtrlAFocusForEdge(focusState.hoveredItem);
+            }
+          }
+        },
+        true
+      );
+      document.addEventListener(
+        'keyup',
+        (evt) => {
+          console.warn('[CtrlA] keyup', { key: evt.key, ctrlKey: evt.ctrlKey, active: focusState.ctrlAActive });
+          if (evt.key === 'a' || evt.key === 'A' || evt.key === 'Control') {
+            if (focusState.ctrlAActive) {
+              focusState.ctrlAActive = false;
+              console.warn('[CtrlA] active = false');
+              clearCtrlAFocus();
+            }
+          }
+        },
+        true
+      );
+      window.addEventListener('blur', () => {
+        if (focusState.ctrlAActive) {
+          focusState.ctrlAActive = false;
+          console.warn('[CtrlA] window blur -> active = false');
+          clearCtrlAFocus();
+        }
+      });
+    }
+
     /* ========= 节点悬停 ========= */
     graph.on('node:mouseenter', e => {
       /* ——— tooltip 逻辑（保持你原有判断） ——— */
       const node = e.item;
       node.update({ IsHovor:true });
+      // 记录当前悬停对象
+      focusState.hoveredItem = node;
+      focusState.hoveredKind = 'node';
       const m = node.getModel();
       tooltip.style.display = 'block';
       tooltip.style.fontColor = 'RED';
@@ -1857,6 +2129,10 @@ const initGraph = async (id = null) => {
         }
       });
 
+      // Ctrl+A 聚焦：除悬停 node 与其关联边外，其它全部半透明
+      if (focusState.ctrlAActive) {
+        applyCtrlAFocusForNode(node);
+      }
       
     });
 
@@ -1868,6 +2144,11 @@ const initGraph = async (id = null) => {
     
       const node = e.item;
       node.update({ IsHovor:false });
+      // 清掉悬停记录（仅当离开的正是当前记录的对象）
+      if (focusState.hoveredItem === node) {
+        focusState.hoveredItem = null;
+        focusState.hoveredKind = null;
+      }
     
       /* ——— 取消关联边高亮 ——— */
       const nodeId = node.getID();
@@ -1892,6 +2173,10 @@ const initGraph = async (id = null) => {
         }
       });
     
+      // 离开悬停对象就恢复（聚焦只在“悬停时”生效）
+      if (focusState.ctrlAActive) {
+        clearCtrlAFocus();
+      }
       
     });
     
@@ -1904,6 +2189,9 @@ const initGraph = async (id = null) => {
     
       const edge = e.item;
       edge._prevStates = edge.getStates();   // 记录原状态
+      // 记录当前悬停对象
+      focusState.hoveredItem = edge;
+      focusState.hoveredKind = 'edge';
     
       // ==== ★ 如果本身是橘 / 紫 / 绿，不改变 stroke，只加光晕 ====
       if (edge.hasState('linkOrange') || edge.hasState('linkPurple') || edge.hasState('linkGreen')) {
@@ -1911,12 +2199,22 @@ const initGraph = async (id = null) => {
       } else {
         edge.setState('linkRed', true);      // 普通边 ➜ 红高亮
       }
+
+      // Ctrl+A 聚焦：除悬停 edge 与其两端节点外，其它全部半透明
+      if (focusState.ctrlAActive) {
+        applyCtrlAFocusForEdge(edge);
+      }
     });
     
     graph.on('edge:mouseleave', e => {
       if (isRunning()) return;
     
       const edge = e.item;
+      // 清掉悬停记录（仅当离开的正是当前记录的对象）
+      if (focusState.hoveredItem === edge) {
+        focusState.hoveredItem = null;
+        focusState.hoveredKind = null;
+      }
     
       // ==== 恢复所有状态 + 去掉阴影 ====
       edge.setState('linkRed', false);
@@ -1934,6 +2232,11 @@ const initGraph = async (id = null) => {
           lineWidth:3,
           opacity:1
         });
+      }
+
+      // 离开悬停对象就恢复（聚焦只在“悬停时”生效）
+      if (focusState.ctrlAActive) {
+        clearCtrlAFocus();
       }
     });
     
@@ -3292,6 +3595,176 @@ function getProjectHistoryKey() {
   return (parts[parts.length - 1] || '').trim();
 }
 
+// === Record mode render normalization ===
+// 记录快照通常只有 nodes/edges，不一定包含 Inputs/Outputs 的 Link(连接数)、IsLabel、甚至 Kind/value 字段。
+// 这会导致：锚点看起来“都没连接”、以及卡片内不显示输入参数值。
+function normalizeGraphForRender(g) {
+  try {
+    if (!g || typeof g !== 'object') return g;
+    const nodes = Array.isArray(g.nodes) ? g.nodes : [];
+    const edges = Array.isArray(g.edges) ? g.edges : [];
+    if (!nodes.length) return g;
+
+    const byId = {};
+    nodes.forEach(n => { if (n && n.id) byId[n.id] = n; });
+
+    const inferKind = (io) => {
+      if (!io || typeof io !== 'object') return 'String';
+      const k = (io.Kind === null || typeof io.Kind === 'undefined') ? '' : String(io.Kind);
+      if (k) return k;
+      // best-effort inference
+      if (typeof io.Boolean === 'boolean') return 'Boolean';
+      if (typeof io.Num === 'number') return 'Num';
+      if (typeof io.Num === 'string' && io.Num.trim() !== '' && Number.isFinite(Number(io.Num))) return 'Num';
+      return 'String';
+    };
+
+    const coerceBoolean = (v) => {
+      if (typeof v === 'boolean') return v;
+      if (v === 1 || v === '1') return true;
+      if (v === 0 || v === '0') return false;
+      if (typeof v === 'string') {
+        const s = v.trim().toLowerCase();
+        if (s === 'true') return true;
+        if (s === 'false') return false;
+      }
+      return undefined;
+    };
+
+    const ensureIOFields = (io) => {
+      if (!io || typeof io !== 'object') return;
+      io.Kind = inferKind(io);
+      // Link / IsLabel defaults
+      if (typeof io.Link !== 'number' || !Number.isFinite(io.Link)) io.Link = 0;
+      if (typeof io.IsLabel !== 'boolean') io.IsLabel = false;
+
+      // Normalize value fields for existing card renderer (which mainly reads Context/Num/Boolean)
+      const kind = String(io.Kind || '');
+      if (kind === 'Num') {
+        if ((io.Num === null || typeof io.Num === 'undefined' || io.Num === '') && io.Parameters !== undefined) {
+          const num = Number(io.Parameters);
+          if (Number.isFinite(num)) io.Num = num;
+        }
+      } else if (kind === 'Boolean' || kind === 'Trigger') {
+        if (typeof io.Boolean !== 'boolean' && io.Parameters !== undefined) {
+          const b = coerceBoolean(io.Parameters);
+          if (typeof b === 'boolean') io.Boolean = b;
+        }
+      } else if (kind.includes('String') || kind === 'Label' || kind === 'Text') {
+        if ((io.Context === null || typeof io.Context === 'undefined' || io.Context === '') && io.Parameters !== undefined) {
+          io.Context = String(io.Parameters);
+        }
+      } else {
+        // Unknown kind -> treat like string
+        if ((io.Context === null || typeof io.Context === 'undefined' || io.Context === '') && io.Parameters !== undefined) {
+          io.Context = String(io.Parameters);
+        }
+      }
+    };
+
+    // 1) Ensure arrays & base fields exist, and sanitize IO entries
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object') return;
+      if (!Array.isArray(n.Inputs)) n.Inputs = [];
+      if (!Array.isArray(n.Outputs)) n.Outputs = [];
+      if (typeof n.TriggerLink !== 'number' || !Number.isFinite(n.TriggerLink)) n.TriggerLink = 0;
+      n.Inputs.forEach(ensureIOFields);
+      n.Outputs.forEach(ensureIOFields);
+    });
+
+    // 2) Recompute Link counts from edges (critical for anchor connected rendering)
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object') return;
+      if (Array.isArray(n.Inputs)) n.Inputs.forEach(io => { if (io && typeof io === 'object') io.Link = 0; });
+      if (Array.isArray(n.Outputs)) n.Outputs.forEach(io => { if (io && typeof io === 'object') io.Link = 0; });
+      n.TriggerLink = 0;
+    });
+
+    edges.forEach(e => {
+      if (!e || typeof e !== 'object') return;
+      const s = byId[e.source];
+      const t = byId[e.target];
+      if (!s || !t) return;
+      const sInputs = Array.isArray(s.Inputs) ? s.Inputs.length : 0;
+      const sOutputs = Array.isArray(s.Outputs) ? s.Outputs.length : 0;
+      const tInputs = Array.isArray(t.Inputs) ? t.Inputs.length : 0;
+      const tOutputs = Array.isArray(t.Outputs) ? t.Outputs.length : 0;
+
+      const sA = Number(e.sourceAnchor);
+      const tA = Number(e.targetAnchor);
+
+      if (Number.isFinite(sA)) {
+        const outIdx = sA - sInputs;
+        if (outIdx >= 0 && outIdx < sOutputs) {
+          const out = s.Outputs[outIdx];
+          if (out && typeof out === 'object') out.Link = (Number(out.Link) || 0) + 1;
+        }
+      }
+
+      if (Number.isFinite(tA)) {
+        const triggerAnchor = tInputs + tOutputs;
+        if ((t.NodeKind === 'IfNode' || (String(t.NodeKind || '').includes('IfNode'))) && tA === triggerAnchor) {
+          t.TriggerLink = (Number(t.TriggerLink) || 0) + 1;
+        } else if (tA >= 0 && tA < tInputs) {
+          const inp = t.Inputs[tA];
+          if (inp && typeof inp === 'object') inp.Link = (Number(inp.Link) || 0) + 1;
+        }
+      }
+    });
+
+    // 3) Auto show inline values when not connected (IsLabel missing in snapshot)
+    nodes.forEach(n => {
+      if (!n || typeof n !== 'object' || !Array.isArray(n.Inputs)) return;
+      n.Inputs.forEach(inp => {
+        if (!inp || typeof inp !== 'object') return;
+        if ((Number(inp.Link) || 0) > 0) {
+          inp.IsLabel = false;
+          return;
+        }
+        // Not connected: if value exists, default to show
+        const k = String(inp.Kind || '');
+        let hasValue = false;
+        if (k === 'Num') hasValue = (inp.Num !== null && typeof inp.Num !== 'undefined' && String(inp.Num) !== '' && Number.isFinite(Number(inp.Num)));
+        else if (k === 'Boolean' || k === 'Trigger') hasValue = (typeof inp.Boolean === 'boolean');
+        else hasValue = (inp.Context !== null && typeof inp.Context !== 'undefined' && String(inp.Context).trim() !== '');
+        if (hasValue && typeof inp.IsLabel !== 'boolean') inp.IsLabel = true;
+        if (hasValue) inp.IsLabel = true;
+      });
+    });
+  } catch (e) {
+    console.warn('[RECORD] normalizeGraphForRender failed:', e);
+  }
+  return g;
+}
+
+// 标记有状态的节点 IsBlock = true，确保外框颜色正常显示
+function markStatefulNodesBlock(nodes) {
+  if (!Array.isArray(nodes)) return;
+  nodes.forEach(node => {
+    if (
+      node && (
+        node.isFinish ||
+        node.IsRunning ||
+        node.IsError ||
+        (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+      )
+    ) {
+      node.IsBlock = true;
+    }
+  });
+}
+
+// 从图数据中恢复 ProjectName（默认值 'Temp' 也视为未初始化）
+function syncProjectNameFromGraph(graphData) {
+  if (!graphData || !graphData.ProjectName) return;
+  if (ProjectName && ProjectName !== 'Temp' && ProjectName === graphData.ProjectName) return;
+  const prev = ProjectName;
+  ProjectName = graphData.ProjectName;
+  if (prev !== ProjectName) {
+    console.log('[RECORD] ProjectName 已同步:', prev, '->', ProjectName);
+  }
+}
+
 async function enterRecordMode() {
   try {
     isRecordMode = true;
@@ -3299,29 +3772,22 @@ async function enterRecordMode() {
     document.body.classList.add('record-mode');
     setRecordButtonState(true);
     toggleToolbarSelect(true);
-    
-    // 🔥 关键修复：在 monitor_completed 模式下，先确保图数据已加载
+
+    // monitor_completed 模式：优先使用已保存的完整图数据
     if (frontendMode === 'monitor_completed' && window.__lastCompletedGraphData) {
       console.log('[RECORD] monitor_completed 模式：先加载完整图数据');
       const graphDataToLoad = structuredClone(window.__lastCompletedGraphData);
-      
-      // 🔥 确保 ProjectName 正确设置（从保存的图数据中获取）
-      if (graphDataToLoad.ProjectName && !ProjectName) {
-        ProjectName = graphDataToLoad.ProjectName;
-        console.log('[RECORD] 从图数据中恢复 ProjectName:', ProjectName);
-      }
-      
-      // 确保所有已完成节点的 IsBlock 为 true
-      if (graphDataToLoad.nodes) {
-        graphDataToLoad.nodes.forEach(node => {
-          if (node && (node.isFinish || node.IsError)) {
-            node.IsBlock = true;
-          }
-        });
-      }
+
+      // 🔥 修复：即使 ProjectName 已有默认值 'Temp'，也要用图数据中的正确值覆盖
+      syncProjectNameFromGraph(graphDataToLoad);
+
+      markStatefulNodesBlock(graphDataToLoad.nodes);
+      // 从 edges 反算 Link，补齐 IsLabel/Kind/value 字段
+      normalizeGraphForRender(graphDataToLoad);
       ChangeDatas(graphDataToLoad);
       RefreshEdge();
-      // 手动触发节点更新
+
+      // 将状态同步到画布上的节点实例
       if (graphDataToLoad.nodes) {
         graphDataToLoad.nodes.forEach(node => {
           const nodeItem = graph.findById(node.id);
@@ -3335,18 +3801,21 @@ async function enterRecordMode() {
           }
         });
       }
-      // 更新 TempMessageNode
+
       TempMessageNode = structuredClone({ nodes: graphDataToLoad.nodes });
-      // 🔥 关键修复：保存当前图数据到记录模式专用变量，供 sidewindow 使用
       window.__recordModeCurrentGraph = structuredClone(graphDataToLoad);
-      console.log('[RECORD] 图数据已加载，节点数:', graphDataToLoad.nodes?.length || 0);
+      console.warn('[RECORD] 图数据已加载，节点数:', graphDataToLoad.nodes?.length || 0);
     } else {
-      // 非 monitor_completed 模式：使用当前图数据
+      // 非 monitor_completed 模式：使用当前画布数据
       const currentGraph = graph.save();
+      syncProjectNameFromGraph(currentGraph);
+      try {
+        markStatefulNodesBlock(currentGraph?.nodes);
+      } catch (_) {}
       window.__recordModeCurrentGraph = structuredClone(currentGraph);
-      console.log('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
+      console.warn('[RECORD] 使用当前图数据初始化 __recordModeCurrentGraph，节点数:', currentGraph?.nodes?.length || 0);
     }
-    
+
     backupGraphForRecordMode();
     disableEditorButtons(true);
     openRecordPanel();
@@ -3383,7 +3852,11 @@ async function loadRecordItems() {
   setRecordLoadingIndicator(true);
   recordItemsCache = [];
   try {
-    const query = historyKey ? `?project_name=${encodeURIComponent(historyKey)}` : '';
+    // 记录列表：让后端按 max_files 自动裁剪最老的快照文件，避免越积越多导致 1000+ 卡顿
+    const maxFiles = (() => { try { return getWorkflowRecordHistoryMaxFiles(); } catch(_) { return 200; } })();
+    const query = historyKey
+      ? `?project_name=${encodeURIComponent(historyKey)}&only_snapshots=1&max_files=${encodeURIComponent(String(maxFiles))}`
+      : `?only_snapshots=1&max_files=${encodeURIComponent(String(maxFiles))}`;
     const url = `/history/runs${query}`;
     console.log('[RECORD] 请求URL:', url);
     const response = await fetch(url);
@@ -3411,7 +3884,7 @@ async function loadRecordItems() {
     renderRecordPanel(recordItemsCache);
     // 异步标记是否存在错误节点，用于控制记录条目的底色（红/蓝）
     try {
-      // 取消上一轮标注任务，避免“记录越多，点一条越慢”
+      // 取消上一轮标注任务，避免"记录越多，点一条越慢"
       cancelRecordAnnotation('reload record list');
       const token = ++recordAnnotateToken;
       recordAnnotateController = new AbortController();
@@ -3420,8 +3893,17 @@ async function loadRecordItems() {
         annotateRecordItemsWithErrorFlag(recordItemsCache, {
           token,
           signal: recordAnnotateController?.signal,
-          // 列表加载阶段只做“错误标记”（轻量）；深度搜索索引按需在用户输入时再构建
-          enableDeepSearch: false
+          enableDeepSearch: true, // 默认在后台加载时就构建深层搜索索引，以支持内容搜索
+          onItemUpdated: (updatedItem) => {
+            // 后台索引构建完成一条后，立即同步到对应 DOM 按钮的搜索文本
+            try {
+              const btn = recordPanelButtonMap && updatedItem && updatedItem.filename
+                ? recordPanelButtonMap.get(updatedItem.filename) : null;
+              if (btn && updatedItem.__searchText) {
+                btn.dataset.searchText = updatedItem.__searchText;
+              }
+            } catch (_) {}
+          }
         });
       }, 0);
     } catch (e) {
@@ -3450,7 +3932,10 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
   const pendingItemsAll = items.filter(item => {
     if (!item || !item.filename) return false;
     if (typeof item.__hasError === 'undefined') return true;
-    if (forceDeepSearch && typeof item.__searchText === 'undefined') return true;
+    if (forceDeepSearch) {
+      if (typeof item.__searchText === 'undefined') return true;
+      if (item.__searchTextVersion !== RECORD_SEARCH_TEXT_VERSION) return true;
+    }
     return false;
   });
   if (!pendingItemsAll.length) return;
@@ -3478,10 +3963,24 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
       );
       if (!resp.ok) return;
       const payload = await resp.json();
-      // payload.nodes 可能是数组，也可能是 { nodes: [...] }
-      let nodes = Array.isArray(payload?.nodes) ? payload.nodes : [];
-      if (!nodes.length && payload && payload.nodes && Array.isArray(payload.nodes.nodes)) {
-        nodes = payload.nodes.nodes;
+      
+      let nodes = [];
+      if (Array.isArray(payload)) {
+        if (payload.length && Array.isArray(payload[payload.length - 1])) {
+          const latestSession = payload[payload.length - 1];
+          nodes = latestSession.filter(n => n && typeof n === 'object');
+        } else if (payload.length && payload.every(n => n && typeof n === 'object' && !Array.isArray(n))) {
+          nodes = payload.filter(n => n && typeof n === 'object');
+        } else {
+          for (const it of payload) {
+            if (!it || typeof it !== 'object') continue;
+            if (Array.isArray(it.nodes)) { nodes = it.nodes; break; }
+            if (it.nodes && Array.isArray(it.nodes.nodes)) { nodes = it.nodes.nodes; break; }
+          }
+        }
+      } else if (payload && typeof payload === 'object') {
+        nodes = Array.isArray(payload.nodes) ? payload.nodes : (payload.nodes && Array.isArray(payload.nodes.nodes) ? payload.nodes.nodes : []);
+        if (!nodes.length && Array.isArray(payload.items)) nodes = payload.items.filter(n => n && typeof n === 'object');
       }
 
       // 快速判定是否有错误节点（可短路）
@@ -3500,42 +3999,75 @@ async function annotateRecordItemsWithErrorFlag(items, opts = {}) {
       }
 
       // 构建可搜索文本（可选：只在记录少时启用，且做截断，避免卡顿/内存爆炸）
-      if (enableDeepSearch && typeof item.__searchText === 'undefined') {
+      if (enableDeepSearch && (typeof item.__searchText === 'undefined' || item.__searchTextVersion !== RECORD_SEARCH_TEXT_VERSION)) {
         try {
           const collectFields = [];
-          const maxNodesForIndex = 30;
-          const maxChars = 12000;
+          const maxChars = 20000; // 上限保护：避免卡顿/内存爆炸（但要比旧值更能覆盖真实文本）
+          const maxNodesForIndex = 260; // 旧值 30 容易漏掉后面的 LLM 输出节点
+          let curLen = 0;
+
+          const pushVal = (v, slice = 240) => {
+            if (v === undefined || v === null) return;
+            let s = '';
+            try { s = String(v); } catch (_) { return; }
+            if (!s) return;
+            if (slice && s.length > slice) s = s.slice(0, slice);
+            collectFields.push(s);
+            curLen += s.length + 1;
+          };
+
+          const pushPort = (p) => {
+            if (!p || typeof p !== 'object') return;
+            pushVal(p.name, 140);
+            pushVal(p.Kind, 80);
+            // Context 字段有大小写差异：Context / context
+            pushVal(p.Context, 1200);
+            pushVal(p.context, 1200);
+            // 其他常见字段（不同节点实现可能写不同 key）
+            pushVal(p.Value, 1200);
+            pushVal(p.value, 1200);
+            if (typeof p.Num !== 'undefined' && p.Num !== null) pushVal(p.Num, 80);
+            if (typeof p.Boolean === 'boolean') pushVal(p.Boolean, 20);
+          };
+
+          const pushNode = (n) => {
+            if (!n || typeof n !== 'object') return;
+            // 常见文本字段（中英都可能出现在这里）
+            [
+              'label','name','NodeKind','Kind',
+              'prompt','Prompt','ExportPrompt','SystemPrompt',
+              'text','Text','content','Content',
+              'result','Result','output','Output',
+              'ErrorContext','Debug','debug'
+            ].forEach(k => pushVal(n[k], 2400));
+
+            // 兜底：把节点对象里所有“短字符串字段”也纳入索引，避免漏掉未列举的 key
+            try {
+              for (const k in n) {
+                if (!Object.prototype.hasOwnProperty.call(n, k)) continue;
+                const v = n[k];
+                if (typeof v === 'string' && v) pushVal(v, 1200);
+                if (curLen > maxChars) break;
+              }
+            } catch (_) {}
+
+            // Inputs/Outputs：保留 name + Context/数值（截断），保证“按关键字搜索”可用
+            if (Array.isArray(n.Inputs)) n.Inputs.forEach(pushPort);
+            if (Array.isArray(n.outputs)) n.outputs.forEach(pushPort);
+            if (Array.isArray(n.Outputs)) n.Outputs.forEach(pushPort);
+            if (Array.isArray(n.Output)) n.Output.forEach(pushPort);
+          };
+
           for (let i = 0; i < (Array.isArray(nodes) ? nodes.length : 0) && i < maxNodesForIndex; i++) {
-            const n = nodes[i];
-            if (!n || typeof n !== 'object') continue;
-            ['label', 'name', 'prompt', 'ExportPrompt', 'SystemPrompt'].forEach(k => {
-              if (n[k]) collectFields.push(String(n[k]));
-            });
-            // Inputs/Outputs：保留 name + 少量 Context/数值（截断），保证“按关键字搜索”可用
-            if (Array.isArray(n.Inputs)) {
-              n.Inputs.forEach(inp => {
-                if (!inp) return;
-                if (inp.name) collectFields.push(String(inp.name));
-                if (inp.Context) collectFields.push(String(inp.Context).slice(0, 240));
-                if (typeof inp.Num !== 'undefined' && inp.Num !== null) collectFields.push(String(inp.Num));
-                if (typeof inp.Boolean === 'boolean') collectFields.push(String(inp.Boolean));
-              });
-            }
-            if (Array.isArray(n.Outputs)) {
-              n.Outputs.forEach(out => {
-                if (!out) return;
-                if (out.name) collectFields.push(String(out.name));
-                if (out.Context) collectFields.push(String(out.Context).slice(0, 240));
-                if (typeof out.Num !== 'undefined' && out.Num !== null) collectFields.push(String(out.Num));
-                if (typeof out.Boolean === 'boolean') collectFields.push(String(out.Boolean));
-              });
-            }
-            if (collectFields.join(' ').length > maxChars) break;
+            pushNode(nodes[i]);
+            if (curLen > maxChars) break;
           }
+
           const baseText = `${formatRecordLabel(item)} ${item.time_label || ''}`;
           let st = `${baseText} ${collectFields.join(' ')}`.toLowerCase();
           if (st.length > maxChars) st = st.slice(0, maxChars);
           item.__searchText = st;
+          item.__searchTextVersion = RECORD_SEARCH_TEXT_VERSION;
         } catch (e) {
           console.warn('[RECORD] build search text failed', e);
         }
@@ -3610,10 +4142,10 @@ function renderRecordPanel(items) {
   searchWrap.innerHTML = `
     <input
       id="record-panel-search"
-      type="text"
-      placeholder="搜索关键字..."
+      type="search"
+      placeholder="搜索记录（支持中文/英文/数字，空格分隔多关键词）..."
       autocomplete="off"
-      style="width:100%;height:28px;line-height:28px;padding:0 8px;border-radius:6px;border:1px solid rgba(255,255,255,.12);background:#0f172a;color:#fff;outline:none;margin:8px 0;"
+      style="width:100%;height:30px;line-height:30px;padding:0 10px;border-radius:6px;border:1px solid rgba(255,255,255,.15);background:#0f172a;color:#fff;outline:none;margin:8px 0;font-size:13px;"
     />
   `;
   container.appendChild(searchWrap);
@@ -3628,13 +4160,43 @@ function renderRecordPanel(items) {
 
   const list = document.createElement('div');
   list.className = 'record-panel-list';
-  items.forEach(item => {
+  console.warn('[SEARCH:RENDER] 开始渲染记录面板，items数量:', items.length);
+  items.forEach((item, _idx) => {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'record-panel-item';
     btn.dataset.filename = item.filename;
-    // 预置搜索文本（先用已有信息，后续异步补齐 Inputs/Outputs）
-    btn.dataset.searchText = (item.__searchText || formatRecordLabel(item)).toLowerCase();
+    // 预置搜索文本（先用已有信息，后续异步补齐深度索引）
+    const stOk = item && item.__searchText && item.__searchTextVersion === RECORD_SEARCH_TEXT_VERSION;
+    if (stOk) {
+      btn.dataset.searchText = item.__searchText;
+      if (_idx < 3) console.warn(`[SEARCH:RENDER] item[${_idx}] 使用已有深度索引, filename=${item.filename}, searchText长度=${item.__searchText.length}`);
+    } else {
+      // 构建更丰富的初始搜索文本，包含所有可用的元数据字段
+      const _parts = [formatRecordLabel(item)];
+      try {
+        if (item.filename) _parts.push(item.filename);
+        if (item.time_label) _parts.push(item.time_label);
+        if (item.label) _parts.push(item.label);
+        if (item.project_name) _parts.push(item.project_name);
+        // 遍历 item 上的所有短字符串字段，纳入初始搜索文本
+        for (const _k in item) {
+          if (!Object.prototype.hasOwnProperty.call(item, _k)) continue;
+          if (_k.startsWith('_')) continue; // 跳过内部字段
+          const _v = item[_k];
+          if (typeof _v === 'string' && _v.length > 0 && _v.length < 500) {
+            if (!_parts.includes(_v)) _parts.push(_v);
+          }
+        }
+      } catch (_) {}
+      btn.dataset.searchText = _parts.join(' ').toLowerCase();
+      if (_idx < 3) console.warn(`[SEARCH:RENDER] item[${_idx}] 初始搜索文本, filename=${item.filename}, parts=${_parts.length}, text="${btn.dataset.searchText.slice(0, 120)}..."`);
+    }
+    // 打印 item 的全部 key，帮助确认后端返回了哪些字段
+    if (_idx === 0) {
+      console.warn('[SEARCH:RENDER] 第一条item的全部key:', Object.keys(item || {}));
+      console.warn('[SEARCH:RENDER] 第一条item内容:', JSON.stringify(item, (k, v) => k.startsWith('__') ? undefined : v, 2).slice(0, 600));
+    }
     // 如果已经提前标记了是否有错误，则在渲染阶段直接加上对应样式
     if (item && item.__hasError) {
       btn.classList.add('record-panel-item-error');
@@ -3659,25 +4221,162 @@ function renderRecordPanel(items) {
   updateRecordPanelSelection(recordModeCurrentFilename);
 
   // 绑定搜索过滤
-  const inputEl = document.getElementById('record-panel-search');
+  const inputEl = searchWrap.querySelector('input');
   if (inputEl) {
-    const doFilter = () => {
-      const q = (inputEl.value || '').trim().toLowerCase();
-      const itemsEls = list.querySelectorAll('.record-panel-item');
-      let hit = 0;
-      itemsEls.forEach(el => {
-        const text = (el.dataset.searchText || el.textContent || '').toLowerCase();
-        const ok = q ? text.includes(q) : true;
-        if (ok && q) hit++;
-        el.style.display = ok ? '' : 'none';
-      });
-      // 如果当前索引命中很少/为 0，则后台按需补全深度搜索索引，再自动重跑过滤
-      if (q && hit === 0) {
-        scheduleRecordSearchIndexBuild(q, doFilter);
+    let isComposing = false;    // 中文输入法合成态
+    let buildTimer = null;      // debounce 深度索引构建
+
+    const normalizeQuery = (s) => (s || '').trim().toLowerCase();
+    
+    // 判断字符串是否主要是中文（用于决定匹配策略）
+    const isMainlyChinese = (str) => {
+      if (!str) return false;
+      const chineseRegex = /[\u4e00-\u9fa5]/g;
+      const chineseCount = (str.match(chineseRegex) || []).length;
+      return chineseCount > 0 && chineseCount / str.length > 0.3; // 30%以上是中文
+    };
+    
+    const matchQuery = (text, q) => {
+      const qq = normalizeQuery(q);
+      if (!qq) return true;
+      const t = (text || '').toLowerCase();
+      
+      // 如果查询主要是中文，使用更宽松的匹配策略（不强制按空格分词）
+      if (isMainlyChinese(qq)) {
+        // 中文查询：直接包含匹配，也支持空格分隔的多个关键词（AND逻辑）
+        const tokens = qq.split(/\s+/).filter(Boolean);
+        if (tokens.length === 1) {
+          // 单个词（可能是完整的中文短语），直接包含匹配
+          return t.includes(tokens[0]);
+        } else {
+          // 多个关键词，所有都要命中（AND逻辑）
+          for (let i = 0; i < tokens.length; i++) {
+            if (!t.includes(tokens[i])) return false;
+          }
+          return true;
+        }
+      } else {
+        // 英文/数字查询：按空格分词，所有token都要命中（AND逻辑）
+        const tokens = qq.split(/\s+/).filter(Boolean);
+        if (!tokens.length) return true;
+        for (let i = 0; i < tokens.length; i++) {
+          if (!t.includes(tokens[i])) return false;
+        }
+        return true;
       }
     };
-    inputEl.addEventListener('input', doFilter);
-    inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') doFilter(); });
+
+    const doFilter = () => {
+      try {
+        console.warn('[SEARCH:FILTER] doFilter 开始执行');
+        const q = normalizeQuery(inputEl.value);
+        console.warn('[SEARCH:FILTER] 规范化后的query:', q);
+        
+        if (!list) {
+          console.warn('[SEARCH:FILTER] ❌ list 变量未定义!');
+          return;
+        }
+        
+        const itemsEls = list.querySelectorAll('.record-panel-item');
+        console.warn('[SEARCH:FILTER] 找到的items数量:', itemsEls.length);
+        
+        let visibleCount = 0;
+        let totalCount = itemsEls.length;
+        let sampleTexts = []; // 收集前几条的搜索文本用于调试
+        itemsEls.forEach((el, elIdx) => {
+          if (!q) {
+            el.style.display = '';
+            visibleCount++;
+            return;
+          }
+          // 合并 searchText + textContent，确保两者都参与匹配
+          const searchText = (el.dataset.searchText || '').toLowerCase();
+          const textContent = (el.textContent || '').toLowerCase();
+          const combined = searchText.includes(textContent) ? searchText : (searchText + ' ' + textContent);
+          const visible = matchQuery(combined, q);
+          el.style.display = visible ? '' : 'none';
+          if (visible) visibleCount++;
+          // 收集前3条的搜索文本用于调试
+          if (elIdx < 3) {
+            sampleTexts.push({
+              idx: elIdx,
+              filename: el.dataset.filename,
+              searchTextLen: searchText.length,
+              searchTextPreview: searchText.slice(0, 150),
+              textContentPreview: textContent.slice(0, 80),
+              combinedLen: combined.length,
+              combinedPreview: combined.slice(0, 200),
+              hasDeepIndex: searchText.length > 200,
+              matchResult: visible,
+              query: q,
+              isMainlyChineseQuery: isMainlyChinese(q)
+            });
+          }
+        });
+        console.warn(`[SEARCH:FILTER] query="${q}", total=${totalCount}, visible=${visibleCount}, isMainlyChinese=${isMainlyChinese(q)}, samples:`, sampleTexts);
+        if (q && visibleCount === 0) {
+          console.warn(`[SEARCH:FILTER] ❌ 没有匹配结果! query="${q}". 检查: searchText是否包含目标内容？深度索引是否已构建？`);
+        }
+        // 根据是否有匹配结果，可额外触发后台深度索引构建（首次搜索无结果时）
+        if (q && visibleCount === 0 && itemsEls.length > 0) {
+          scheduleDeepBuild();
+        }
+      } catch (error) {
+        console.warn('[SEARCH:FILTER] ❌ doFilter 执行异常:', error);
+        console.warn('[SEARCH:FILTER] 异常堆栈:', error.stack);
+      }
+    };
+
+    const scheduleDeepBuild = () => {
+      const q = normalizeQuery(inputEl.value);
+      if (!q) return;
+      console.warn(`[SEARCH:DEEP] scheduleDeepBuild called, query="${q}"`);
+      // 移除 lastScheduledQuery 的去重判断：确保查询变化或无结果时都能触发
+      try {
+        if (buildTimer) clearTimeout(buildTimer);
+        buildTimer = setTimeout(() => {
+          console.warn(`[SEARCH:DEEP] 定时器触发，调用 scheduleRecordSearchIndexBuild, query="${q}"`);
+          try { scheduleRecordSearchIndexBuild(q, doFilter); } catch (e) { console.warn('[SEARCH:DEEP] scheduleRecordSearchIndexBuild 异常:', e); }
+        }, 200);
+      } catch (_) {}
+    };
+
+    inputEl.addEventListener('compositionstart', () => {
+      isComposing = true;
+      console.warn('[SEARCH:EVENT] compositionstart (中文输入法开始), value="' + inputEl.value + '"');
+    });
+    inputEl.addEventListener('compositionend', (e) => {
+      isComposing = false;
+      // 使用 setTimeout 确保 compositionend 后 inputEl.value 已经更新
+      setTimeout(() => {
+        const finalValue = inputEl.value;
+        console.warn('[SEARCH:EVENT] compositionend (中文输入法结束), value="' + finalValue + '"');
+        // compositionend 后立即过滤并触发深度构建
+        try {
+          doFilter();
+          scheduleDeepBuild();
+        } catch (err) {
+          console.warn('[SEARCH:EVENT] compositionend 处理异常:', err);
+        }
+      }, 0);
+    });
+    inputEl.addEventListener('input', () => {
+      console.warn('[SEARCH:EVENT] input event, isComposing=' + isComposing + ', value="' + inputEl.value + '"');
+      if (isComposing) return;
+      doFilter();
+      scheduleDeepBuild();
+    });
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        doFilter();
+        scheduleDeepBuild();
+      }
+    });
+    // 清空搜索框时自动恢复全部显示
+    inputEl.addEventListener('search', () => {
+      if (!inputEl.value) doFilter();
+    });
     try { inputEl.focus(); } catch(_) {}
   }
 }
@@ -3761,25 +4460,110 @@ async function applyRecordSnapshot(filename) {
       throw new Error('记录文件不存在或无法读取');
     }
     const payload = await response.json();
-    const nodes = Array.isArray(payload?.nodes) ? payload.nodes : payload?.nodes?.nodes || [];
-    if (!nodes || !Array.isArray(nodes)) {
+    const isNodeLike = (n) => {
+      if (!n || typeof n !== 'object') return false;
+      return !!(
+        n.id ||
+        n.label ||
+        n.name ||
+        n.NodeKind ||
+        Array.isArray(n.Inputs) ||
+        Array.isArray(n.Outputs) ||
+        Array.isArray(n.outputs) ||
+        Array.isArray(n.Output) ||
+        Array.isArray(n.output)
+      );
+    };
+
+    // 兼容新旧记录格式：
+    // 1) 快照：{ nodes:[...], edges:[...] } 或 { nodes:{nodes:[...],edges:[...]} }
+    // 2) 历史会话：[[{...node event...}], ...] / [{...node event...}]
+    let nodes = [];
+    let edges = null;
+    if (Array.isArray(payload)) {
+      if (payload.length && Array.isArray(payload[payload.length - 1])) {
+        const latestSession = payload[payload.length - 1];
+        nodes = latestSession.filter(isNodeLike);
+      } else if (payload.length && payload.every(isNodeLike)) {
+        nodes = payload.filter(isNodeLike);
+      } else {
+        for (const it of payload) {
+          if (!it || typeof it !== 'object') continue;
+          if (Array.isArray(it.nodes)) { nodes = it.nodes; break; }
+          if (it.nodes && Array.isArray(it.nodes.nodes)) { nodes = it.nodes.nodes; break; }
+        }
+      }
+    } else if (payload && typeof payload === 'object') {
+      nodes = Array.isArray(payload.nodes) ? payload.nodes : (payload.nodes && Array.isArray(payload.nodes.nodes) ? payload.nodes.nodes : []);
+      if (!nodes.length && Array.isArray(payload.items)) nodes = payload.items.filter(isNodeLike);
+      edges = Array.isArray(payload.edges)
+        ? payload.edges
+        : (payload.nodes && Array.isArray(payload.nodes.edges) ? payload.nodes.edges : null);
+    }
+    if (!Array.isArray(nodes) || !nodes.length) {
       throw new Error('记录文件缺少节点数据');
     }
+
     const nextGraph = structuredClone(recordModeBaseGraph);
-    const nodeMap = {};
+    if (Array.isArray(edges) && edges.length) {
+      nextGraph.edges = structuredClone(edges);
+    }
+
+    // 兼容无 id 的会话格式：按 id 优先，失败则按 NodeKind+label+name 兜底匹配
+    const nodeMapById = new Map();
+    const nodeMapByKey = new Map();
+    const makeNodeKey = (n) => {
+      const kind = String((n && n.NodeKind) || '').trim().toLowerCase();
+      const label = String((n && n.label) || '').trim().toLowerCase();
+      const name = String((n && n.name) || '').trim().toLowerCase();
+      return `${kind}::${label}::${name}`;
+    };
     nextGraph.nodes.forEach(node => {
-      nodeMap[node.id] = node;
+      if (node && typeof node.id !== 'undefined' && node.id !== null) {
+        nodeMapById.set(String(node.id), node);
+      }
+      const key = makeNodeKey(node);
+      if (!nodeMapByKey.has(key)) nodeMapByKey.set(key, node);
     });
+
     nodes.forEach(recordNode => {
-      const target = nodeMap[recordNode.id];
+      let target = null;
+      if (recordNode && typeof recordNode.id !== 'undefined' && recordNode.id !== null) {
+        target = nodeMapById.get(String(recordNode.id)) || null;
+      }
+      if (!target) {
+        const key = makeNodeKey(recordNode);
+        if (key !== '::::' && nodeMapByKey.has(key)) {
+          target = nodeMapByKey.get(key);
+        }
+      }
+      if (!target && recordNode && recordNode.label) {
+        target = nextGraph.nodes.find(n =>
+          n && n.label === recordNode.label &&
+          (!recordNode.NodeKind || n.NodeKind === recordNode.NodeKind)
+        ) || null;
+      }
+      if (!target && recordNode && recordNode.name) {
+        target = nextGraph.nodes.find(n =>
+          n && n.name === recordNode.name &&
+          (!recordNode.NodeKind || n.NodeKind === recordNode.NodeKind)
+        ) || null;
+      }
       if (target) {
         mergeRecordNode(target, recordNode);
       }
     });
     
-    // 🔥 关键修复：确保所有已完成、运行中或错误的节点都有 IsBlock=true，以便显示边框
+    // 🔥 关键修复：确保关键状态节点都有 IsBlock=true，以便显示边框/颜色
     nextGraph.nodes.forEach(node => {
-      if (node && (node.isFinish || node.IsRunning || node.IsError)) {
+      if (
+        node && (
+          node.isFinish ||
+          node.IsRunning ||
+          node.IsError ||
+          (typeof node.TriggerLink !== 'undefined' && node.TriggerLink !== 0)
+        )
+      ) {
         node.IsBlock = true;
       }
     });
@@ -3847,12 +4631,55 @@ function mergeRecordNode(target, source) {
   if (source.Inputs) {
     target.Inputs = structuredClone(source.Inputs);
   }
-  if (source.Outputs) {
-    target.Outputs = structuredClone(source.Outputs);
+  // 记录文件在不同版本里可能使用 Outputs / outputs / Output / output
+  // 这里统一兼容，避免“记录有值但侧窗看不到输出”。
+  const normalizeOutputs = (raw) => {
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const out = structuredClone(item);
+        if (typeof out.Context === 'undefined' && typeof item.context !== 'undefined') out.Context = item.context;
+        if (typeof out.Num === 'undefined' && typeof item.num !== 'undefined') out.Num = item.num;
+        if (typeof out.Boolean === 'undefined' && typeof item.boolean !== 'undefined') out.Boolean = item.boolean;
+        if (typeof out.name === 'undefined') out.name = item.name || `Output${idx + 1}`;
+        if (typeof out.Kind === 'undefined') out.Kind = item.Kind || item.kind || 'String';
+        if (
+          typeof out.Context === 'undefined' &&
+          typeof out.Num === 'undefined' &&
+          typeof out.Boolean === 'undefined'
+        ) {
+          const v = (typeof item.value !== 'undefined') ? item.value : item.Value;
+          if (typeof v === 'string') out.Context = v;
+          else if (typeof v === 'number') out.Num = v;
+          else if (typeof v === 'boolean') out.Boolean = v;
+          else if (v !== null && typeof v !== 'undefined') {
+            try { out.Context = JSON.stringify(v, null, 2); } catch (_) { out.Context = String(v); }
+          }
+        }
+        return out;
+      }
+      if (typeof item === 'string') return { name: `Output${idx + 1}`, Kind: 'String', Context: item };
+      if (typeof item === 'number') return { name: `Output${idx + 1}`, Kind: 'Num', Num: item };
+      if (typeof item === 'boolean') return { name: `Output${idx + 1}`, Kind: 'Boolean', Boolean: item };
+      return { name: `Output${idx + 1}`, Kind: 'String', Context: '' };
+    });
+  };
+  if (Array.isArray(source.Outputs)) {
+    target.Outputs = normalizeOutputs(source.Outputs);
+  } else {
+    const fallbackOutputs = normalizeOutputs(source.outputs || source.Output || source.output);
+    if (fallbackOutputs.length > 0) {
+      target.Outputs = fallbackOutputs;
+    }
   }
   
-  // 🔥 关键修复：如果节点已完成、运行中或错误，确保 IsBlock=true（即使记录中没有）
-  if (target.isFinish || target.IsRunning || target.IsError) {
+  // 🔥 关键修复：如果节点处于关键状态（完成/运行/错误/逻辑触发），确保 IsBlock=true（即使记录中没有）
+  if (
+    target.isFinish ||
+    target.IsRunning ||
+    target.IsError ||
+    (typeof target.TriggerLink !== 'undefined' && target.TriggerLink !== 0)
+  ) {
     target.IsBlock = true;
   }
 }
@@ -4807,6 +5634,23 @@ function adjustHeight(textarea) {
   textarea.style.height = 'auto'; // 重置高度以获得正确的滚动高度
   textarea.style.height = `${textarea.scrollHeight}px`;
 }
+
+// 详情窗口初次加载高度：
+// - 最大视窗高度：maxRatio * window.innerHeight
+// - 所需视窗高度：domElement.scrollHeight
+// 初次创建时设置 height = min(所需, 最大)；之后用户可自由拖拽调整高度，不再覆盖
+function applyInitialDetailHeight(domElement, maxRatio = 0.8) {
+  if (!domElement || domElement.dataset.initialAutoSize === '1') return;
+  domElement.dataset.initialAutoSize = '1';
+  requestAnimationFrame(() => {
+    // 让浏览器先完成布局计算
+    domElement.style.height = 'auto';
+    const maxH = Math.max(120, Math.floor(window.innerHeight * maxRatio));
+    const needH = domElement.scrollHeight;
+    const targetH = Math.min(needH, maxH);
+    domElement.style.height = `${targetH}px`;
+  });
+}
 function CreatDetaile(Item)
   {
     // 确保 item.model 中包含 x, y 位置和 id
@@ -4814,27 +5658,66 @@ function CreatDetaile(Item)
     // 创建 DOM 元素或者更新现有元素
     console.log('Inputs',InputIsAdd,OutputsIsAdd,Outputs);
     let domElement = document.getElementById(`dom-${id}`);
+
+    // 详情面板启用 node-detail 样式（用于可拖拽调高/统一外观等）
+    // NameId 已放进 sticky 的 drag-bar 顶栏，因此不会随内容滚动上下移动
+    if (domElement) {
+      domElement.classList.add('node-detail');
+      // 兼容旧结构：把顶栏输入框移入 drag-bar，避免随内容滚动
+      const dragBarExist = domElement.querySelector('.drag-bar');
+      if (dragBarExist) {
+        let titleInput = domElement.querySelector('input[data-role="node-title"]');
+        if (!titleInput) {
+          // 旧节点：NameId 可能是 domElement 的直接子元素
+          const directChildInput = Array.from(domElement.children).find(
+            (c) => c && c.tagName === 'INPUT'
+          );
+          if (directChildInput) {
+            directChildInput.dataset.role = 'node-title';
+            titleInput = directChildInput;
+          }
+        }
+        if (titleInput && titleInput.parentElement !== dragBarExist) {
+          // 覆盖旧的 absolute 定位，改为放进 sticky 顶栏
+          titleInput.style.position = 'relative';
+          titleInput.style.left = '';
+          titleInput.style.top = '';
+          titleInput.style.zIndex = '';
+          titleInput.style.marginLeft = '30px';
+          if (!titleInput.dataset.dragStopBound) {
+            titleInput.addEventListener('mousedown', (e) => e.stopPropagation());
+            titleInput.addEventListener('pointerdown', (e) => e.stopPropagation());
+            titleInput.dataset.dragStopBound = '1';
+          }
+          dragBarExist.insertBefore(titleInput, dragBarExist.firstChild);
+        }
+      }
+    }
   if (!domElement) {
     domElement = document.createElement('div');
     domElement.id = `dom-${id}`;
-    document.className = 'Nodes';
+    domElement.className = 'Nodes node-detail';
     domElement.style.cssText = `
       position: absolute;
       left: ${500}px;
       top: ${500}px;
-      width: ${600}px;
-      height: ${400}px;
+      width: ${650}px;
+      height: auto;
       border-radius: 10px;
     `;
-    const NameId = document.createElement('input'); // 创建 input 元素而不是 div
-    NameId.value = label; // 设置输入框的初始值为 id
+    const dragBar = document.createElement('div');
+    dragBar.className = 'drag-bar';
+    domElement.appendChild(dragBar);
+
+    // 顶栏标题输入框：放进 drag-bar（drag-bar 是 sticky 的），这样不会随详情滚动
+    const NameId = document.createElement('input');
+    NameId.dataset.role = 'node-title';
+    NameId.value = label;
     NameId.style.cssText = `
-        position: absolute;
-        left: 30px;
-        top: 3px;
+        position: relative;
+        margin-left: 30px;
         width: 200px;
         height: 26px;
-        z-index: 100;
         background: #505050; /* 黑灰色高质感背景 */
         border: 1px solid rgba(255, 255, 255, 0.08); /* 极细微边框 */
         border-left: 3px solid #00d4ff; /* 科技蓝侧边条 */
@@ -4848,7 +5731,6 @@ function CreatDetaile(Item)
         outline: none;
         transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
         backdrop-filter: blur(12px); /* 强毛玻璃 */
-        
     `;
     NameId.addEventListener('focus', function() {
         this.style.background = '#505050';
@@ -4860,15 +5742,13 @@ function CreatDetaile(Item)
         this.style.borderLeftColor = '#00d4ff';
         this.style.color = '#e0e0e0';
     });
-
-    // 当输入框失去焦点时触发
     NameId.addEventListener('input', function() {
         ChangeNodeLabel(id,NameId.value,-1);
     });
-    domElement.appendChild(NameId);
-    const dragBar = document.createElement('div');
-    dragBar.className = 'drag-bar';
-    domElement.appendChild(dragBar);
+    // 编辑标题时不要触发 drag-bar 的拖拽
+    NameId.addEventListener('mousedown', (e) => e.stopPropagation());
+    NameId.addEventListener('pointerdown', (e) => e.stopPropagation());
+    dragBar.appendChild(NameId);
 
     // 添加图标到 .drag-bar
     const icons = ['w-out'];
@@ -4916,9 +5796,8 @@ function CreatDetaile(Item)
     // 添加灰色背景和宽度自适应样式
     ResetColumn.style.cssText = `
         background:rgb(238, 238, 238) !important;  /* 灰色背景 */
-        width: fit-content !important;   /* 宽度自适应内容 */
-        min-width: 580px;               /* 最小宽度 */
-        max-width: 580px;               /* 最大宽度（可选） */
+        width: 100% !important;         /* 跟随窗口宽度 */
+        box-sizing: border-box;
 `;
 
 
@@ -7338,17 +8217,38 @@ const database = graph.save();
                                 console.warn('Outputs refresh skipped:', e);
                               }         
                           } else {
-                              console.error('Error:', data.message,data);
+                              console.error('Error:', data && data.message, data);
                               if (pathButton) {
                                 pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
                               }
+                              // 将后端错误显示给用户（按 nodeId+filePath 去重，避免输入时频繁弹窗）
+                              try {
+                                const msg = (data && data.message) ? String(data.message) : 'Load Fail';
+                                const resolved = (data && data.resolved_path) ? `\n\nPath: ${data.resolved_path}` : '';
+                                const hint = (data && data.hint) ? `\n\nHint: ${data.hint}` : '';
+                                const dedupKey = `${id}::${filePath}::${msg}`;
+                                if (!window.__dbLoadFailDedup) window.__dbLoadFailDedup = {};
+                                if (!window.__dbLoadFailDedup[dedupKey]) {
+                                  window.__dbLoadFailDedup[dedupKey] = Date.now();
+                                  alert(`${msg}${resolved}${hint}`);
+                                }
+                              } catch (_) {}
                           }
                       })
                       .catch(error => {
-                          console.error('Error:', error,data);
+                          console.error('Error:', error);
                           if (pathButton) {
                             pathButton.innerHTML = 'Select Path <span style="color: red;">(Load Fail)</span>';
                           }
+                          try {
+                            const msg = (error && error.message) ? String(error.message) : String(error);
+                            const dedupKey = `${id}::${filePath}::${msg}`;
+                            if (!window.__dbLoadFailDedup) window.__dbLoadFailDedup = {};
+                            if (!window.__dbLoadFailDedup[dedupKey]) {
+                              window.__dbLoadFailDedup[dedupKey] = Date.now();
+                              alert(`Read_DataBase request failed: ${msg}\n\nPath: ${filePath}`);
+                            }
+                          } catch (_) {}
                       });
                   }
                   ChangeAnchorValue(id, labelTextarea.value, 'Input', input.Id); // 假定 id 和 ChangeNodeLabel 已定义
@@ -9922,6 +10822,8 @@ const database = graph.save();
         vessel.appendChild(promptColumn);
         const SystemPromptInput = document.createElement('textarea');
         SystemPromptInput.className = 'prompt-textarea editable-div';
+        const PROMPT_TEXTAREA_WIDTH = '95%';
+        SystemPromptInput.style.width = PROMPT_TEXTAREA_WIDTH;
         SystemPromptInput.spellcheck = false;
         SystemPromptInput.textContent = SystemPrompt;
         promptColumn.querySelector('.prompt-container').appendChild(SystemPromptInput);
@@ -9933,6 +10835,7 @@ const database = graph.save();
         vessel.appendChild(userPromptColumn);
         const UserPromptInput = document.createElement('textarea');
         UserPromptInput.className = 'prompt-textarea editable-div';
+        UserPromptInput.style.width = PROMPT_TEXTAREA_WIDTH;
         UserPromptInput.spellcheck = false;
         UserPromptInput.textContent = prompt;
         userPromptColumn.querySelector('.prompt-container').appendChild(UserPromptInput);
@@ -12077,6 +12980,7 @@ const database = graph.save();
     }
 
     document.getElementById('graph-container').appendChild(domElement);
+    applyInitialDetailHeight(domElement, 0.8);
     domBlocks.push({ id: `dom-${id}`, element: domElement, Item });
   }
   initializeDragAndResize(domElement,300,400);
@@ -12508,10 +13412,59 @@ function createSideWindow(item, isCheckMode = false) {
   if (!contentArea) { console.warn('[SIDEWIN:DOM] 缺少 #content-area，放弃渲染'); return; }
   contentArea.innerHTML = '';
 
+  // Error / Output 文本需要进入 textarea innerHTML，必须做转义（避免 </textarea> 破坏 DOM）
+  function escapeForTextarea(val) {
+    const s = (val === null || val === undefined) ? '' : String(val);
+    return s
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/<\/textarea/gi, '&lt;/textarea');
+  }
+
+  // 兼容 Outputs / outputs / Output / output，并统一成可展示结构
+  function normalizeSideWindowOutputs(nodeLike) {
+    if (!nodeLike || typeof nodeLike !== 'object') return [];
+    const raw = nodeLike.Outputs || nodeLike.outputs || nodeLike.Output || nodeLike.output || [];
+    if (!Array.isArray(raw)) return [];
+    return raw.map((item, idx) => {
+      if (item && typeof item === 'object' && !Array.isArray(item)) {
+        const out = structuredClone(item);
+        if (typeof out.Context === 'undefined' && typeof item.context !== 'undefined') out.Context = item.context;
+        if (typeof out.Num === 'undefined' && typeof item.num !== 'undefined') out.Num = item.num;
+        if (typeof out.Boolean === 'undefined' && typeof item.boolean !== 'undefined') out.Boolean = item.boolean;
+        if (typeof out.name === 'undefined') out.name = item.name || `Output${idx + 1}`;
+        if (typeof out.Kind === 'undefined') out.Kind = item.Kind || item.kind || 'String';
+        if (
+          typeof out.Context === 'undefined' &&
+          typeof out.Num === 'undefined' &&
+          typeof out.Boolean === 'undefined'
+        ) {
+          const v = (typeof item.value !== 'undefined') ? item.value : item.Value;
+          if (typeof v === 'string') out.Context = v;
+          else if (typeof v === 'number') out.Num = v;
+          else if (typeof v === 'boolean') out.Boolean = v;
+          else if (v !== null && typeof v !== 'undefined') {
+            try { out.Context = JSON.stringify(v, null, 2); } catch (_) { out.Context = String(v); }
+          }
+        }
+        return out;
+      }
+      if (typeof item === 'string') return { name: `Output${idx + 1}`, Kind: 'String', Context: item };
+      if (typeof item === 'number') return { name: `Output${idx + 1}`, Kind: 'Num', Num: item };
+      if (typeof item === 'boolean') return { name: `Output${idx + 1}`, Kind: 'Boolean', Boolean: item };
+      return { name: `Output${idx + 1}`, Kind: 'String', Context: '' };
+    });
+  }
+
+  const tempNodeOutputs = normalizeSideWindowOutputs(tempNode);
+
   // 生成 Token 信息（如果有）
   let tokenInfo = '';
-  if (tempNode && tempNode.Outputs?.[0]) {
-      const output = tempNode.Outputs[0];
+  if (tempNodeOutputs[0]) {
+      const output = tempNodeOutputs[0];
       if (
           typeof output.prompt_tokens !== 'undefined' &&
           typeof output.completion_tokens !== 'undefined' &&
@@ -12541,24 +13494,64 @@ function createSideWindow(item, isCheckMode = false) {
   console.log('  - node.prompt:', node?.prompt);
   console.log('  - node.SystemPrompt:', node?.SystemPrompt);
   console.log('[SIDEWIN:HTML] tempNode 用于输出:');
-  console.log('  - tempNode.Outputs 数量:', tempNode?.Outputs?.length || 0);
-  console.log('  - tempNode.Outputs 详情:', tempNode?.Outputs);
+  console.log('  - outputs 数量:', tempNodeOutputs?.length || 0);
+  console.log('  - outputs 详情:', tempNodeOutputs);
 
   // 生成输入区域 HTML
+  // Inputs/Outputs 的值字段在不同节点/版本里可能不一致（Context/Num/Boolean/Parameters/value...）
+  // 这里做一次统一兜底，避免“记录模式输入为空”的体验问题。
+  function getIOValue(io) {
+    if (!io || typeof io !== 'object') return '';
+    const kind = (io.Kind === null || typeof io.Kind === 'undefined') ? '' : String(io.Kind);
+
+    // helper: pick "present" value without treating 0/false as empty
+    const pick = (...vals) => {
+      for (const v of vals) {
+        if (v === 0) return 0;
+        if (v === false) return false;
+        if (v === true) return true;
+        if (v === null || typeof v === 'undefined') continue;
+        if (typeof v === 'string') return v;
+        // allow numbers/objects
+        return v;
+      }
+      return '';
+    };
+
+    // Prefer explicit typed fields
+    if (kind === 'Num') {
+      const v = pick(io.Num, io.Parameters, io.Value, io.value);
+      return (v === '' ? '' : String(v));
+    }
+    if (kind === 'Boolean' || kind === 'Trigger') {
+      const v = pick(io.Boolean, io.Parameters, io.Value, io.value);
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      if (v === 0) return 'false';
+      if (v === 1) return 'true';
+      if (v === '' || v === null || typeof v === 'undefined') return '';
+      return String(v);
+    }
+    if (kind.includes('String') || kind === 'Label' || kind === 'Text') {
+      const v = pick(io.Context, io.Parameters, io.Text, io.Value, io.value);
+      return (v === '' ? '' : String(v));
+    }
+
+    // Unknown kind: best-effort fallback
+    const v = pick(io.Context, io.Num, io.Boolean, io.Parameters, io.Text, io.Value, io.value);
+    if (typeof v === 'object') {
+      try { return JSON.stringify(v, null, 2); } catch (_) { return String(v); }
+    }
+    if (typeof v === 'boolean') return v ? 'true' : 'false';
+    return (v === '' ? '' : String(v));
+  }
+
   let inputsHtml = `
   <div class="section-container">
       <h3>Inputs</h3>
   `;
   if (node?.Inputs && Array.isArray(node.Inputs)) {
   node.Inputs.forEach((input, index) => {
-  let value = '';
-  if (input.Kind === 'Num') {
-      value = input.Num ?? '';
-  } else if (input.Kind.includes('String')) {
-      value = input.Context ?? '';
-  } else if (input.Kind === 'Boolean') {
-      value = input.Boolean ? 'true' : 'false';
-  }
+  const value = getIOValue(input);
 
   inputsHtml += `
       <div class="input-item">
@@ -12616,40 +13609,32 @@ function createSideWindow(item, isCheckMode = false) {
       <div class="section-container">
           <h3>Outputs</h3>
   `;
-  if (tempNode?.Outputs && Array.isArray(tempNode.Outputs)) {
-  tempNode.Outputs.forEach((output, index) => {
-      let value = '';
-      if (output.Kind === 'Num') {
-          value = output.Num ?? '';
-      } else if (output.Kind?.includes('String')) {
-          value = output.Context ?? '';
-      } else if (output.Kind === 'Boolean' || output.Kind === 'Trigger') {
-          value = output.Boolean ? 'true' : 'false';
-      }
+  if (tempNodeOutputs.length > 0) {
+  tempNodeOutputs.forEach((output, index) => {
+      const value = getIOValue(output);
+      const valueSafe = escapeForTextarea(value);
+      const nameSafe = escapeForTextarea(output.name || `Output${index + 1}`);
 
       outputsHtml += `
           <div class="output-item">
-              <label><strong>${output.name}:</strong></label>
-              <textarea class="side-window-textarea" readonly>${value}</textarea>
+              <label><strong>${nameSafe}:</strong></label>
+              <textarea class="side-window-textarea" readonly>${valueSafe}</textarea>
           </div>
       `;
   });
   } else {
-    console.warn('[SIDEWIN:HTML] tempNode.Outputs 不存在或不是数组:', tempNode?.Outputs);
+    console.warn('[SIDEWIN:HTML] 未找到可用 outputs 字段:', tempNode);
+    const fallbackText = (node?.ExportPrompt || node?.prompt || '').trim();
+    if (fallbackText) {
+      outputsHtml += `
+          <div class="output-item">
+              <label><strong>Output</strong></label>
+              <textarea class="side-window-textarea" readonly>${escapeForTextarea(fallbackText)}</textarea>
+          </div>
+      `;
+    }
   }
   outputsHtml += '</div>';
-
-  // Error / Debug 文本需要进入 textarea innerHTML，必须做转义（避免 </textarea> 破坏 DOM）
-  function escapeForTextarea(val) {
-    const s = (val === null || val === undefined) ? '' : String(val);
-    return s
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/<\/textarea/gi, '&lt;/textarea');
-  }
 
   //创建一个debug区域（优先使用快照中的 debug；若为空则回退到 tempNode.debug）
   let debugTextRaw = '';
@@ -12750,7 +13735,7 @@ function createSideWindow(item, isCheckMode = false) {
   } catch(_) {}
   try {
     const inputsCount  = Array.isArray(node && node.Inputs) ? node.Inputs.length : 0;
-    const outputsCount = Array.isArray(tempNode && tempNode.Outputs) ? tempNode.Outputs.length : 0;
+    const outputsCount = Array.isArray(tempNodeOutputs) ? tempNodeOutputs.length : 0;
     console.log(`[SIDEWIN:DATA] inputs=${inputsCount} outputs=${outputsCount} debugLen=${debugText.length}`);
   } catch(_) {}
 
@@ -12825,7 +13810,8 @@ function createSideWindow(item, isCheckMode = false) {
           // 重新构建 token html（若有 tokens）
           let tokenHtml = '';
           try {
-            const out0 = (pickNode.Outputs && pickNode.Outputs[0]) || null;
+            const pickOutputs = normalizeSideWindowOutputs(pickNode);
+            const out0 = (pickOutputs && pickOutputs[0]) || null;
             if (out0 && out0.total_tokens !== undefined && out0.prompt_tokens !== undefined && out0.completion_tokens !== undefined) {
               tokenHtml = `
                 <div class="token-info">
@@ -12890,15 +13876,16 @@ function createSideWindow(item, isCheckMode = false) {
             <div class="section-container">
               <h3>Outputs</h3>`;
           try {
-            (pickNode.Outputs||[]).forEach((output) => {
+            const pickOutputs = normalizeSideWindowOutputs(pickNode);
+            pickOutputs.forEach((output, idx2) => {
               let v = '';
               if (output.Kind === 'Num') v = output.Num ?? '';
               else if ((output.Kind||'').includes('String')) v = output.Context ?? '';
               else if (output.Kind === 'Boolean' || output.Kind==='Trigger') v = output.Boolean ? 'true' : 'false';
               outputsHtml2 += `
                 <div class="output-item">
-                  <label><strong>${output.name}:</strong></label>
-                  <textarea class="side-window-textarea" readonly>${v}</textarea>
+                  <label><strong>${escapeForTextarea(output.name || `Output${idx2 + 1}`)}:</strong></label>
+                  <textarea class="side-window-textarea" readonly>${escapeForTextarea(v)}</textarea>
                 </div>`;
             });
           } catch(_) {}
@@ -14231,6 +15218,24 @@ function updateUIFromBackendStatus(statusData) {
     const wfId     = statusData?.workflow_id || monitoredWorkflowId || currentWorkflowId || null;
     const projName = statusData?.graph_project_name || statusData?.project_name || '';
     const childSummaryText = formatChildSummaryText(statusData?.childSummary);
+
+    // --- short system monitor metrics (from backend) ---
+    const connNow = statusData?.ConnNow;
+    const twNow = statusData?.TWNow;
+    const portUse = statusData?.PortUse;
+    const hasSysMon = (connNow !== null && connNow !== undefined)
+                   || (twNow !== null && twNow !== undefined)
+                   || (portUse !== null && portUse !== undefined);
+    const fmtVal = (v) => {
+      if (v === 0) return '0';
+      if (typeof v === 'number') return Number.isFinite(v) ? String(v) : '-';
+      if (typeof v === 'string') return v.trim() ? v.trim() : '-';
+      if (typeof v === 'boolean') return v ? 'true' : 'false';
+      return '-';
+    };
+    const sysMonText = hasSysMon
+      ? ` · ConnNow=${fmtVal(connNow)} · TWNow=${fmtVal(twNow)} · PortUse=${fmtVal(portUse)}%`
+      : '';
     
     // 记录最后的状态和项目名称，用于错误恢复
     if (status && status !== 'idle') {
@@ -14361,17 +15366,23 @@ function updateUIFromBackendStatus(statusData) {
       
       if (mode === 'edit') {
         infoEl.textContent = '当前工作流：无';
+        try { infoEl.title = ''; } catch (_) {}
       } else if (mode === 'monitor_completed') {
         // monitor_completed 模式：显示已完成状态
         if (!wfId) {
           infoEl.textContent = '当前工作流：无';
+          try { infoEl.title = ''; } catch (_) {}
         } else {
           const name = projName || wfId;
-          infoEl.textContent = `当前工作流：${name}（已完成）${childSummaryText}`;
+          infoEl.textContent = `当前工作流：${name}（已完成）${childSummaryText}${sysMonText}`;
+          try {
+            infoEl.title = 'ConnNow=本进程TCP连接数；TWNow=系统TIME_WAIT数量；PortUse=系统临时端口占用率(%)';
+          } catch (_) {}
         }
       } else {
         if (!wfId || status === 'idle') {
           infoEl.textContent = '当前工作流：无';
+          try { infoEl.title = ''; } catch (_) {}
         } else {
           let statusLabel = '未知';
           if (status === 'running')  statusLabel = '运行中';
@@ -14380,7 +15391,10 @@ function updateUIFromBackendStatus(statusData) {
           else if (status === 'error')     statusLabel = '错误';
           else if (status === 'stopped')   statusLabel = '已停止';
           const name = projName || wfId;
-          infoEl.textContent = `当前工作流：${name}（${statusLabel}）${childSummaryText}`;
+          infoEl.textContent = `当前工作流：${name}（${statusLabel}）${childSummaryText}${sysMonText}`;
+          try {
+            infoEl.title = 'ConnNow=本进程TCP连接数；TWNow=系统TIME_WAIT数量；PortUse=系统临时端口占用率(%)';
+          } catch (_) {}
         }
       }
     }
@@ -15980,6 +16994,12 @@ function pasteFunction() {
   document.addEventListener('mousemove', function(event) {
       let target = graph.getPointByClient(event.clientX, event.clientY);
       
+      // Ctrl+V 后可紧接 Ctrl+A 将本次粘贴升级为“全面复制”
+      const pending = window.__wfPastePending;
+      const fullPaste = !!(pending && pending.full);
+      // 本次粘贴消费掉 pending（一次性）
+      try { window.__wfPastePending = null; } catch (_) {}
+
       // 确保复制的节点存在
       if (CopyNodeTemp) {
           // 获取鼠标位置的 canvas 坐标
@@ -15987,7 +17007,10 @@ function pasteFunction() {
           let canvasY = target.y;
 
           // 粘贴节点到鼠标位置
-          copyNode(CopyNodeTemp, canvasX, canvasY);
+          copyNode(CopyNodeTemp, canvasX, canvasY, {
+            cloneInputEdges: fullPaste,
+            inputEdges: CopyInputEdgesTemp
+          });
       } else {
           alert("No node to paste!");
       }
@@ -15996,10 +17019,22 @@ function pasteFunction() {
 function copyFunction() {
   //遍历所有的node找到ishovor==true的node
   let DataTemp=graph.save();
+  const edges = Array.isArray(DataTemp.edges) ? DataTemp.edges : [];
   DataTemp.nodes.forEach(node => {
     if (node.IsHovor) {
       CopyNodeTemp = node;
+      // 缓存“Inputs 的入边”：target 为该节点，且 targetAnchorID 对应 Inputs[].Id
+      try {
+        const inputIds = new Set((node.Inputs || []).map(i => i && i.Id).filter(Boolean));
+        CopyInputEdgesTemp = edges
+          .filter(e => e && e.target === node.id && inputIds.has(e.targetAnchorID))
+          .map(e => structuredClone(e));
+      } catch (e) {
+        CopyInputEdgesTemp = [];
+        console.warn('[CopyFull] build input edge cache failed:', e);
+      }
       console.log('CopyNodeTemp:',CopyNodeTemp);
+      console.log('CopyInputEdgesTemp:', CopyInputEdgesTemp);
     }
   });
 }
@@ -16073,6 +17108,12 @@ document.addEventListener('keydown', function(event) {
     copyFunction();
   } else if (!isInput && event.ctrlKey && event.key === 'v') {
     event.preventDefault();
+    pasteFunction();
+  }
+  // Ctrl+B：全面粘贴（包含 Inputs 的 edge 关系），比 Ctrl+V+A 更容易按出来
+  else if (!isInput && event.ctrlKey && (event.key === 'b' || event.key === 'B')) {
+    event.preventDefault();
+    window.__wfPastePending = { full: true, at: Date.now() };
     pasteFunction();
   }
   else if(event.ctrlKey && event.key === 'r') {
@@ -16270,6 +17311,14 @@ function runFunction() {
     window.currentHasPassivityTrigger = nodes.some(n => n.NodeKind?.includes('passivityTrigger'));
     
     let DataTemp=graph.save();
+    // 把“是否记录历史”注入到 graph_data，供后端 workflow 引擎决定是否落盘
+    try {
+      DataTemp.RecordHistory = !!getWorkflowRecordHistoryEnabled();
+    } catch (_) {}
+    // 把“最大保存记录数”注入到 graph_data，供后端在保存记录快照后自动清理最老文件
+    try {
+      DataTemp.HistoryMaxFiles = getWorkflowRecordHistoryMaxFiles();
+    } catch (_) {}
     DataTemp.nodes.forEach(nodez => {
       nodez.IsBlock = true;
       nodez.IsRunning = false;
@@ -16914,6 +17963,14 @@ async function executeNode(node, count, DataTemp, nodes, edges) {
 
 
 function RefreshEdge () {
+  // ✅ 记录模式：不要运行“过滤边/重算锚点/写回图”的逻辑
+  // 否则只要 edge 的 sourceAnchorID/targetAnchorID 与端口 Id 有任何不一致，就会被过滤成空，表现为“查看记录没有边”
+  try {
+    if (typeof isRecordMode !== 'undefined' && isRecordMode) {
+      try { graph.refresh?.(); } catch (_) {}
+      return;
+    }
+  } catch (_) {}
   // 预热阶段：仅当仍满足预热规则时才跳过刷新
   const stillPreheat = !!window.inPreheat && !!window.currentHasPassivityTrigger && !!currentWorkflowId;
   console.warn('RefreshEdge: window.inPreheat', window.inPreheat, 'stillPreheat', stillPreheat);
@@ -17323,6 +18380,10 @@ try {
   setWorkflowPollingInterval(2000);
 } catch (_) {}
 function addHistory(data) { // 
+  // 允许用户在设置里关闭历史记录（仅停止写入，不影响工作流运行）
+  if (!getWorkflowRecordHistoryEnabled()) {
+    return;
+  }
   let Temp;
   if(data!='Start')
   {
@@ -17337,6 +18398,20 @@ function addHistory(data) { //
       debug: data.debug || '',
       status: data.status || '',
       isFinish: data.isFinish || false,
+      // 关联边：保留与该节点相关的 edges（用于回放/定位）
+      edges: (() => {
+        try {
+          const raw = graph && typeof graph.save === 'function' ? graph.save() : null;
+          const allEdges = raw && Array.isArray(raw.edges) ? raw.edges : [];
+          const nodeId = data && data.id;
+          if (!nodeId) return [];
+          return allEdges
+            .filter(e => e && (e.source === nodeId || e.target === nodeId))
+            .map(slimEdge);
+        } catch (_) {
+          return [];
+        }
+      })(),
       Outputs: data.Outputs.map(item => {
           // 根据 Kind 字段的内容选择性保留 Context, Boolean, 或 Num
           let selectedField;
@@ -17383,11 +18458,21 @@ function addHistory(data) { //
   }
   else
   {
-    //让赋值Temp =['message': 'New conversation started']
-    Temp = JSON.stringify({name: 'New started'});
+    // Start 记录：除了“新会话”标记，也带上当前图的 edges（之前这里被省略了）
+    // 这样后端历史文件中能还原连线关系（尤其是并行边/曲线参数等）
+    const startPayload = { name: 'New started' };
+    try {
+      const raw = graph && typeof graph.save === 'function' ? graph.save() : null;
+      const allEdges = raw && Array.isArray(raw.edges) ? raw.edges : [];
+      startPayload.edges = allEdges.map(slimEdge);
+    } catch (_) {
+      startPayload.edges = [];
+    }
+    Temp = JSON.stringify(startPayload);
     
   }
-  fetch(`/addHistory?ProjectName=${ProjectName}`, {
+  const recordHistory = getWorkflowRecordHistoryEnabled() ? 1 : 0;
+  fetch(`/addHistory?ProjectName=${ProjectName}&RecordHistory=${recordHistory}`, {
     method: 'POST',
     headers: {
         'Content-Type': 'application/json',
@@ -17404,7 +18489,10 @@ function addHistory(data) { //
     });
 }
 function loadHistory() {
-  fetch(`/getHistory?ProjectName=${ProjectName}`)
+  // 历史关闭时不做自动拉取，避免无意义网络请求
+  if (!getWorkflowRecordHistoryEnabled()) return;
+  const limit = WORKFLOW_HISTORY_FETCH_LIMIT_DEFAULT;
+  fetch(`/getHistory?ProjectName=${ProjectName}&limit=${encodeURIComponent(limit)}`)
   .then(response => response.json())
   .then(data => {
       //console.log('Success:', data);
@@ -17475,11 +18563,20 @@ function slimNode(node) {
 
 /** 精简 edge 结构 */
 function slimEdge(edge) {
+  // 之前这里裁剪过猛，导致有些 edge 相关信息（例如曲线/并行边参数、样式/类型等）无法恢复
+  // 这里在“仍然轻量”的前提下，把常用字段补回来；pick 会自动忽略不存在的键
   return pick(edge, [
     'id',
     'source', 'target',
     'sourceAnchor', 'targetAnchor',
-    'targetAnchorID','sourceAnchorID'
+    'targetAnchorID','sourceAnchorID',
+    // optional rendering/layout fields (G6 / custom)
+    'type', 'label',
+    'curveOffset', 'curvePosition', 'minCurveOffset',
+    'controlPoints', 'points', 'startPoint', 'endPoint',
+    'router', 'connector',
+    'style', 'stateStyles',
+    'zIndex'
   ]);
 }
 
@@ -17858,7 +18955,7 @@ function LoadWorkFlow(dates, fileName, HostPost, Callsign) {
   }
   if (Callsign !== '') {
     Tempdata.nodes.forEach((n) => {
-      if (n.NodeKind.includes('passivityTrigger')) {
+      if (n.NodeKind.includes('passivityTrigger') && n.Inputs[1] !== undefined) {//升级代码加入if条件证明n.Inputs[1]存在
         n.Inputs[1].Context = Callsign;
         n.Inputs[1].IsLabel = true;
       }
@@ -17922,6 +19019,8 @@ let secretsConfigWorkflow = { secrets: [], llmMappings: {} };
 let llmNodesWorkflow = [];
 let selectedSecretIndexWorkflow = -1;
 let settingsTabsInitializedWorkflow = false;
+let pendingRecordHistoryEnabledWorkflow = null;
+let pendingRecordHistoryMaxFilesWorkflow = null;
 
 document.addEventListener('DOMContentLoaded', () => {
   const settingsBtn = document.getElementById('settingsBtnWorkflow');
@@ -17964,6 +19063,10 @@ function initSettingsMenuWorkflow() {
               <i class="fas fa-code-branch"></i>
               <span>LLM Key</span>
             </div>
+            <div class="settings-menu-item" data-section="history">
+              <i class="fas fa-history"></i>
+              <span>历史</span>
+            </div>
           </div>
           <div class="settings-content">
             <div id="secretsSectionWorkflow" class="settings-section">
@@ -17976,6 +19079,36 @@ function initSettingsMenuWorkflow() {
               <h3>LLM 密钥分配</h3>
               <div class="llm-key-list" id="llmKeyListWorkflow">
                 <!-- LLM 分配列表 -->
+              </div>
+            </div>
+            <div id="historySectionWorkflow" class="settings-section" style="display:none;">
+              <h3>历史记录</h3>
+              <div class="secret-item">
+                <div class="history-form-group">
+                  <div class="history-title">是否记录历史（addHistory / 工作流 History）</div>
+                  <label class="history-toggle" for="disableHistoryWorkflow">
+                    <input type="checkbox" id="disableHistoryWorkflow">
+                    <span class="history-toggle-text">勾选后不记录历史（已有历史不会删除）</span>
+                  </label>
+                  <div class="history-title" style="margin-top:10px;">最大保存记录数（记录列表）</div>
+                  <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                    <input
+                      type="number"
+                      id="historyMaxFilesWorkflow"
+                      min="0"
+                      max="5000"
+                      step="1"
+                      placeholder="例如 200（0=不限制）"
+                      style="width: 260px;"
+                    />
+                    <div style="color: rgba(255,255,255,.6); font-size: 12px; line-height: 1.4;">
+                      超过后自动删除最老的记录文件（只影响“记录模式/记录列表”的运行快照）
+                    </div>
+                  </div>
+                  <div class="history-hint">
+                    为避免历史无限变大：后端会自动裁剪“单次会话条数/会话数量”，并截断超长字符串字段。
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -18366,6 +19499,63 @@ function initSettingsMenuWorkflow() {
         .llm-key-list::-webkit-scrollbar-thumb:hover {
           background: linear-gradient(180deg, rgba(0, 212, 255, 0.9), rgba(123, 47, 247, 0.9));
         }
+        .history-form-group {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .history-title {
+          color: rgba(255, 255, 255, 0.9);
+          font-size: 14px;
+          font-weight: 600;
+        }
+        /* history number input: reuse secret input look */
+        #settingsModalWorkflow #historyMaxFilesWorkflow {
+          padding: 10px 12px;
+          background: rgba(0, 0, 0, 0.3);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 8px;
+          color: #fff;
+          font-size: 14px;
+          transition: all 0.2s ease;
+          outline: none;
+        }
+        #settingsModalWorkflow #historyMaxFilesWorkflow:focus {
+          border-color: rgba(0, 212, 255, 0.6);
+          box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.12);
+        }
+        .history-toggle {
+          display: flex;
+          align-items: flex-start;
+          gap: 12px;
+          padding: 12px 14px;
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          border-radius: 10px;
+          cursor: pointer;
+          user-select: none;
+        }
+        /* 覆盖全局 input 样式：避免 checkbox 被 width:100% 拉伸成“长条” */
+        #settingsModalWorkflow .history-toggle input[type="checkbox"] {
+          width: 20px !important;
+          height: 20px !important;
+          min-width: 20px !important;
+          flex: 0 0 20px !important;
+          margin-top: 2px;
+          transform: none !important;
+        }
+        .history-toggle-text {
+          color: rgba(255, 255, 255, 0.85);
+          font-size: 14px;
+          line-height: 1.5;
+          word-break: break-word;
+        }
+        .history-hint {
+          margin-top: 10px;
+          color: rgba(255, 255, 255, 0.6);
+          font-size: 12px;
+          line-height: 1.6;
+        }
       `;
       document.head.appendChild(style);
     }
@@ -18400,6 +19590,29 @@ function initSettingsMenuWorkflow() {
     
     document.getElementById('settingsApplyBtnWorkflow').addEventListener('click', async () => {
       await saveSecretsConfigWorkflow();
+      // 保存“是否记录历史”开关（只在点“应用”时落盘到 localStorage）
+      try {
+        if (pendingRecordHistoryEnabledWorkflow !== null) {
+          setWorkflowRecordHistoryEnabled(!!pendingRecordHistoryEnabledWorkflow);
+        }
+      } catch (_) {}
+      // 保存“最大保存记录数”（只在点“应用”时落盘到 localStorage）
+      try {
+        if (pendingRecordHistoryMaxFilesWorkflow !== null) {
+          setWorkflowRecordHistoryMaxFiles(pendingRecordHistoryMaxFilesWorkflow);
+          // 尝试让后端立刻按新上限清理（非必须；失败也不影响后续自动清理）
+          try {
+            const pn = getProjectHistoryKey();
+            if (pn) {
+              fetch('/history/prune', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ project_name: pn, max_files: pendingRecordHistoryMaxFilesWorkflow })
+              }).catch(() => {});
+            }
+          } catch (_) {}
+        }
+      } catch (_) {}
       modal.style.display = 'none';
       document.body.classList.remove('modal-open');
     });
@@ -18409,6 +19622,50 @@ function initSettingsMenuWorkflow() {
   modal.style.display = 'flex';
   document.body.classList.add('modal-open');
   loadSecretsConfigWorkflow();
+  initHistorySettingsWorkflow();
+}
+
+function initHistorySettingsWorkflow() {
+  // 每次打开弹窗时，都刷新一次 checkbox 的状态（支持用户在别处改 localStorage）
+  try {
+    pendingRecordHistoryEnabledWorkflow = getWorkflowRecordHistoryEnabled();
+    const cb = document.getElementById('disableHistoryWorkflow');
+    if (cb) {
+      // 勾选 = 不记录历史
+      cb.checked = !pendingRecordHistoryEnabledWorkflow;
+      cb.onchange = () => {
+        pendingRecordHistoryEnabledWorkflow = !cb.checked;
+        // 立即生效：不需要等待点击“应用”
+        try {
+          setWorkflowRecordHistoryEnabled(!!pendingRecordHistoryEnabledWorkflow);
+        } catch (_) {}
+        // 同步到后端：保证运行中的 workflow 也立刻停止/恢复写历史
+        try {
+          const wfId = window.currentWorkflowId || window.monitoredWorkflowId || (typeof currentWorkflowId !== 'undefined' ? currentWorkflowId : null);
+          if (wfId) {
+            fetch(`/workflow/record-history/${encodeURIComponent(wfId)}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enabled: !!pendingRecordHistoryEnabledWorkflow })
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      };
+    }
+    // 最大保存记录数（记录列表）
+    try {
+      pendingRecordHistoryMaxFilesWorkflow = getWorkflowRecordHistoryMaxFiles();
+      const maxInp = document.getElementById('historyMaxFilesWorkflow');
+      if (maxInp) {
+        maxInp.value = String(pendingRecordHistoryMaxFilesWorkflow);
+        maxInp.onchange = () => {
+          const n = parseInt(String(maxInp.value || ''), 10);
+          if (!Number.isFinite(n) || isNaN(n)) return;
+          pendingRecordHistoryMaxFilesWorkflow = Math.max(0, Math.min(n, 5000));
+        };
+      }
+    } catch (_) {}
+  } catch (_) {}
 }
 
 async function loadSecretsConfigWorkflow() {
@@ -18577,7 +19834,8 @@ function initSettingsTabsWorkflow() {
   const menuItems = document.querySelectorAll('.settings-menu-item');
   const sections = {
     secrets: document.getElementById('secretsSectionWorkflow'),
-    'llm-key': document.getElementById('llmKeySectionWorkflow')
+    'llm-key': document.getElementById('llmKeySectionWorkflow'),
+    history: document.getElementById('historySectionWorkflow')
   };
 
   menuItems.forEach(item => {
