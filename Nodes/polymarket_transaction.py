@@ -571,15 +571,31 @@ def _ensure_position_allowance(c: Any, token_id: int, required: float, debug: Li
 
 def _http_get_json(url: str, timeout: float, debug: Optional[List[str]] = None) -> Any:
     req = Request(url, headers={'User-Agent': 'polymarket-transaction-node'})
+    resp = None
     try:
-        with urlopen(req, timeout=timeout) as resp:
-            data = resp.read().decode('utf-8')
-            return json.loads(data)
+        resp = urlopen(req, timeout=timeout)
+        data = resp.read().decode('utf-8')
+        return json.loads(data)
     except (HTTPError, URLError, TimeoutError, ValueError) as e:
         if debug is not None:
             _append_debug(debug, f"HTTP GET failed: {url} => {e}")
             _append_exception_debug(debug, f"HTTP GET failed detail [{url}]", e)
+        if isinstance(e, HTTPError):
+            try:
+                e.read()
+            except Exception:
+                pass
+            try:
+                e.close()
+            except Exception:
+                pass
         raise
+    finally:
+        if resp is not None:
+            try:
+                resp.close()
+            except Exception:
+                pass
 
 
 def _is_tx_hash_like(s: str) -> bool:

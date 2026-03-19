@@ -1095,6 +1095,19 @@ def _get_side_float(usedata: _UseDataProxy, side: str, suffix: str, default=0.0)
     return float(default)
 
 
+def _get_side_pos_info(usedata: _UseDataProxy, side: str, qty: float, other_qty: float):
+    candidates = [
+        f"{side}_Now_Pos",
+        f"Now_{side}_Pos",
+        f"{side}_Pos",
+    ]
+    fallback = _clamp(qty, 0.0, 1.0) if qty > 0.0 else _infer_live_ratio(qty, other_qty)
+    for key in candidates:
+        if usedata.has(key):
+            return _clamp(_to_float(usedata.get(key), fallback), 0.0, 1.0), key
+    return _clamp(fallback, 0.0, 1.0), "fallback_from_qty"
+
+
 def _run_strategy(usedata: _UseDataProxy, params: dict):
     actions = []
     logs = []
@@ -1170,28 +1183,8 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     O_open = _get_side_float(usedata, opp_side, "OpenOrdersQty", 0.0)
 
     # ===== 3) 当前仓位 + 上限 =====
-    F_pos = _clamp(
-        _to_float(
-            usedata.get(
-                f"Now_{fact_side}_Pos",
-                usedata.get(f"{fact_side}_Pos", _clamp(F_qty, 0.0, 1.0)),
-            ),
-            0.0,
-        ),
-        0.0,
-        1.0,
-    )
-    O_pos = _clamp(
-        _to_float(
-            usedata.get(
-                f"Now_{opp_side}_Pos",
-                usedata.get(f"{opp_side}_Pos", _clamp(O_qty, 0.0, 1.0)),
-            ),
-            0.0,
-        ),
-        0.0,
-        1.0,
-    )
+    F_pos, F_pos_source = _get_side_pos_info(usedata, fact_side, F_qty, O_qty)
+    O_pos, O_pos_source = _get_side_pos_info(usedata, opp_side, O_qty, F_qty)
     F_cap = _clamp(
         _to_float(
             usedata.get(f"{fact_side}_MaxPos", usedata.get(f"{fact_side}_PosCap", 1.0)),
@@ -1235,6 +1228,22 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
 
     # ===== 7) Pos0 =====
     Pos0 = (F_qty <= eps) and (O_qty <= eps) and (F_open <= eps) and (O_open <= eps)
+    Print(
+        "Pos0_check: "
+        f"fact_side={fact_side}, opp_side={opp_side}, "
+        f"Pos0={Pos0}, eps={eps}, "
+        f"F_qty={F_qty}, O_qty={O_qty}, F_open={F_open}, O_open={O_open}, "
+        f"F_pos={F_pos}, O_pos={O_pos}, F_pos_source={F_pos_source}, O_pos_source={O_pos_source}, "
+        f"F_cap={F_cap}, O_cap={O_cap}, "
+        f"F_avg={F_avg}, O_avg={O_avg}, F_bid={F_bid}, O_bid={O_bid}, F_ask={F_ask}, O_ask={O_ask}, "
+        f"F_qty<=eps={F_qty <= eps}, O_qty<=eps={O_qty <= eps}, "
+        f"F_open<=eps={F_open <= eps}, O_open<=eps={O_open <= eps}, "
+        f"F_qty-eps={F_qty - eps}, O_qty-eps={O_qty - eps}, "
+        f"F_open-eps={F_open - eps}, O_open-eps={O_open - eps}, "
+        f"qty_sum={F_qty + O_qty}, open_sum={F_open + O_open}, total_pending={F_qty + O_qty + F_open + O_open}, "
+        f"ref_ask={ref_ask}, risk={risk}, start_day={start_day}, day_to_end={day_to_end}, "
+        f"time_ratio={time_ratio}, e={e}, A={A}, tp_ratio={tp_ratio}, core_ratio={core_ratio}"
+    )
 
     # ===== 8) 初始化目标 =====
     # 默认“维持现状”，再由规则覆盖。
@@ -1250,10 +1259,15 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     Print(
         "rule1_check: "
         f"Pos0={Pos0}, "
-        f"F_ask>ref_ask+0.05={rule1_price} ({F_ask}>{ref_ask + 0.05}), "
-        f"ref_ask<0.9={rule1_ref}, "
-        f"day_to_end>0.5={rule1_day}, "
-        f"time_ratio>0.25={rule1_time}"
+        f"rule1_price={rule1_price} (F_ask={F_ask}, ref_ask+0.05={ref_ask + 0.05}, diff={F_ask - (ref_ask + 0.05)}), "
+        f"rule1_ref={rule1_ref} (ref_ask={ref_ask}, limit=0.9, diff={ref_ask - 0.9}), "
+        f"rule1_day={rule1_day} (day_to_end={day_to_end}, limit=0.5, diff={day_to_end - 0.5}), "
+        f"rule1_time={rule1_time} (time_ratio={time_ratio}, limit=0.25, diff={time_ratio - 0.25}), "
+        f"F_qty={F_qty}, O_qty={O_qty}, F_open={F_open}, O_open={O_open}, "
+        f"F_pos={F_pos}, O_pos={O_pos}, F_pos_source={F_pos_source}, O_pos_source={O_pos_source}, "
+        f"F_cap={F_cap}, O_cap={O_cap}, "
+        f"tp_ratio={tp_ratio}, core_ratio={core_ratio}, "
+        f"risk={risk}, start_day={start_day}, day_to_end={day_to_end}, e={e}, A={A}"
     )
     rule1 = (
         Pos0
@@ -1262,6 +1276,7 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
         and rule1_day
         and rule1_time
     )
+    Print(f"rule1_result={rule1}")
     if rule1:
         hedge_target = 0.25 * tp_ratio
         fact_target = 0.0
@@ -1352,7 +1367,7 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     Print(f"ref_ask={ref_ask} risk={risk} start_day={start_day} day_to_end={day_to_end}")
     Print(f"time_ratio(day_to_end/start_day)={time_ratio}")
     Print(f"time_ratio_calc: day_to_end={day_to_end} / start_day={start_day} => {time_ratio}")
-    Print(f"F_cap={F_cap} O_cap={O_cap} Pos0={Pos0}")
+    Print(f"F_cap={F_cap} O_cap={O_cap} Pos0={Pos0} F_pos_source={F_pos_source} O_pos_source={O_pos_source}")
     Print(f"tp_ratio={tp_ratio} core_ratio={core_ratio}")
     Print(
         f"A={A} trend_tp_line={trend_tp_line} hedge_line={hedge_line} "
@@ -1369,6 +1384,15 @@ def _run_strategy(usedata: _UseDataProxy, params: dict):
     ts = _pick_ts_from_map(raw_map)
     decision = "SETPOS" if should_set else "HOLD"
     metrics = {
+        "F_pos": F_pos,
+        "O_pos": O_pos,
+        "F_cap": F_cap,
+        "O_cap": O_cap,
+        "F_qty": F_qty,
+        "O_qty": O_qty,
+        "F_avg": F_avg,
+        "O_avg": O_avg,
+        "F_open": F_open,
         "ts": ts or "missing",
         "fact_side": fact_side,
         "opp_side": opp_side,

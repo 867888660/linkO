@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, Tuple
 
 # **Define the number of outputs and inputs**
 OutPutNum = 5
-InPutNum = 17
+InPutNum = 19
 
 DEFAULT_REBALANCE_HI = Decimal("0.06")
 DEFAULT_MIN_NOTIONAL = Decimal("10")
@@ -47,21 +47,24 @@ FunctionIntroduction = (
     "输出 YesMode/NoMode（BUY/SELL/Wait）、YesQty/NoQty（买入/卖出数量）以及 IsAwake。\n\n"
     "核心逻辑：\n"
     "- 读取 FunctionJson.actions，识别 action.type == 'SETPOS'，得到目标仓位 pct（0~1）\n"
-    "- 用 Max_BudgetCap * pct 得到目标投入金额 TargetCost；当前资金占用 NowCost = AvgPrice*now_Qty + AskPrice*OpenOrdersQty（仅挂买单 qty）\n"
+    "- 用 Max_BudgetCap * pct 得到目标投入金额 TargetCost；当前资金占用 NowCost = AvgPrice*now_Qty + AskPrice*OpenBuyOrdersQty\n"
     "- 防抖顺序：RebalanceHi -> MinNotional，任一命中则 Wait\n"
+    "- 卖出时可卖数量 sellable_qty = now_Qty - OpenSellOrdersQty，避免重复卖出已挂卖部分\n"
     "- 最后用 DeltaCost 与 ask/bid 换算整数 qty（向下取整）输出 BUY/SELL/Wait\n"
     "- IsAwake：若 wake_reason 非空或 actions 内包含 WAKE，则 True\n\n"
     "参数\n```yaml\n"
     "inputs:\n"
     "  - name: Yes_now_Qty\n    type: number\n    required: true\n"
-    "  - name: Yes_OpenOrdersQty\n    type: number\n    required: true\n"
+    "  - name: Yes_OpenBuyOrdersQty\n    type: number\n    required: true\n"
+    "  - name: Yes_OpenSellOrdersQty\n    type: number\n    required: true\n"
     "  - name: Yes_AvgPrice\n    type: number\n    required: true\n"
     "  - name: Yes_Ask_Price\n    type: number\n    required: true\n"
     "  - name: Yes_Bids_Price\n    type: number\n    required: true\n"
     "  - name: Yes_Min_BudgetCap\n    type: number\n    required: true\n"
     "  - name: Yes_Max_BudgetCap\n    type: number\n    required: true\n"
     "  - name: No_now_Qty\n    type: number\n    required: true\n"
-    "  - name: No_OpenOrdersQty\n    type: number\n    required: true\n"
+    "  - name: No_OpenBuyOrdersQty\n    type: number\n    required: true\n"
+    "  - name: No_OpenSellOrdersQty\n    type: number\n    required: true\n"
     "  - name: No_AvgPrice\n    type: number\n    required: true\n"
     "  - name: No_Ask_Price\n    type: number\n    required: true\n"
     "  - name: No_Bids_Price\n    type: number\n    required: true\n"
@@ -242,7 +245,8 @@ def _is_awake(actions: Any, wake_reason: Any) -> bool:
 
 def _mode_and_qty_by_budget(
     now_qty: float,
-    open_orders_qty: float,
+    open_buy_orders_qty: float,
+    open_sell_orders_qty: float,
     avg_price: float,
     ask_price: float,
     bids_price: float,
@@ -254,13 +258,14 @@ def _mode_and_qty_by_budget(
 ) -> Tuple[str, float, Dict[str, Any]]:
     """
     按预算口径执行仓位调整：
-    - NowCost = AvgPrice * now_qty + AskPrice * open_orders_qty
+    - NowCost = AvgPrice * now_qty + AskPrice * open_buy_orders_qty
     - TargetCost = Max_BudgetCap * target_pct（target_pct>0 时至少 Min_BudgetCap）
     - 防抖顺序：RebalanceHi -> MinNotional
     - 最终按 ask/bid 将 DeltaCost 映射为整数 qty（向下取整）
     """
     now_q = _to_decimal(_safe_float(now_qty, 0.0), Decimal("0"))
-    open_q = _to_decimal(_safe_float(open_orders_qty, 0.0), Decimal("0"))
+    open_buy_q = _to_decimal(_safe_float(open_buy_orders_qty, 0.0), Decimal("0"))
+    open_sell_q = _to_decimal(_safe_float(open_sell_orders_qty, 0.0), Decimal("0"))
     avg_p = _to_decimal(_safe_float(avg_price, 0.0), Decimal("0"))
     ask_p = _to_decimal(_safe_float(ask_price, 0.0), Decimal("0"))
     bid_p = _to_decimal(_safe_float(bids_price, 0.0), Decimal("0"))
@@ -271,8 +276,10 @@ def _mode_and_qty_by_budget(
 
     if now_q < 0:
         now_q = Decimal("0")
-    if open_q < 0:
-        open_q = Decimal("0")
+    if open_buy_q < 0:
+        open_buy_q = Decimal("0")
+    if open_sell_q < 0:
+        open_sell_q = Decimal("0")
     if avg_p < 0:
         avg_p = Decimal("0")
     if ask_p < 0:
@@ -291,7 +298,8 @@ def _mode_and_qty_by_budget(
     # 如果策略未给该 side 目标 pct，则该 side 不调整。
     debug_info: Dict[str, Any] = {
         "now_qty": float(now_q),
-        "open_orders_qty": float(open_q),
+        "open_buy_orders_qty": float(open_buy_q),
+        "open_sell_orders_qty": float(open_sell_q),
         "avg_price": float(avg_p),
         "ask_price": float(ask_p),
         "bid_price": float(bid_p),
@@ -315,7 +323,7 @@ def _mode_and_qty_by_budget(
     debug_info["target_pct"] = float(pct_d)
 
     used_cost = avg_p * now_q
-    reserved_buy_cost = ask_p * open_q
+    reserved_buy_cost = ask_p * open_buy_q
     now_cost = used_cost + reserved_buy_cost
 
     target_cost = budget_cap * pct_d
@@ -368,8 +376,13 @@ def _mode_and_qty_by_budget(
             return "Wait", 0.0, debug_info
         qty_sell = ((-delta_cost) / bid_p).to_integral_value(rounding=ROUND_DOWN)
         debug_info["qty_sell_raw"] = float((-delta_cost) / bid_p)
-        if qty_sell > now_q:
-            qty_sell = now_q.to_integral_value(rounding=ROUND_DOWN)
+        sellable_q = now_q - open_sell_q
+        if sellable_q < 0:
+            sellable_q = Decimal("0")
+        sellable_q = sellable_q.to_integral_value(rounding=ROUND_DOWN)
+        debug_info["sellable_qty"] = float(sellable_q)
+        if qty_sell > sellable_q:
+            qty_sell = sellable_q
         debug_info["qty_sell_floor"] = float(qty_sell)
         if qty_sell < 1:
             debug_info["reason"] = "sell_qty_lt_1"
@@ -386,39 +399,43 @@ def run_node(node: Dict[str, Any]):
 
     # Inputs:
     # 0  Yes_now_Qty
-    # 1  Yes_OpenOrdersQty
-    # 2  Yes_AvgPrice
-    # 3  Yes_Ask_Price
-    # 4  Yes_Bids_Price
-    # 5  Yes_Min_BudgetCap
-    # 6  Yes_Max_BudgetCap
-    # 7  No_now_Qty
-    # 8  No_OpenOrdersQty
-    # 9  No_AvgPrice
-    # 10 No_Ask_Price
-    # 11 No_Bids_Price
-    # 12 No_Min_BudgetCap
-    # 13 No_Max_BudgetCap
-    # 14 FunctionJson
-    # 15 RebalanceHi
-    # 16 MinNotional
+    # 1  Yes_OpenBuyOrdersQty
+    # 2  Yes_OpenSellOrdersQty
+    # 3  Yes_AvgPrice
+    # 4  Yes_Ask_Price
+    # 5  Yes_Bids_Price
+    # 6  Yes_Min_BudgetCap
+    # 7  Yes_Max_BudgetCap
+    # 8  No_now_Qty
+    # 9  No_OpenBuyOrdersQty
+    # 10 No_OpenSellOrdersQty
+    # 11 No_AvgPrice
+    # 12 No_Ask_Price
+    # 13 No_Bids_Price
+    # 14 No_Min_BudgetCap
+    # 15 No_Max_BudgetCap
+    # 16 FunctionJson
+    # 17 RebalanceHi
+    # 18 MinNotional
     yes_now = _read_num(node, 0, 0.0)
-    yes_open = _read_num(node, 1, 0.0)
-    yes_avg = _read_num(node, 2, 0.0)
-    yes_ask = _read_num(node, 3, 0.0)
-    yes_bid = _read_num(node, 4, 0.0)
-    yes_min_cap = _read_num(node, 5, 0.0)
-    yes_max_cap = _read_num(node, 6, 0.0)
-    no_now = _read_num(node, 7, 0.0)
-    no_open = _read_num(node, 8, 0.0)
-    no_avg = _read_num(node, 9, 0.0)
-    no_ask = _read_num(node, 10, 0.0)
-    no_bid = _read_num(node, 11, 0.0)
-    no_min_cap = _read_num(node, 12, 0.0)
-    no_max_cap = _read_num(node, 13, 0.0)
-    func_json_s = _read_str(node, 14, "")
-    rebalance_hi = _read_num(node, 15, float(DEFAULT_REBALANCE_HI))
-    min_notional = _read_num(node, 16, float(DEFAULT_MIN_NOTIONAL))
+    yes_open_buy = _read_num(node, 1, 0.0)
+    yes_open_sell = _read_num(node, 2, 0.0)
+    yes_avg = _read_num(node, 3, 0.0)
+    yes_ask = _read_num(node, 4, 0.0)
+    yes_bid = _read_num(node, 5, 0.0)
+    yes_min_cap = _read_num(node, 6, 0.0)
+    yes_max_cap = _read_num(node, 7, 0.0)
+    no_now = _read_num(node, 8, 0.0)
+    no_open_buy = _read_num(node, 9, 0.0)
+    no_open_sell = _read_num(node, 10, 0.0)
+    no_avg = _read_num(node, 11, 0.0)
+    no_ask = _read_num(node, 12, 0.0)
+    no_bid = _read_num(node, 13, 0.0)
+    no_min_cap = _read_num(node, 14, 0.0)
+    no_max_cap = _read_num(node, 15, 0.0)
+    func_json_s = _read_str(node, 16, "")
+    rebalance_hi = _read_num(node, 17, float(DEFAULT_REBALANCE_HI))
+    min_notional = _read_num(node, 18, float(DEFAULT_MIN_NOTIONAL))
 
     debug_lines.append("[INPUT] FunctionJson raw:")
     debug_lines.append(_preview_text(func_json_s, 2000) or "<empty>")
@@ -432,14 +449,16 @@ def run_node(node: Dict[str, Any]):
     # This prevents downstream from treating "failed fetch" as "0 position".
     numeric_inputs = (
         yes_now,
-        yes_open,
+        yes_open_buy,
+        yes_open_sell,
         yes_avg,
         yes_ask,
         yes_bid,
         yes_min_cap,
         yes_max_cap,
         no_now,
-        no_open,
+        no_open_buy,
+        no_open_sell,
         no_avg,
         no_ask,
         no_bid,
@@ -475,7 +494,8 @@ def run_node(node: Dict[str, Any]):
 
     yes_mode, yes_qty, yes_debug = _mode_and_qty_by_budget(
         yes_now,
-        yes_open,
+        yes_open_buy,
+        yes_open_sell,
         yes_avg,
         yes_ask,
         yes_bid,
@@ -487,7 +507,8 @@ def run_node(node: Dict[str, Any]):
     )
     no_mode, no_qty, no_debug = _mode_and_qty_by_budget(
         no_now,
-        no_open,
+        no_open_buy,
+        no_open_sell,
         no_avg,
         no_ask,
         no_bid,
@@ -517,50 +538,54 @@ def run_node(node: Dict[str, Any]):
 # ---- Port definitions ----
 Inputs[0]["name"] = "Yes_now_Qty"
 Inputs[0]["Kind"] = "Num"
-Inputs[1]["name"] = "Yes_OpenOrdersQty"
+Inputs[1]["name"] = "Yes_OpenBuyOrdersQty"
 Inputs[1]["Kind"] = "Num"
-Inputs[2]["name"] = "Yes_AvgPrice"
+Inputs[2]["name"] = "Yes_OpenSellOrdersQty"
 Inputs[2]["Kind"] = "Num"
-Inputs[3]["name"] = "Yes_Ask_Price"
+Inputs[3]["name"] = "Yes_AvgPrice"
 Inputs[3]["Kind"] = "Num"
-Inputs[4]["name"] = "Yes_Bids_Price"
+Inputs[4]["name"] = "Yes_Ask_Price"
 Inputs[4]["Kind"] = "Num"
-Inputs[5]["name"] = "Yes_Min_BudgetCap"
+Inputs[5]["name"] = "Yes_Bids_Price"
 Inputs[5]["Kind"] = "Num"
-Inputs[6]["name"] = "Yes_Max_BudgetCap"
+Inputs[6]["name"] = "Yes_Min_BudgetCap"
 Inputs[6]["Kind"] = "Num"
-Inputs[7]["name"] = "No_now_Qty"
+Inputs[7]["name"] = "Yes_Max_BudgetCap"
 Inputs[7]["Kind"] = "Num"
-Inputs[8]["name"] = "No_OpenOrdersQty"
+Inputs[8]["name"] = "No_now_Qty"
 Inputs[8]["Kind"] = "Num"
-Inputs[9]["name"] = "No_AvgPrice"
+Inputs[9]["name"] = "No_OpenBuyOrdersQty"
 Inputs[9]["Kind"] = "Num"
-Inputs[10]["name"] = "No_Ask_Price"
+Inputs[10]["name"] = "No_OpenSellOrdersQty"
 Inputs[10]["Kind"] = "Num"
-Inputs[11]["name"] = "No_Bids_Price"
+Inputs[11]["name"] = "No_AvgPrice"
 Inputs[11]["Kind"] = "Num"
-Inputs[12]["name"] = "No_Min_BudgetCap"
+Inputs[12]["name"] = "No_Ask_Price"
 Inputs[12]["Kind"] = "Num"
-Inputs[13]["name"] = "No_Max_BudgetCap"
+Inputs[13]["name"] = "No_Bids_Price"
 Inputs[13]["Kind"] = "Num"
-Inputs[14]["name"] = "FunctionJson"
-Inputs[14]["Kind"] = "String"
-Inputs[14]["IsLabel"] = False
-Inputs[15]["name"] = "RebalanceHi"
+Inputs[14]["name"] = "No_Min_BudgetCap"
+Inputs[14]["Kind"] = "Num"
+Inputs[15]["name"] = "No_Max_BudgetCap"
 Inputs[15]["Kind"] = "Num"
-Inputs[16]["name"] = "MinNotional"
-Inputs[16]["Kind"] = "Num"
+Inputs[16]["name"] = "FunctionJson"
+Inputs[16]["Kind"] = "String"
+Inputs[16]["IsLabel"] = False
+Inputs[17]["name"] = "RebalanceHi"
+Inputs[17]["Kind"] = "Num"
+Inputs[18]["name"] = "MinNotional"
+Inputs[18]["Kind"] = "Num"
 
 # 默认端口模式：
 # - 除 RebalanceHi/MinNotional 外，其余输入默认 Link 模式（IsLabel=False）
 # - 上述两个防抖参数保留为可直接填写默认值
-for _idx in range(0, 15):
+for _idx in range(0, 17):
     Inputs[_idx]["IsLabel"] = False
 
-Inputs[15]["IsLabel"] = True
-Inputs[16]["IsLabel"] = True
-Inputs[15]["Num"] = float(DEFAULT_REBALANCE_HI)
-Inputs[16]["Num"] = float(DEFAULT_MIN_NOTIONAL)
+Inputs[17]["IsLabel"] = True
+Inputs[18]["IsLabel"] = True
+Inputs[17]["Num"] = float(DEFAULT_REBALANCE_HI)
+Inputs[18]["Num"] = float(DEFAULT_MIN_NOTIONAL)
 
 Outputs[0]["name"] = "YesMode"
 Outputs[0]["Kind"] = "String"

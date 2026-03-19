@@ -104,7 +104,7 @@ FunctionIntroduction = (
     '组件功能：将 Yes / No / 实时 / 指标 的 JSON 输入解析为结构化记录，并写入 SQLite 的五张业务表：'
     '`Yes_Data` / `No_Data` / `RealTime_Data` / `Action_Data` / `metrics`。\n\n'
     '代码功能摘要：\n'
-    '- 输入分三路：YesJson / NoJson / RealTimeJson（支持 `{...}`、`[{...},{...}]`、多行 JSONL、多个 JSON 拼接；不再支持 KV 行兜底）\n'
+    '- 输入分三路：YesJson / NoJson / RealTimeJson（支持 `{...}`、`[{...},{...}]`、多行 JSONL、多个 JSON 拼接；RealTimeJson 额外支持 `key:value` / `key：value` 多行文本）\n'
     '- 可选 Action 输入：写入 `Action_Data`（同样支持 JSON/JSONL/多段 JSON）\n'
     '- 可选 YesMode/NoMode/YesQty/NoQty：写入 `Action_Data`（用于记录买入/卖出模式与份额数）\n'
     '- 自动解析列：遇到 dict 记录时，用其 key 自动生成/扩展表列（SQLite `ALTER TABLE ADD COLUMN`）\n'
@@ -132,7 +132,7 @@ FunctionIntroduction = (
     '  - name: RealTimeJson\n'
     '    type: string\n'
     '    required: false\n'
-    '    description: 实时数据（JSON/多段 JSON/JSONL）\n'
+    '    description: 实时数据（JSON/多段 JSON/JSONL，或 `key:value` 多行文本）\n'
     '  - name: NowTime\n'
     '    type: string\n'
     '    required: false\n'
@@ -270,6 +270,29 @@ _ACTION_DB_FIELDS = (
     "db_calc_json",
 )
 
+_REALTIME_ACTION_CONTEXT_KEYS = (
+    "Yes_Min_BudgetCap",
+    "Yes_Max_BudgetCap",
+    "No_Min_BudgetCap",
+    "No_Max_BudgetCap",
+    "Yes_now_Qty",
+    "No_now_Qty",
+    "Yes_now_avgPrice",
+    "No_now_avgPrice",
+    "Yes_depth_ask_1c_usd",
+    "Yes_depth_bid_1c_usd",
+    "No_depth_ask_1c_usd",
+    "No_depth_bid_1c_usd",
+    "Yes_now_ask",
+    "Yes_now_bid",
+    "No_now_ask",
+    "No_now_bid",
+    "Yes_OpenOrdersQty",
+    "No_OpenOrdersQty",
+    "Yes_Now_Pos",
+    "No_Now_Pos",
+)
+
 _ACTION_ALLOWED_KEYS = (
     "Yes_Pct",
     "No_Pct",
@@ -279,7 +302,7 @@ _ACTION_ALLOWED_KEYS = (
     "YesQty",
     "NoQty",
     "Print",
-)
+) + _REALTIME_ACTION_CONTEXT_KEYS
 
 
 def _extract_metrics_dict(v: Any) -> Optional[Dict[str, Any]]:
@@ -293,6 +316,77 @@ def _extract_metrics_dict(v: Any) -> Optional[Dict[str, Any]]:
     if isinstance(vv, dict):
         return vv
     return None
+
+
+def _parse_kv_text_record(text: Any) -> Optional[Dict[str, Any]]:
+    """
+    解析形如 `key: value` / `key：value` 的多行文本为 dict。
+    仅当至少成功解析 1 行时返回 dict。
+    """
+    s = _safe_str(text)
+    if not s.strip():
+        return None
+
+    rec: Dict[str, Any] = {}
+    for raw_line in s.splitlines():
+        line = _safe_str(raw_line).strip()
+        if not line:
+            continue
+        sep = "：" if "：" in line else (":" if ":" in line else None)
+        if sep is None:
+            continue
+        key, value = line.split(sep, 1)
+        key = _safe_str(key).strip()
+        if not key:
+            continue
+        rec[key] = _safe_str(value).strip()
+    return rec if rec else None
+
+
+def _normalize_realtime_records(raw: Any) -> Tuple[List[Any], int]:
+    """
+    RealTimeJson 专用归一化：
+    - 先按现有 JSON/JSONL/多段 JSON 规则解析
+    - 若失败，再兜底解析 `key: value` / `key：value` 多行文本
+    """
+    records, parse_err = _normalize_to_records(raw)
+    if records or not isinstance(raw, str):
+        return records, parse_err
+    kv_rec = _parse_kv_text_record(raw)
+    if kv_rec:
+        return [kv_rec], 0
+    return records, parse_err
+
+
+def _extract_realtime_context_fields(rt_raw: Any) -> Dict[str, Any]:
+    """
+    从 RealTimeJson 中抽取需附带到 Action_Data 的检查字段。
+    支持 JSON dict / `key:value` 文本。
+    """
+    out: Dict[str, Any] = {}
+    records, _ = _normalize_realtime_records(rt_raw)
+    if not records:
+        return out
+
+    def _pick_from_dict(src: Dict[str, Any]):
+        lower_map = {(_safe_str(k).strip().lower()): k for k in src.keys()}
+        for want in _REALTIME_ACTION_CONTEXT_KEYS:
+            want_lower = want.lower()
+            if want in out:
+                continue
+            if want_lower in lower_map:
+                out[want] = src.get(lower_map[want_lower])
+
+    for rec in records:
+        if not isinstance(rec, dict):
+            continue
+        _pick_from_dict(rec)
+        data_dict = _extract_data_as_dict(rec.get("data")) if "data" in rec else None
+        if isinstance(data_dict, dict):
+            _pick_from_dict(data_dict)
+        if len(out) == len(_REALTIME_ACTION_CONTEXT_KEYS):
+            break
+    return out
 
 
 def _build_action_snapshot(rec: Any, print_hint: Any = None) -> Optional[Dict[str, Any]]:
@@ -675,13 +769,14 @@ def _json_text_or_none(v: Any) -> Optional[str]:
 
 def _extract_realtime_query_time(rt_raw: Any) -> Optional[str]:
     """
-    从 RealTimeJson 的 JSON 内容中抽取 query_time（仅 JSON；不做 KV 兜底）。
+    从 RealTimeJson 内容中抽取 query_time。
+    - 支持 JSON / `key:value` 文本
     - 优先取 dict 里的 query_time / query_time_beijing / ts_utc / NowTime（大小写不敏感）
     """
     if rt_raw is None or _safe_str(rt_raw).strip() == "":
         return None
 
-    records, _ = _normalize_to_records(rt_raw)
+    records, _ = _normalize_realtime_records(rt_raw)
     for r in records:
         if not isinstance(r, dict):
             continue
@@ -1158,7 +1253,10 @@ def run_node(node):
                 if raw_val is None or _safe_str(raw_val).strip() == "":
                     return 0, 0, 0
                 table = tables[source_label]
-                records, parse_err = _normalize_to_records(raw_val)
+                if source_label == "RealTime":
+                    records, parse_err = _normalize_realtime_records(raw_val)
+                else:
+                    records, parse_err = _normalize_to_records(raw_val)
                 valid_records = [r for r in records if r is not None]
                 inserted = 0
                 skipped = 0
@@ -1357,17 +1455,7 @@ def run_node(node):
 
                             # Action_Data：仅保留动作快照需要的列
                             if source_label == "Action":
-                                allowed_keys = (
-                                    "Yes_Pct",
-                                    "No_Pct",
-                                    "action_raw_json",
-                                    "YesMode",
-                                    "NoMode",
-                                    "YesQty",
-                                    "NoQty",
-                                    "Print",
-                                    "print",
-                                )
+                                allowed_keys = _ACTION_ALLOWED_KEYS + ("print",)
                                 compact: Dict[str, Any] = {}
                                 for ak in allowed_keys:
                                     if ak in r:
@@ -1499,6 +1587,7 @@ def run_node(node):
             action_parse_err = 0
             metrics_records: List[Any] = []
             metrics_parse_err = 0
+            rt_context_fields = _extract_realtime_context_fields(rt_val)
             action_dbg = {
                 "rt_records_seen": 0,
                 "action_input_records_seen": 0,
@@ -1528,7 +1617,7 @@ def run_node(node):
 
             # 1) RealTimeJson.actions
             if rt_val is not None and _safe_str(rt_val).strip() != "":
-                rt_records, pe = _normalize_to_records(rt_val)
+                rt_records, pe = _normalize_realtime_records(rt_val)
                 action_parse_err += pe
                 metrics_parse_err += pe
                 for rt in [x for x in rt_records if x is not None]:
@@ -1558,6 +1647,9 @@ def run_node(node):
                         print_hint=rt.get("print"),
                     )
                     if snap:
+                        for ctx_k, ctx_v in rt_context_fields.items():
+                            if ctx_k not in snap:
+                                snap[ctx_k] = ctx_v
                         action_records.append(snap)
 
             # 2) Action input
@@ -1587,6 +1679,9 @@ def run_node(node):
                         action_print_hint = act.get("print")
                     snap = _build_action_snapshot(act, print_hint=action_print_hint)
                     if snap:
+                        for ctx_k, ctx_v in rt_context_fields.items():
+                            if ctx_k not in snap:
+                                snap[ctx_k] = ctx_v
                         action_records.append(snap)
 
             # 3) YesMode/NoMode/YesQty/NoQty inputs -> 写入 Action_Data
@@ -1622,6 +1717,9 @@ def run_node(node):
                         merged[kk] = vv
                 if "Print" not in merged and action_print_hint is not None and _safe_str(action_print_hint).strip() != "":
                     merged["Print"] = action_print_hint
+                for ctx_k, ctx_v in rt_context_fields.items():
+                    if ctx_k not in merged:
+                        merged[ctx_k] = ctx_v
                 action_records = [merged] if merged else []
             action_dbg["action_records_after_filter"] = len(action_records)
 

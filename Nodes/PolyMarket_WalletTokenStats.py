@@ -30,7 +30,7 @@ except Exception:
     _CLOB_IMPORTS_OK = False
 
 # **节点输入输出定义**
-OutPutNum = 5
+OutPutNum = 7
 InPutNum = 3
 NodeKind = 'Normal'
 
@@ -75,8 +75,12 @@ Outputs[2]['name'] = 'AvgPrice'
 Outputs[2]['Kind'] = 'String'
 Outputs[3]['name'] = 'OpenOrdersCount'
 Outputs[3]['Kind'] = 'String'
-Outputs[4]['name'] = 'OpenOrdersQty'
+Outputs[4]['name'] = 'OpenBuyOrdersQty'
 Outputs[4]['Kind'] = 'String'
+Outputs[5]['name'] = 'OpenSellOrdersQty'
+Outputs[5]['Kind'] = 'String'
+Outputs[6]['name'] = 'OpenOrdersQty'
+Outputs[6]['Kind'] = 'String'
 
 FunctionIntroduction = (
     '组件功能（简述代码整体功能）\n'
@@ -94,7 +98,9 @@ FunctionIntroduction = (
     '  - name: Quantity\n    type: string\n    description: 该 token 的仓位数量（size 汇总）\n'
     '  - name: AvgPrice\n    type: string\n    description: 购买均价（avgPrice 按 size 加权；无数据则为空）\n'
     '  - name: OpenOrdersCount\n    type: string\n    description: 该 token 的钱包在挂单条数（status=live/partial_fill）。需要 py-clob-client/eth-account 且提供私钥。\n'
-    '  - name: OpenOrdersQty\n    type: string\n    description: 该 token 的钱包在挂单总份数（尽量使用 remaining=size-filled；取不到则用 size 汇总）。\n'
+    '  - name: OpenBuyOrdersQty\n    type: string\n    description: 该 token 的钱包在挂买单未成交总份数（优先 remaining=size-filled）。\n'
+    '  - name: OpenSellOrdersQty\n    type: string\n    description: 该 token 的钱包在挂卖单未成交总份数（优先 remaining=size-filled）。\n'
+    '  - name: OpenOrdersQty\n    type: string\n    description: 该 token 的钱包在挂单总份数（BUY+SELL，兼容旧链路）。\n'
     '```\n'
     '\n可选行为（环境变量开关）\n'
     '- PM_WTS_AUTO_CANCEL_UNFILLABLE=1（默认）：会自动撤掉当前无法立即成交的挂单（BUY: limit < best_ask；SELL: limit > best_bid）\n'
@@ -380,7 +386,11 @@ def _fetch_best_levels_public(host: str, token_id: str, timeout: float = 10.0) -
     return best_bid, best_ask, src
 
 
-def _count_open_orders_for_token(target_token: str, private_key: str = "", expected_addr: str = "") -> Tuple[int, float, float, str, Dict[str, Any]]:
+def _count_open_orders_for_token(
+    target_token: str,
+    private_key: str = "",
+    expected_addr: str = "",
+) -> Tuple[int, float, float, float, float, str, Dict[str, Any]]:
     """
     查询该 token 的在挂单数量（best-effort）。
     说明：
@@ -390,14 +400,14 @@ def _count_open_orders_for_token(target_token: str, private_key: str = "", expec
     - 若依赖缺失或未配置私钥，则返回 (0, reason)。
     """
     if not target_token:
-        return 0, 0.0, 0.0, "empty_token", {}
+        return 0, 0.0, 0.0, 0.0, 0.0, "empty_token", {}
     if not _CLOB_IMPORTS_OK:
-        return 0, 0.0, 0.0, "missing_deps: pip install eth-account py-clob-client", {}
+        return 0, 0.0, 0.0, 0.0, 0.0, "missing_deps: pip install eth-account py-clob-client", {}
 
     pk_in = str(private_key or "").strip()
     pk = pk_in or _env_first(["POLYMARKET_PRIVATE_KEY", "PM_PRIVATE_KEY", "PRIVATE_KEY", "WALLET_PRIVATE_KEY", "PK"])
     if not pk:
-        return 0, 0.0, 0.0, "missing_private_key_env", {}
+        return 0, 0.0, 0.0, 0.0, 0.0, "missing_private_key_env", {}
 
     host = _env_first(["HOST", "POLYMARKET_HOST", "CLOB_HOST"]) or "https://clob.polymarket.com"
     try:
@@ -417,7 +427,7 @@ def _count_open_orders_for_token(target_token: str, private_key: str = "", expec
             wallet_addr = ""
         exp = str(expected_addr or "").strip()
         if exp and wallet_addr and exp.lower() != wallet_addr.lower():
-            return 0, 0.0, 0.0, f"address_mismatch: input={exp} pk_wallet={wallet_addr}", {"wallet": wallet_addr}
+            return 0, 0.0, 0.0, 0.0, 0.0, f"address_mismatch: input={exp} pk_wallet={wallet_addr}", {"wallet": wallet_addr}
 
         # 兼容不同版本 py-clob-client 的构造参数
         try:
@@ -450,12 +460,16 @@ def _count_open_orders_for_token(target_token: str, private_key: str = "", expec
         if hasattr(c, "get_orders"):
             orders = c.get_orders() or []
         if not isinstance(orders, list):
-            return 0, 0.0, 0.0, "get_orders_not_list", {"wallet": wallet_addr, "cancel": cancel_summary}
+            return 0, 0.0, 0.0, 0.0, 0.0, "get_orders_not_list", {"wallet": wallet_addr, "cancel": cancel_summary}
 
         live_status = {"live", "partial_fill", "partial-fill", "partial"}
         n = 0
         qty_sum = 0.0
         rem_sum = 0.0
+        buy_qty_sum = 0.0
+        sell_qty_sum = 0.0
+        buy_rem_sum = 0.0
+        sell_rem_sum = 0.0
         samples: List[Dict[str, Any]] = []
 
         def _to_f(v: Any) -> Optional[float]:
@@ -554,10 +568,22 @@ def _count_open_orders_for_token(target_token: str, private_key: str = "", expec
             if rem_f is None and (size_f is not None):
                 # filled 缺失则按 0 处理
                 rem_f = max(0.0, size_f - (filled_f or 0.0))
+            side_s = str(od.get("side") or "").strip().upper()
             if size_f is not None:
                 qty_sum += float(size_f)
             if rem_f is not None:
                 rem_sum += float(rem_f)
+
+            if side_s == "BUY":
+                if size_f is not None:
+                    buy_qty_sum += float(size_f)
+                if rem_f is not None:
+                    buy_rem_sum += float(rem_f)
+            elif side_s == "SELL":
+                if size_f is not None:
+                    sell_qty_sum += float(size_f)
+                if rem_f is not None:
+                    sell_rem_sum += float(rem_f)
 
             if len(samples) < 3:
                 samples.append({
@@ -578,9 +604,22 @@ def _count_open_orders_for_token(target_token: str, private_key: str = "", expec
                 "skipped_unknown": skipped_unknown,
                 "cancelled_order_ids": cancelled_ids,
             })
-        return int(n), float(qty_sum), float(rem_sum), "ok", {"wallet": wallet_addr, "samples": samples, "cancel": cancel_summary}
+        total_qty = buy_qty_sum + sell_qty_sum
+        total_remain = buy_rem_sum + sell_rem_sum
+        debug_info = {
+            "wallet": wallet_addr,
+            "samples": samples,
+            "cancel": cancel_summary,
+            "buy_open_qty": float(buy_qty_sum),
+            "sell_open_qty": float(sell_qty_sum),
+            "buy_open_remaining": float(buy_rem_sum),
+            "sell_open_remaining": float(sell_rem_sum),
+            "total_open_qty": float(total_qty),
+            "total_open_remaining": float(total_remain),
+        }
+        return int(n), float(total_qty), float(total_remain), float(buy_rem_sum), float(sell_rem_sum), "ok", debug_info
     except Exception as e:
-        return 0, 0.0, 0.0, f"error:{type(e).__name__}", {}
+        return 0, 0.0, 0.0, 0.0, 0.0, f"error:{type(e).__name__}", {}
 
 
 def _aggregate_token_stats(positions: List[Dict[str, Any]], target_token: str) -> Tuple[float, Optional[float], int]:
@@ -635,6 +674,8 @@ def run_node(node) -> List[Dict[str, Any]]:
         Outputs[2]['Context'] = ""
         Outputs[3]['Context'] = "-999"
         Outputs[4]['Context'] = "-999"
+        Outputs[5]['Context'] = "-999"
+        Outputs[6]['Context'] = "-999"
         return Outputs
 
     if not addr_input or not addr_input.startswith("0x") or len(addr_input) < 10:
@@ -644,6 +685,8 @@ def run_node(node) -> List[Dict[str, Any]]:
         Outputs[2]['Context'] = ""
         Outputs[3]['Context'] = "-999"
         Outputs[4]['Context'] = "-999"
+        Outputs[5]['Context'] = "-999"
+        Outputs[6]['Context'] = "-999"
         return Outputs
 
     timeout: Tuple[float, float] = (5.0, 20.0)
@@ -676,7 +719,15 @@ def run_node(node) -> List[Dict[str, Any]]:
 
         qty, avg_price, matched = _aggregate_token_stats(all_positions, token_input)
 
-        open_orders_count, open_orders_qty, open_orders_remain, open_orders_reason, open_orders_debug = _count_open_orders_for_token(token_input, pk_input, addr_input)
+        (
+            open_orders_count,
+            open_orders_qty,
+            open_orders_remain,
+            open_buy_orders_qty,
+            open_sell_orders_qty,
+            open_orders_reason,
+            open_orders_debug,
+        ) = _count_open_orders_for_token(token_input, pk_input, addr_input)
 
         result = {
             "success": True,
@@ -688,6 +739,8 @@ def run_node(node) -> List[Dict[str, Any]]:
             "open_orders_count": open_orders_count,
             "open_orders_qty": open_orders_qty,
             "open_orders_remaining": open_orders_remain,
+            "open_buy_orders_qty": open_buy_orders_qty,
+            "open_sell_orders_qty": open_sell_orders_qty,
             "open_orders_reason": open_orders_reason,
             "open_orders_debug": open_orders_debug,
             "proxies": proxy_ok,
@@ -698,10 +751,10 @@ def run_node(node) -> List[Dict[str, Any]]:
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False)
         Outputs[1]['Context'] = str(qty)
         Outputs[2]['Context'] = ("" if avg_price is None else str(avg_price))
-        Outputs[3]['Context'] = str(int(open_orders_count))
-        # 优先输出 remaining（更符合“挂单量/未成交份数”口径）；若拿不到则退回 qty
-        oo = open_orders_remain if (open_orders_remain is not None and open_orders_remain > 0) else open_orders_qty
-        Outputs[4]['Context'] = str(oo)
+        Outputs[3]['Context'] = str(open_orders_count)
+        Outputs[4]['Context'] = str(open_buy_orders_qty)
+        Outputs[5]['Context'] = str(open_sell_orders_qty)
+        Outputs[6]['Context'] = str(open_orders_qty)
         return Outputs
 
     except Exception as e:
@@ -711,6 +764,8 @@ def run_node(node) -> List[Dict[str, Any]]:
         Outputs[2]['Context'] = ""
         Outputs[3]['Context'] = "-999"
         Outputs[4]['Context'] = "-999"
+        Outputs[5]['Context'] = "-999"
+        Outputs[6]['Context'] = "-999"
         return Outputs
 
 

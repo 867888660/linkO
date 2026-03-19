@@ -166,9 +166,9 @@ def _fetch_market_tags(market_id: str) -> List[Dict[str, Any]]:
 
 ALLOWED_TAGS = {
     "crypto", "elections", "politics", "sports", "companies",
-    "economic", "financial", "geopolitical", "tech", "world",
+    "economic", "finance", "geopolitical", "tech", "world",
     "climate & science", "public health", "culture", "earnings",
-    "regulations", "mentions"
+    "regulations", "mentions",
 }
 
 def _is_allowed_tag(label: str, slug: str) -> bool:
@@ -183,20 +183,26 @@ def _is_allowed_tag(label: str, slug: str) -> bool:
     return False
 
 def _tags_to_subject(tags: List[Dict[str, Any]]) -> str:
-    """将 tags 列表过滤后转成 Subject 字符串（逗号分隔的 label，仅保留允许的 tags）"""
+    """将 tags 列表转成 Subject；优先保留允许的 tags，空时回退到全部 tags。"""
     if not tags:
         return ""
     labels = []
+    fallback_labels = []
     for t in tags:
         if isinstance(t, dict):
             label = str(t.get("label") or t.get("name") or "").strip()
             slug = str(t.get("slug") or "").strip()
+            raw_label = label if label else slug
+            if raw_label:
+                fallback_labels.append(raw_label)
             if _is_allowed_tag(label, slug):
-                labels.append(label if label else slug)
+                labels.append(raw_label)
         elif isinstance(t, str) and t.strip():
-            if t.strip().lower() in ALLOWED_TAGS:
-                labels.append(t.strip())
-    return ",".join(labels)
+            raw_label = t.strip()
+            fallback_labels.append(raw_label)
+            if raw_label.lower() in ALLOWED_TAGS:
+                labels.append(raw_label)
+    return ",".join(labels if labels else fallback_labels)
 
 def _extract_event_id_from_stub(stub: Dict[str, Any]) -> str:
     """从 market stub 中提取 event_id"""
