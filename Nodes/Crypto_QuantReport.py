@@ -75,19 +75,47 @@ def _format_number(n: float, decimals: int = 2) -> str:
 def _signal_to_chinese(signal: str) -> str:
     """信号翻译"""
     translations = {
+        # 旧格式（保持兼容性）
         "strong_bullish": "强烈看涨",
         "bullish": "看涨",
         "neutral": "中性",
         "bearish": "看跌",
         "strong_bearish": "强烈看跌",
+
+        # 新格式
+        "STRONG_BULLISH": "强烈看涨",
+        "BULLISH": "看涨",
+        "NEUTRAL": "中性",
+        "BEARISH": "看跌",
+        "STRONG_BEARISH": "强烈看跌",
+
+        # RSI状态
         "overbought": "超买",
         "oversold": "超卖",
+        "approaching_overbought": "接近超买",
+        "approaching_oversold": "接近超卖",
+
+        # MACD交叉
         "golden_cross": "金叉",
         "death_cross": "死叉",
         "none": "无",
+
+        # 布林带
         "above_upper": "突破上轨",
         "below_lower": "跌破下轨",
         "within_bands": "带内运行",
+
+        # 市场状态
+        "TRENDING_UP": "上升趋势",
+        "TRENDING_DOWN": "下降趋势",
+        "RANGING": "震荡",
+        "VOLATILE": "高波动",
+
+        # EMA排列
+        "perfect_bullish": "完美看多排列",
+        "perfect_bearish": "完美看空排列",
+        "partial_bullish": "部分看多",
+        "partial_bearish": "部分看空",
     }
     return translations.get(signal, signal)
 
@@ -112,21 +140,23 @@ def run_node(node):
     indicators = kline_data.get("indicators", {})
     period_stats = kline_data.get("period_stats", {})
     current = kline_data.get("current", {})
-    
-    current_price = signals.get("current_price") or current.get("price")
-    
+
+    current_price = current.get("price")
+
     # 目标价格分析
     target_price = None
     if question_parsed:
         target_price = question_parsed.get("target_price")
-    
+
     # 生成报告
+    now_utc = datetime.now(timezone.utc)
     lines = []
     lines.append("=" * 50)
     lines.append(f"【{symbol} 量化技术分析报告】")
-    lines.append(f"数据周期: {interval}  |  分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+    lines.append(f"分析时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
+    lines.append(f"数据周期: {interval}  |  K线数量: {kline_data.get('kline_count', 'N/A')}")
     lines.append("=" * 50)
-    
+
     # 1. 价格概览
     lines.append("\n📊 【价格概览】")
     lines.append(f"  当前价格: ${_format_number(current_price, 2)}")
@@ -135,14 +165,14 @@ def run_node(node):
         lines.append(f"  周期最低: ${_format_number(period_stats.get('low'), 2)}")
         lines.append(f"  周期涨跌: {period_stats.get('period_change_pct', 0):.2f}%")
         lines.append(f"  波动幅度: {period_stats.get('range_pct', 0):.2f}%")
-    
+
     # 2. 目标价格分析（如果有）
     if target_price and current_price:
         lines.append("\n🎯 【目标价格分析】")
         lines.append(f"  目标价格: ${_format_number(target_price, 2)}")
         distance_pct = (target_price - current_price) / current_price * 100
         lines.append(f"  距离目标: {distance_pct:+.2f}%")
-        
+
         if distance_pct > 50:
             lines.append(f"  难度评估: ⚠️ 需要上涨超过50%，难度极高")
         elif distance_pct > 20:
@@ -153,10 +183,39 @@ def run_node(node):
             lines.append(f"  难度评估: 目标接近当前价格，可能性较大")
         else:
             lines.append(f"  难度评估: 目标低于当前价格较多，需要下跌趋势")
-    
-    # 3. 技术指标
+
+    # 3. 市场状态（新增）
+    market_regime = signals.get("market_regime", {})
+    if market_regime:
+        lines.append("\n🌍 【市场状态】")
+        regime = market_regime.get("regime", "UNKNOWN")
+        regime_confidence = market_regime.get("confidence", 0)
+        lines.append(f"  状态: {_signal_to_chinese(regime)} (置信度: {regime_confidence:.2f})")
+
+        characteristics = market_regime.get("characteristics", {})
+        if characteristics:
+            trend_strength = characteristics.get("trend_strength", 0)
+            volatility_level = characteristics.get("volatility_level", 0)
+            volume_profile = characteristics.get("volume_profile", "unknown")
+            lines.append(f"  趋势强度(ADX): {trend_strength:.1f}")
+            lines.append(f"  波动率水平: {volatility_level:.2f}x")
+            lines.append(f"  成交量趋势: {volume_profile}")
+
+    # 4. 技术指标
     lines.append("\n📈 【技术指标】")
-    
+
+    # EMA排列（新增）
+    ema9 = indicators.get("ema9")
+    ema21 = indicators.get("ema21")
+    ema55 = indicators.get("ema55")
+    if ema9 is not None and ema21 is not None and ema55 is not None:
+        details = signals.get("details", {})
+        trend_alignment = details.get("trend_alignment", "unknown")
+        lines.append(f"  EMA排列: {_signal_to_chinese(trend_alignment)}")
+        lines.append(f"    EMA9: ${_format_number(ema9, 2)}")
+        lines.append(f"    EMA21: ${_format_number(ema21, 2)}")
+        lines.append(f"    EMA55: ${_format_number(ema55, 2)}")
+
     # MACD
     macd = indicators.get("macd")
     macd_signal = indicators.get("macd_signal")
@@ -164,80 +223,114 @@ def run_node(node):
         macd_diff = macd - macd_signal
         macd_status = "多头" if macd_diff > 0 else "空头"
         lines.append(f"  MACD: {macd:.4f} (信号线: {macd_signal:.4f}) → {macd_status}")
-        if signals.get("macd_cross") and signals.get("macd_cross") != "none":
-            lines.append(f"    ⚡ 近期出现 {_signal_to_chinese(signals.get('macd_cross'))}")
-    
+
+        details = signals.get("details", {})
+        macd_cross = details.get("macd_cross", "none")
+        if macd_cross != "none":
+            lines.append(f"    ⚡ 近期出现 {_signal_to_chinese(macd_cross)}")
+
     # RSI
     rsi = indicators.get("rsi")
     if rsi is not None:
-        rsi_status = _signal_to_chinese(signals.get("rsi_signal", "neutral"))
-        lines.append(f"  RSI(14): {rsi:.2f} → {rsi_status}")
-    
+        details = signals.get("details", {})
+        rsi_zone = details.get("rsi_zone", "neutral")
+        lines.append(f"  RSI(14): {rsi:.2f} → {_signal_to_chinese(rsi_zone)}")
+
+    # ADX（新增）
+    adx = indicators.get("adx")
+    plus_di = indicators.get("plus_di")
+    minus_di = indicators.get("minus_di")
+    if adx is not None:
+        lines.append(f"  ADX: {adx:.2f}")
+        if plus_di is not None and minus_di is not None:
+            di_trend = "多头" if plus_di > minus_di else "空头"
+            lines.append(f"    +DI: {plus_di:.2f} | -DI: {minus_di:.2f} → {di_trend}")
+
     # 均线
     sma20 = indicators.get("sma20")
     sma50 = indicators.get("sma50")
     if sma20 is not None:
-        price_vs_sma20 = signals.get("price_vs_sma20", 0)
-        lines.append(f"  SMA20: ${_format_number(sma20, 2)} (价格偏离: {price_vs_sma20:+.2f}%)")
+        deviation_20 = ((current_price - sma20) / sma20 * 100) if sma20 > 0 else 0
+        lines.append(f"  SMA20: ${_format_number(sma20, 2)} (价格偏离: {deviation_20:+.2f}%)")
     if sma50 is not None:
-        price_vs_sma50 = signals.get("price_vs_sma50", 0)
-        lines.append(f"  SMA50: ${_format_number(sma50, 2)} (价格偏离: {price_vs_sma50:+.2f}%)")
-    
-    # 趋势
-    trend = signals.get("trend")
-    if trend:
-        lines.append(f"  趋势判断: {'📈 多头趋势 (SMA20>SMA50)' if trend == 'bullish' else '📉 空头趋势 (SMA20<SMA50)'}")
-        if signals.get("ma_cross") and signals.get("ma_cross") != "none":
-            lines.append(f"    ⚡ 近期出现均线 {_signal_to_chinese(signals.get('ma_cross'))}")
-    
+        deviation_50 = ((current_price - sma50) / sma50 * 100) if sma50 > 0 else 0
+        lines.append(f"  SMA50: ${_format_number(sma50, 2)} (价格偏离: {deviation_50:+.2f}%)")
+
+    # ATR（新增）
+    atr = indicators.get("atr")
+    if atr is not None:
+        lines.append(f"  ATR(14): {_format_number(atr, 4)} (波动率指标)")
+
     # 布林带
     bb_upper = indicators.get("bb_upper")
     bb_lower = indicators.get("bb_lower")
     if bb_upper is not None and bb_lower is not None:
-        bb_position = signals.get("bb_position", 0.5)
-        bb_status = _signal_to_chinese(signals.get("bb_signal", "within_bands"))
+        details = signals.get("details", {})
+        bb_position = details.get("bb_position", 0.5)
         lines.append(f"  布林带: 上轨${_format_number(bb_upper, 2)} 下轨${_format_number(bb_lower, 2)}")
-        lines.append(f"    位置: {bb_position:.0%} ({bb_status})")
-    
-    # 4. 综合信号
+        lines.append(f"    位置: {bb_position:.0%}")
+
+    # 5. 综合信号（新版）
     lines.append("\n🔮 【综合信号】")
-    bullish_count = signals.get("bullish_signals", 0)
-    bearish_count = signals.get("bearish_signals", 0)
-    overall = signals.get("overall_signal", "neutral")
-    
-    lines.append(f"  多头信号数: {bullish_count} | 空头信号数: {bearish_count}")
+
+    overall = signals.get("overall_signal", "NEUTRAL")
+    signal_score = signals.get("signal_score", 0)
+    confidence = signals.get("confidence", 0)
+    direction = signals.get("direction", "neutral")
+
     lines.append(f"  综合判断: {_signal_to_chinese(overall)}")
-    
-    # 5. 量化概率建议
+    lines.append(f"  信号分数: {signal_score:.1f} / 100 ({direction})")
+    lines.append(f"  置信度: {confidence:.2f}")
+
+    # 显示分类评分
+    scores = signals.get("scores", {})
+    if scores:
+        lines.append(f"\n  分类评分:")
+        lines.append(f"    趋势: {scores.get('trend', 0):.1f}")
+        lines.append(f"    动量: {scores.get('momentum', 0):.1f}")
+        lines.append(f"    成交量: {scores.get('volume', 0):.1f}")
+        lines.append(f"    波动率: {scores.get('volatility', 0):.1f}")
+
+    # 关键信号
+    key_signals = signals.get("key_signals", [])
+    if key_signals:
+        lines.append(f"\n  关键信号:")
+        for sig in key_signals[:5]:
+            lines.append(f"    • {sig}")
+
+    # 警告
+    warnings = signals.get("warnings", [])
+    if warnings:
+        lines.append(f"\n  ⚠️ 警告:")
+        for warn in warnings[:3]:
+            lines.append(f"    • {warn}")
+
+    # 6. 量化概率建议
     lines.append("\n💡 【量化参考建议】")
-    
-    # 基于技术指标的概率调整建议
+
+    # 基于新信号系统的概率调整
     base_prob = 0.50
     adjustments = []
-    
-    # MACD
-    if signals.get("macd_trend") == "bullish":
-        adjustments.append(("MACD多头", +0.05))
-    elif signals.get("macd_trend") == "bearish":
-        adjustments.append(("MACD空头", -0.05))
-    
-    if signals.get("macd_cross") == "golden_cross":
-        adjustments.append(("MACD金叉", +0.08))
-    elif signals.get("macd_cross") == "death_cross":
-        adjustments.append(("MACD死叉", -0.08))
-    
-    # RSI
-    if signals.get("rsi_signal") == "oversold":
-        adjustments.append(("RSI超卖反弹预期", +0.05))
-    elif signals.get("rsi_signal") == "overbought":
-        adjustments.append(("RSI超买回调风险", -0.05))
-    
-    # 趋势
-    if signals.get("trend") == "bullish":
-        adjustments.append(("多头趋势", +0.05))
-    elif signals.get("trend") == "bearish":
-        adjustments.append(("空头趋势", -0.05))
-    
+
+    # 使用信号分数直接影响概率
+    # 信号分数范围 -100 to +100, 映射到概率调整 -0.3 to +0.3
+    score_adjustment = (signal_score / 100) * 0.3
+    adjustments.append((f"信号分数({signal_score:.1f})", score_adjustment))
+
+    # 置信度影响
+    confidence_multiplier = confidence * 1.2  # 置信度越高，调整越大
+    adjustments = [(reason, adj * confidence_multiplier) for reason, adj in adjustments]
+
+    # 市场状态调整
+    if market_regime:
+        regime = market_regime.get("regime", "")
+        if regime == "TRENDING_UP" and direction == "bullish":
+            adjustments.append(("趋势市场配合信号", +0.08))
+        elif regime == "TRENDING_DOWN" and direction == "bearish":
+            adjustments.append(("趋势市场配合信号", +0.08))
+        elif regime == "VOLATILE":
+            adjustments.append(("高波动市场风险", -0.05))
+
     # 目标距离
     if target_price and current_price:
         distance_pct = (target_price - current_price) / current_price * 100
@@ -255,21 +348,21 @@ def run_node(node):
             adjustments.append(("已超过目标(0-10%)", +0.10))
         else:
             adjustments.append(("大幅超过目标(>10%)", +0.15))
-    
+
     # 计算建议概率
     suggested_prob = base_prob
     for reason, adj in adjustments:
         suggested_prob += adj
         sign = "+" if adj > 0 else ""
         lines.append(f"  • {reason}: {sign}{adj*100:.0f}%")
-    
+
     suggested_prob = max(0.05, min(0.95, suggested_prob))
-    
+
     lines.append(f"\n  📊 量化建议概率: {suggested_prob:.2f} ({suggested_prob*100:.0f}%)")
     lines.append(f"  （注：此为技术面参考，需结合基本面和消息面综合判断）")
-    
+
     lines.append("\n" + "=" * 50)
-    
+
     report = "\n".join(lines)
     Outputs[0]['Context'] = report
     return Outputs
