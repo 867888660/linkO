@@ -1,5 +1,6 @@
 """
-加密货币K线分析节点 - 工具函数模块
+K线分析 - 工具函数模块（通用）
+适用于加密货币和股票
 """
 import logging
 from typing import List, Optional

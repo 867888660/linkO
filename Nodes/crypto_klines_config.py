@@ -1,20 +1,26 @@
 """
-加密货币K线分析节点 - 集中配置管理
-精简版：只保留强趋势性指标（EMA/MACD/RSI/ADX/ATR）
-所有策略相关数值集中于此，代码中不出现策略硬编码
+加密货币K线分析节点 - 集中配置管理（v3 特征选择+深度优化版）
+训练集: 32 个加密货币 (BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT 等)
+留出集: 8 个加密货币 (AXSUSDT, CHZUSDT, ENJUSDT, CRVUSDT 等)
+
+优化日期: 2026-04-01
+优化方法: Optuna 贝叶斯搜索 (TPE, 2000 trials, 12-worker 并行)
+特征选择: 相关性去重 + 穷举组合实验 v3（356 个组合粗筛 + Top 15 精筛）
+评估指标: Brier Score + Expected Edge + Calibration Slope 复合适应度
+回测标的: 32 训练 + 8 留出 = 40 个加密货币
+结果: 训练集 0.4191, 留出集 0.3344 (旧基线 0.1932, 提升 +73.1%)
+新特征: 淘汰 ema_alignment/macd_strength/macd_cross，新增 bb_position/macd_hist_delta/roc_20/roc_5
 """
 
 # =========================
 # 技术指标参数
 # =========================
 INDICATOR_CONFIG = {
-    "macd": {"fast": 8, "slow": 17, "signal": 7},
-    "rsi": {"period": 14},
-    "ema": {"periods": [9, 21]},
-    "sma": {"periods": [50]},
-    "bollinger": {"period": 20, "std_dev": 2.0},
-    "adx": {"period": 14},
-    "atr": {"period": 14}
+    "macd": {"fast": 14, "slow": 32, "signal": 11},
+    "rsi": {"period": 20},
+    "ema": {"periods": [5, 35]},
+    "adx": {"period": 25},
+    "atr": {"period": 12},
 }
 
 # =========================
@@ -32,75 +38,61 @@ HTTP_CONFIG = {
 
 # =========================
 # 信号系统配置
+# 7 个特征 × ADX 连续插值线性模型
 # =========================
 SIGNAL_CONFIG = {
-    # RSI自适应阈值
-    "rsi_thresholds": {
-        "high_volatility": {"upper": 80, "lower": 20, "atr_ratio_min": 1.5},
-        "normal":          {"upper": 70, "lower": 30},
-        "low_volatility":  {"upper": 65, "lower": 35, "atr_ratio_max": 0.7}
+    # 使用的特征列表（v3: 淘汰 ema_alignment/macd_strength/macd_cross）
+    "feature_keys": [
+        "adx_normalized", "atr_ratio", "bb_position",
+        "macd_hist_delta", "roc_20", "roc_5", "rsi_normalized",
+    ],
+
+    # 布林带周期
+    "bb_period": 27,
+
+    # 盘整模式权重 (ADX 低)
+    "weights_ranging": {
+        "adx_normalized": -2.8037,
+        "atr_ratio":      -1.2321,
+        "bb_position":     1.3268,
+        "macd_hist_delta":  2.7606,
+        "roc_20":         -2.6568,
+        "roc_5":           2.7874,
+        "rsi_normalized":   1.0606,
+    },
+    # 趋势模式权重 (ADX 高)
+    "weights_trending": {
+        "adx_normalized":  2.1817,
+        "atr_ratio":      -0.8897,
+        "bb_position":    -1.6545,
+        "macd_hist_delta": -2.5849,
+        "roc_20":         -2.1991,
+        "roc_5":           1.0289,
+        "rsi_normalized":  -1.5300,
     },
 
-    # 市场状态识别
+    # 市场状态检测参数（供 _detect_market_regime 使用）
     "regime": {
         "trend_thresholds": {"strong": 25, "weak": 20},
         "volatility_thresholds": {"high_atr": 1.5, "high_bb": 1.5},
         "sma_proximity": 0.03,
         "volume_trend": {"increasing": 1.5, "decreasing": 0.6},
         "confidence": {
-            "strong_trend_base": 0.55,
-            "strong_trend_slope": 0.009,  # 每ADX点增加的置信度
-            "volatile": 0.4,
-            "ranging_base": 0.7,
-            "ranging_slope_divisor": 40,  # (20 - adx) / divisor
-            "weak_trend": 0.5,
-            "sma_converged": 0.6,
-            "fallback": 0.4
+            "strong_trend_base": 0.55, "strong_trend_slope": 0.009,
+            "volatile": 0.4, "ranging_base": 0.7,
+            "ranging_slope_divisor": 40, "weak_trend": 0.5,
+            "sma_converged": 0.6, "fallback": 0.4
         }
     },
+}
 
-    # 两类信号的权重
-    "regime_weights": {
-        "TRENDING_UP":       {"trend": 1.6, "momentum": 0.8},
-        "TRENDING_DOWN":     {"trend": 1.6, "momentum": 0.8},
-        "RANGING":           {"trend": 0.6, "momentum": 1.5},
-        "VOLATILE":          {"trend": 1.0, "momentum": 1.0},
-        "INSUFFICIENT_DATA": {"trend": 1.0, "momentum": 1.0}
-    },
-
-    # 趋势信号分数分配（满分100）
-    "trend_scores": {
-        "ema_alignment": 40,
-        "macd_signal": 40,
-        "adx_confirmation": 20
-    },
-
-    # 动量信号分数分配
-    "momentum_scores": {
-        "rsi_extreme": 100,
-        # 策略参数
-        "rsi_trend_discount": 0.5,  # 趋势市场RSI打折系数
-        "rsi_zone_trigger": 0.4    # RSI偏离中线触发阈值(0~1)
-    },
-
-    # 信号聚合参数
-    "aggregation": {
-        "regime_confidence_weight": 0.4,
-        "direction_threshold": {"trend": 15, "momentum": 10},
-        "confidence_levels": {
-            "strong_agreement": 0.80,
-            "single_trend": 0.60,
-            "single_momentum": 0.45,
-            "contradiction": 0.25,
-            "no_signal": 0.35
-        }
-    },
-
-    # 信号分类阈值
-    "signal_thresholds": {
-        "strong_bullish": {"score": 60, "confidence": 0.6},
-        "bullish": {"score": 25, "confidence": 0.0},
-        "strong_bearish": {"score": -60, "confidence": 0.6},
-        "bearish": {"score": -25, "confidence": 0.0}
-    }
+# =========================
+# 概率模型参数（逻辑回归）
+# =========================
+PROBABILITY_CONFIG = {
+    "logit_bias":     -4.2000,
+    "logit_score":    -1.4388,
+    "logit_conf":      1.0500,
+    "logit_dist":     -5.1205,
+    "logit_interact":  1.0193,
 }

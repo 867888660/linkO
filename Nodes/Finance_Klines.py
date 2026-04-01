@@ -5,14 +5,15 @@ import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import yfinance as yf
 
-from crypto_klines_config import INDICATOR_CONFIG, SIGNAL_CONFIG, HTTP_CONFIG
-from klines_utils import safe_divide, format_float
+from finance_klines_config import INDICATOR_CONFIG, SIGNAL_CONFIG, HTTP_CONFIG
+from klines_utils import format_float, safe_divide
 from klines_signals import generate_signals
 from klines_indicators import _sma, _ema, _macd, _rsi, _bollinger_bands, _adx, _atr, _detect_market_regime
+
+# Finance 使用的短周期 RSI 周期
+_RSI2_PERIOD = SIGNAL_CONFIG.get("rsi2_period", 7)
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -31,13 +32,13 @@ Outputs = [{
     "Context": None,
     "name": "Result",
     "Link": 0,
-    "Description": "K线数据JSON，包含OHLCV和技术指标"
+    "Description": "股票K线数据JSON，包含OHLCV和技术指标"
 } for _ in range(OutPutNum)]
 
 Inputs = [
     {"Num": None, "Kind": "String", "Id": "Input1", "Context": None, "name": "Symbol", "Link": 0, "IsLabel": True, "Isnecessary": True},
     {"Num": None, "Kind": "String", "Id": "Input2", "Context": "1d", "name": "Interval", "Link": 0, "IsLabel": True, "Isnecessary": False},
-    {"Num": 60, "Kind": "Num", "Id": "Input3", "Context": None, "name": "Limit", "Link": 0, "IsLabel": True, "Isnecessary": False},
+    {"Num": None, "Kind": "String", "Id": "Input3", "Context": "3mo", "name": "Period", "Link": 0, "IsLabel": True, "Isnecessary": False},
 ]
 
 NodeKind = "Normal"
@@ -48,67 +49,44 @@ for o in Outputs:
 
 FunctionIntroduction = (
     "组件功能\n"
-    "加密货币K线数据抓取与技术指标分析节点：从 Binance Spot API 获取历史K线，"
+    "股票K线数据抓取与技术指标分析节点：从 Yahoo Finance 获取历史K线，"
     "计算核心技术指标（EMA、MACD、RSI、ADX、ATR），"
     "输出趋势+动量双通道加权信号系统的量化分析JSON。\n\n"
     "参数\n```yaml\n"
     "inputs:\n"
-    "  - name: Symbol\n    type: string\n    required: true\n    description: 交易对，如 BTCUSDT\n"
+    "  - name: Symbol\n    type: string\n    required: true\n    description: 股票代码，如 AAPL\n"
     "  - name: Interval\n    type: string\n    default: 1d\n    description: K线周期\n"
-    "  - name: Limit\n    type: number\n    default: 60\n    description: K线数量（最多1000）\n"
+    "  - name: Period\n    type: string\n    default: 3mo\n    description: 数据时间范围（如 3mo, 6mo, 1y）\n"
     "outputs:\n"
     "  - name: Result\n    type: string\n    description: JSON，含技术指标+加权信号系统\n```"
 )
 
 # =========================
-# HTTP session
+# yfinance data fetching
 # =========================
-def _make_session() -> requests.Session:
-    s = requests.Session()
-    rc = HTTP_CONFIG["retries"]
-    retry = Retry(
-        total=rc["total"], connect=rc["total"], read=rc["total"], status=rc["total"],
-        backoff_factor=rc["backoff_factor"], status_forcelist=rc["status_forcelist"],
-        allowed_methods=frozenset(["GET", "POST"]), raise_on_status=False,
-    )
-    pc = HTTP_CONFIG["pool"]
-    adapter = HTTPAdapter(max_retries=retry, pool_connections=pc["connections"], pool_maxsize=pc["maxsize"])
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
-    return s
-
-_SESS = _make_session()
-
-# =========================
-# Technical indicators imported from klines_indicators.py
-# =========================
-
-# =========================
-# Binance API
-# =========================
-def _binance_base_url() -> str:
-    return os.getenv("BINANCE_SPOT_BASE_URL", "https://api.binance.com").rstrip("/")
-
-def _fetch_klines(symbol: str, interval: str, limit: int, dbg: List[str]) -> List[Dict]:
-    url = _binance_base_url() + "/api/v3/klines"
-    params = {"symbol": symbol.upper(), "interval": interval, "limit": min(limit, 1000)}
-
+def _fetch_stock_klines(symbol: str, interval: str, period: str, dbg: List[str]) -> List[Dict]:
     try:
-        resp = _SESS.get(url, params=params, timeout=float(os.getenv("HTTP_TIMEOUT", str(HTTP_CONFIG["timeout"]))))
-        if resp.status_code != 200:
-            dbg.append(f"Binance klines failed: status={resp.status_code}")
+        ticker = yf.Ticker(symbol)
+        df = ticker.history(period=period, interval=interval)
+        if df.empty:
+            dbg.append(f"yfinance returned empty data for {symbol}")
             return []
-        data = resp.json()
-        if not isinstance(data, list):
-            dbg.append(f"Unexpected response type: {type(data)}")
-            return []
-        return [{
-            "open_time": k[0], "open": float(k[1]), "high": float(k[2]),
-            "low": float(k[3]), "close": float(k[4]), "volume": float(k[5]),
-            "close_time": k[6], "quote_volume": float(k[7]), "trades": k[8],
-        } for k in data]
+        klines = []
+        for idx, row in df.iterrows():
+            klines.append({
+                "open_time": int(idx.timestamp() * 1000),
+                "open": float(row["Open"]),
+                "high": float(row["High"]),
+                "low": float(row["Low"]),
+                "close": float(row["Close"]),
+                "volume": float(row["Volume"]),
+                "close_time": int(idx.timestamp() * 1000),
+                "quote_volume": 0,
+                "trades": 0,
+            })
+        return klines
     except Exception as e:
-        dbg.append(f"Binance klines exception: {repr(e)}")
+        dbg.append(f"yfinance exception: {repr(e)}")
         return []
 
 # =========================
@@ -118,31 +96,29 @@ def run_node(node):
     dbg = []
     t0 = time.time()
 
-    # 解析输入
     symbol_raw = node['Inputs'][0].get('Context')
     if not symbol_raw or not symbol_raw.strip():
-        result = {"ok": False, "error": "Symbol is required (e.g., BTCUSDT)", "debug": ["Missing Symbol"]}
+        result = {"ok": False, "error": "Symbol is required (e.g., AAPL)", "debug": ["Missing Symbol"]}
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
         return Outputs
 
     symbol = symbol_raw.strip().upper()
     interval = (node['Inputs'][1].get('Context') or "1d").strip().lower()
-    limit = node['Inputs'][2].get('Num') or 60
-    try:
-        limit = int(limit)
-    except (ValueError, TypeError):
-        limit = 60
+    period = (node['Inputs'][2].get('Context') or "3mo").strip().lower()
 
-    valid_intervals = ["1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w", "1M"]
+    valid_intervals = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo"]
     if interval not in valid_intervals:
         interval = "1d"
 
-    dbg.append(f"Fetching {symbol} {interval} klines, limit={limit}")
+    valid_periods = ["1d", "5d", "1mo", "3mo", "6mo", "1y", "2y", "5y", "10y", "ytd", "max"]
+    if period not in valid_periods:
+        period = "3mo"
 
-    # 获取K线
-    klines = _fetch_klines(symbol, interval, limit, dbg)
+    dbg.append(f"Fetching {symbol} {interval} klines, period={period}")
+
+    klines = _fetch_stock_klines(symbol, interval, period, dbg)
     if not klines:
-        result = {"ok": False, "error": "Failed to fetch klines", "debug": dbg, "symbol": symbol, "interval": interval}
+        result = {"ok": False, "error": "Failed to fetch stock klines", "debug": dbg, "symbol": symbol, "interval": interval}
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
         return Outputs
 
@@ -159,10 +135,12 @@ def run_node(node):
     adx, plus_di, minus_di = _adx(highs, lows, closes, INDICATOR_CONFIG["adx"]["period"])
     atr = _atr(highs, lows, closes, INDICATOR_CONFIG["atr"]["period"])
 
-    # 布林带和SMA50
+    # 布林带和SMA50仅用于市场状态检测（不再作为可调参数）
     sma50 = _sma(closes, 50)
-    bb_period = SIGNAL_CONFIG.get("bb_period", 20)
-    bb_upper, bb_mid, bb_lower = _bollinger_bands(closes, period=bb_period, std_dev=2.0)
+    bb_upper, bb_mid, bb_lower = _bollinger_bands(closes, period=20, std_dev=2.0)
+
+    # 短周期 RSI（Finance 新特征）
+    rsi2 = _rsi(closes, _RSI2_PERIOD)
 
     # 市场状态
     market_regime = _detect_market_regime(closes, volumes, adx, atr, bb_upper, bb_lower, bb_mid, sma50, signal_config=SIGNAL_CONFIG)
@@ -172,6 +150,7 @@ def run_node(node):
         "bb_upper": bb_upper[-1] if bb_upper[-1] is not None else None,
         "bb_lower": bb_lower[-1] if bb_lower[-1] is not None else None,
         "bb_mid": bb_mid[-1] if bb_mid[-1] is not None else None,
+        "rsi2": rsi2[-1] if rsi2[-1] is not None else None,
         "plus_di": plus_di[-1] if plus_di[-1] is not None else None,
         "minus_di": minus_di[-1] if minus_di[-1] is not None else None,
         "sma50": sma50[-1] if sma50[-1] is not None else None,
