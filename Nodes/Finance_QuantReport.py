@@ -16,7 +16,7 @@ Outputs = [{
     "Context": None,
     "name": "QuantReport",
     "Link": 0,
-    "Description": "量化分析报告，供LLM判定员参考"
+    "Description": "股票量化分析报告，供LLM判定员参考"
 } for _ in range(OutPutNum)]
 
 Inputs = [
@@ -33,15 +33,15 @@ for o in Outputs:
 
 FunctionIntroduction = (
     "组件功能\n"
-    "量化分析报告生成节点：将K线数据和技术指标转换为自然语言报告，"
+    "股票量化分析报告生成节点：将K线数据和技术指标转换为自然语言报告，"
     "供下游LLM判定员作为概率评估的量化依据。\n\n"
     "参数\n```yaml\n"
     "inputs:\n"
-    "  - name: KlineData\n    type: string\n    required: true\n    description: Crypto_Klines节点的输出JSON\n"
-    "  - name: QuestionParsed\n    type: string\n    required: false\n    description: Crypto_ParseQuestion节点的输出JSON\n"
+    "  - name: KlineData\n    type: string\n    required: true\n    description: Finance_Klines节点的输出JSON\n"
+    "  - name: QuestionParsed\n    type: string\n    required: false\n    description: Finance_ParseQuestion节点的输出JSON\n"
     "  - name: question\n    type: string\n    required: false\n    description: 原始问题（备用）\n"
     "outputs:\n"
-    "  - name: QuantReport\n    type: string\n    description: 结构化的量化分析报告文本\n```"
+    "  - name: QuantReport\n    type: string\n    description: 结构化的股票量化分析报告文本\n```"
 )
 
 def _parse_json_safe(text: str) -> Optional[Dict]:
@@ -83,7 +83,7 @@ def run_node(node):
     question_parsed = _parse_json_safe(question_parsed_json)
 
     if not kline_data or not kline_data.get("ok"):
-        Outputs[0]['Context'] = "【量化分析报告】\n\n无法获取K线数据，技术分析不可用。\n"
+        Outputs[0]['Context'] = "【股票量化分析报告】\n\n无法获取K线数据，技术分析不可用。\n"
         return Outputs
 
     symbol = kline_data.get("symbol", "UNKNOWN")
@@ -99,7 +99,7 @@ def run_node(node):
     now_utc = datetime.now(timezone.utc)
     lines = []
     lines.append("=" * 50)
-    lines.append(f"【{symbol} 量化技术分析报告】")
+    lines.append(f"【{symbol} 股票量化技术分析报告】")
     lines.append(f"分析时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     lines.append(f"数据周期: {interval}  |  K线数量: {kline_data.get('kline_count', 'N/A')}")
     lines.append("=" * 50)
@@ -146,7 +146,6 @@ def run_node(node):
     lines.append("\n【技术指标】")
     details = signals.get("details", {})
 
-    # EMA排列
     ema9 = indicators.get("ema9")
     ema21 = indicators.get("ema21")
     if ema9 is not None and ema21 is not None:
@@ -154,7 +153,6 @@ def run_node(node):
         lines.append(f"  EMA排列: {_signal_to_chinese(trend_alignment)}")
         lines.append(f"    EMA9: ${_format_number(ema9, 2)}  EMA21: ${_format_number(ema21, 2)}")
 
-    # MACD
     macd = indicators.get("macd")
     macd_signal = indicators.get("macd_signal")
     if macd is not None and macd_signal is not None:
@@ -164,13 +162,11 @@ def run_node(node):
         if macd_cross != "none":
             lines.append(f"    近期出现 {_signal_to_chinese(macd_cross)}")
 
-    # RSI
     rsi = indicators.get("rsi")
     if rsi is not None:
         rsi_zone = details.get("rsi_zone", "neutral")
         lines.append(f"  RSI(14): {rsi:.2f} -> {_signal_to_chinese(rsi_zone)}")
 
-    # ADX
     adx = indicators.get("adx")
     plus_di = indicators.get("plus_di")
     minus_di = indicators.get("minus_di")
@@ -180,13 +176,11 @@ def run_node(node):
             di_trend = "多头" if plus_di > minus_di else "空头"
             lines.append(f"    +DI: {plus_di:.2f} | -DI: {minus_di:.2f} -> {di_trend}")
 
-    # SMA
     sma50 = indicators.get("sma50")
     if sma50 is not None and current_price:
         deviation = ((current_price - sma50) / sma50 * 100) if sma50 > 0 else 0
         lines.append(f"  SMA50: ${_format_number(sma50, 2)} (偏离: {deviation:+.2f}%)")
 
-    # ATR
     atr_val = indicators.get("atr")
     if atr_val is not None:
         lines.append(f"  ATR(14): {_format_number(atr_val, 4)}")
@@ -220,24 +214,25 @@ def run_node(node):
         for warn in warnings[:3]:
             lines.append(f"    - {warn}")
 
+    # 6. 量化概率建议
+    lines.append("\n【量化参考建议】")
+
     # 6. 量化概率建议（v2: 逻辑回归模型，参数经回测优化）
     lines.append("\n【量化参考建议】")
 
     try:
-        from crypto_klines_config import PROBABILITY_CONFIG as _prob_cfg
+        from finance_klines_config import PROBABILITY_CONFIG as _prob_cfg
     except ImportError:
-        _prob_cfg = {"logit_bias": -2.4091, "logit_score": 0.9690,
-                     "logit_conf": -1.7754, "logit_dist": -4.3409, "logit_interact": 1.1382}
+        _prob_cfg = {"logit_bias": -2.5410, "logit_score": 1.4157,
+                     "logit_conf": 0.3641, "logit_dist": -1.5565, "logit_interact": 1.5834}
 
     import math as _math
 
-    # 计算目标距离（标准化）
     if target_price and current_price and current_price > 0:
         target_dist = (target_price - current_price) / current_price
     else:
         target_dist = 0.0
 
-    # 逻辑回归
     logit = (_prob_cfg["logit_bias"]
              + _prob_cfg["logit_score"] * (signal_score / 100.0)
              + _prob_cfg["logit_conf"] * confidence
@@ -246,7 +241,6 @@ def run_node(node):
     suggested_prob = 1.0 / (1.0 + _math.exp(-max(-20, min(20, logit))))
     suggested_prob = max(0.05, min(0.95, suggested_prob))
 
-    # 展示关键因子
     lines.append(f"  - 信号分数: {signal_score:.1f}")
     lines.append(f"  - 置信度: {confidence:.2f}")
     if target_dist != 0:
