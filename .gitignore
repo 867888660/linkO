@@ -24,32 +24,6 @@ TempFiles/*
 Nodes/jsonlist.json
 Nodes/jsonlist.jsonl
 
-# Test scripts
-test_crypto_flow.py
-test_klines_quick.py
-test_crypto_klines.py
-test_report_output.txt
-test_run.py
-
-# Claude settings
-.claude/
-
-# Logs
-*.log
-*-debug.log
-
-# Backup files
-*.backup
-
-# Temp docs
-CRYPTO_KLINES_OPTIMIZATION.md
-IMPLEMENTATION_SUMMARY.md
-
-# Experiment scripts & data
-scripts/
-optimization_results.json
-out.txt
-
 # Environment
 .env
 .venv/
