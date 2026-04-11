@@ -1,11 +1,18 @@
 import json
 import logging
 import os
+import re
+import sys
 import time
 from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 import yfinance as yf
+
+# Ensure sibling modules can be imported when this file is loaded dynamically.
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
 
 from finance_klines_config import INDICATOR_CONFIG, SIGNAL_CONFIG, HTTP_CONFIG
 from klines_utils import format_float, safe_divide
@@ -89,6 +96,62 @@ def _fetch_stock_klines(symbol: str, interval: str, period: str, dbg: List[str])
         dbg.append(f"yfinance exception: {repr(e)}")
         return []
 
+
+def _normalize_yfinance_symbol(symbol: Optional[str]) -> Optional[str]:
+    if not isinstance(symbol, str):
+        return None
+
+    text = symbol.strip().upper().replace(" ", "")
+    if not text or len(text) > 32:
+        return None
+
+    allowed_chars = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-^=")
+    if any(ch not in allowed_chars for ch in text):
+        return None
+
+    return text
+
+
+def _extract_json_text_field(text: str, field_names: List[str]) -> Optional[str]:
+    for field_name in field_names:
+        pattern = rf'["\']{re.escape(field_name)}["\']\s*:\s*["\']([^"\']+)'
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            value = match.group(1).strip()
+            if value:
+                return value
+    return None
+
+
+def _extract_symbol_from_input(symbol_input) -> Optional[str]:
+    if symbol_input is None:
+        return None
+
+    if isinstance(symbol_input, dict):
+        payload = {str(k).lower(): v for k, v in symbol_input.items()}
+        return _normalize_yfinance_symbol(payload.get("yfinance_symbol") or payload.get("symbol"))
+
+    text = str(symbol_input).strip()
+    if not text:
+        return None
+
+    try:
+        parsed = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        extracted = _extract_json_text_field(text, ["yfinance_symbol", "symbol"])
+        if extracted:
+            return _normalize_yfinance_symbol(extracted)
+        return _normalize_yfinance_symbol(text)
+
+    if isinstance(parsed, dict):
+        payload = {str(k).lower(): v for k, v in parsed.items()}
+        return _normalize_yfinance_symbol(payload.get("yfinance_symbol") or payload.get("symbol"))
+
+    if isinstance(parsed, str) and parsed.strip():
+        return _normalize_yfinance_symbol(parsed)
+
+    return None
+
 # =========================
 # Main
 # =========================
@@ -97,12 +160,12 @@ def run_node(node):
     t0 = time.time()
 
     symbol_raw = node['Inputs'][0].get('Context')
-    if not symbol_raw or not symbol_raw.strip():
-        result = {"ok": False, "error": "Symbol is required (e.g., AAPL)", "debug": ["Missing Symbol"]}
+    symbol = _extract_symbol_from_input(symbol_raw)
+    if not symbol:
+        result = {"ok": False, "error": "Symbol is required (e.g., AAPL)", "debug": ["Missing valid symbol. Prefer yfinance_symbol, fallback to symbol."]}
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
         return Outputs
 
-    symbol = symbol_raw.strip().upper()
     interval = (node['Inputs'][1].get('Context') or "1d").strip().lower()
     period = (node['Inputs'][2].get('Context') or "3mo").strip().lower()
 
