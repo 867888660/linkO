@@ -1,245 +1,211 @@
+"""
+Crypto_ParseQuestion - LLM解析加密货币相关问题
+从自然语言问题中智能提取：加密货币代码、Binance交易对、目标价格、方向、时间条件
+"""
+
 import json
-import logging
 import os
-import re
-import time
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+import httpx
+from pathlib import Path
+from typing import Any
 
-import requests
-
-# =========================
-# Node metadata
-# =========================
-OutPutNum = 1
+# ========== 节点基础信息 ==========
+OutPutNum = 2
 InPutNum = 2
 
-Outputs = [{
-    "Num": None,
-    "Kind": None,
-    "Boolean": False,
-    "Id": "Output1",
-    "Context": None,
-    "name": "Result",
-    "Link": 0,
-    "Description": "从question中提取的加密货币Symbol和目标价格"
-} for _ in range(OutPutNum)]
-
-Inputs = [
-    {"Num": None, "Kind": "String", "Id": "Input1", "Context": None, "name": "question", "Link": 0, "IsLabel": False, "Isnecessary": True},
-    {"Num": None, "Kind": "String", "Id": "Input2", "Context": None, "name": "keywords", "Link": 0, "IsLabel": False, "Isnecessary": False},
+Outputs = [
+    {'Num': None, 'Kind': 'String', 'Boolean': False, 'Id': 'Output1', 'Context': None, 'name': 'parsed_json', 'Link': 0, 'Description': '解析后的JSON'},
+    {'Num': None, 'Kind': 'String', 'Boolean': False, 'Id': 'Output2', 'Context': None, 'name': 'binance_symbol', 'Link': 0, 'Description': 'Binance交易对符号'}
 ]
 
-NodeKind = "Normal"
-Lable = [{"Id": "Label1", "Kind": "None"}]
+Inputs = [
+    {'Num': None, 'Kind': 'String', 'Id': 'Input1', 'Context': None, 'name': 'question', 'Link': 0, 'IsLabel': False, 'Isnecessary': True},
+    {'Num': None, 'Kind': 'Trigger', 'Id': 'Input_Trigger_IsCrypto', 'Context': None, 'name': 'IsCrypto_Trigger', 'Link': 0, 'IsLabel': False, 'Isnecessary': False}
+]
 
-for o in Outputs:
-    o['Kind'] = 'String'
+NodeKind = 'Normal'
+Lable = [{'Id': 'Label1', 'Kind': 'None'}]
 
 FunctionIntroduction = (
-    "组件功能（简述代码整体功能）\n"
-    "这是一个加密货币问题解析节点：从自然语言问题中提取交易对Symbol和目标价格等关键信息，"
-    "为下游的K线获取和技术分析节点提供输入。\n\n"
-    "代码功能摘要（概括核心算法或主要处理步骤）\n"
-    "1. 使用正则表达式从question中识别加密货币名称（BTC/ETH/SOL等）\n"
-    "2. 提取目标价格（如 '突破10万'、'reach $50000' 等）\n"
-    "3. 识别时间条件（如 '2月底'、'by March' 等）\n"
-    "4. 自动转换为Binance交易对格式（如 BTCUSDT）\n\n"
+    "组件功能\n"
+    "加密货币问题解析节点：使用LLM从自然语言问题中智能提取加密货币代码、目标价格、方向、时间条件。\n\n"
     "参数\n```yaml\n"
     "inputs:\n"
-    "  - name: question\n    type: string\n    required: true\n    description: 预测市场的问题描述\n"
-    "  - name: keywords\n    type: string\n    required: false\n    description: 额外关键词（可选）\n"
+    "  - name: question\n    type: string\n    required: true\n    description: 用户问题，如'Bitcoin能涨到15万吗？'\n"
     "outputs:\n"
-    "  - name: Result\n    type: string\n    description: JSON字符串，包含解析出的symbol、target_price、direction等\n```"
+    "  - name: parsed_json\n    type: string\n    description: 解析结果JSON，包含symbol/binance_symbol/target_price/direction等\n"
+    "  - name: binance_symbol\n    type: string\n    description: Binance交易对符号，如BTCUSDT\n```"
 )
 
-# =========================
-# Crypto Symbol Mapping
-# =========================
-CRYPTO_ALIASES = {
-    # 主流币
-    "BITCOIN": "BTC",
-    "BTC": "BTC",
-    "ETHEREUM": "ETH",
-    "ETH": "ETH",
-    "ETHER": "ETH",
-    "SOLANA": "SOL",
-    "SOL": "SOL",
-    "RIPPLE": "XRP",
-    "XRP": "XRP",
-    "DOGECOIN": "DOGE",
-    "DOGE": "DOGE",
-    "CARDANO": "ADA",
-    "ADA": "ADA",
-    "AVALANCHE": "AVAX",
-    "AVAX": "AVAX",
-    "POLKADOT": "DOT",
-    "DOT": "DOT",
-    "CHAINLINK": "LINK",
-    "LINK": "LINK",
-    "POLYGON": "MATIC",
-    "MATIC": "MATIC",
-    "LITECOIN": "LTC",
-    "LTC": "LTC",
-    "BINANCE COIN": "BNB",
-    "BNB": "BNB",
-    "SHIBA": "SHIB",
-    "SHIB": "SHIB",
-    "TRON": "TRX",
-    "TRX": "TRX",
-    "UNISWAP": "UNI",
-    "UNI": "UNI",
-    "COSMOS": "ATOM",
-    "ATOM": "ATOM",
-    "NEAR": "NEAR",
-    "APTOS": "APT",
-    "APT": "APT",
-    "ARBITRUM": "ARB",
-    "ARB": "ARB",
-    "OPTIMISM": "OP",
-    "OP": "OP",
-    "SUI": "SUI",
-    "PEPE": "PEPE",
-    "FLOKI": "FLOKI",
-    "BONK": "BONK",
-    # 稳定币（用于识别交易对）
-    "USDT": "USDT",
-    "USDC": "USDC",
-    "BUSD": "BUSD",
+
+def get_llm_api_key():
+    component_name = Path(__file__).stem
+    try:
+        edit_path = Path(__file__).parent.parent / "Edit" / "Edit.json"
+        if edit_path.exists():
+            with open(edit_path, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+                llm_mappings = config.get('llmMappings', {})
+                key_name = None
+                for k, v in llm_mappings.items():
+                    if k.lower() == component_name.lower():
+                        key_name = v
+                        break
+                if key_name:
+                    api_key = os.getenv(key_name, "")
+                    if api_key:
+                        return api_key
+                    else:
+                        raise ValueError(f"环境变量 '{key_name}' 未设置，组件: {component_name}")
+                else:
+                    raise ValueError(f"组件 '{component_name}' 未在 llmMappings 中配置")
+    except Exception as e:
+        raise ValueError(f"读取密钥配置失败: {e}")
+    raise ValueError(f"无法获取组件 '{component_name}' 的 API 密钥")
+
+
+def _llm_parse_question(question: str) -> dict:
+    api_key = get_llm_api_key()
+    base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+    system_prompt = """你是一个专业的加密货币市场问题解析助手。你需要从用户的问题中提取以下信息：
+
+1. **symbol**: 加密货币代码（如 BTC, ETH, SOL, DOGE 等）
+2. **binance_symbol**: Binance交易对格式（如 BTCUSDT, ETHUSDT, SOLUSDT）
+3. **target_price**: 目标价格（数字，如果问题中没有具体价格则为 null）
+4. **direction**: 价格方向（"above" 表示看涨/突破/达到，"below" 表示看跌/跌破）
+5. **time_condition**: 时间条件描述（如 "by December 31, 2026"，没有则为 null）
+
+**常见加密货币名称/别名到代码的映射**：
+- 比特币/Bitcoin → BTC (BTCUSDT)
+- 以太坊/Ethereum/Ether → ETH (ETHUSDT)
+- 索拉纳/Solana → SOL (SOLUSDT)
+- 瑞波/Ripple/XRP → XRP (XRPUSDT)
+- 狗狗币/Dogecoin → DOGE (DOGEUSDT)
+- 卡达诺/Cardano → ADA (ADAUSDT)
+- 雪崩/Avalanche → AVAX (AVAXUSDT)
+- 波卡/Polkadot → DOT (DOTUSDT)
+- Chainlink → LINK (LINKUSDT)
+- Polygon/MATIC → MATIC (MATICUSDT)
+- 莱特币/Litecoin → LTC (LTCUSDT)
+- 币安币/BNB → BNB (BNBUSDT)
+- SHIBA → SHIB (SHIBUSDT)
+- 波场/TRON → TRX (TRXUSDT)
+- Uniswap → UNI (UNIUSDT)
+- Cosmos/ATOM → ATOM (ATOMUSDT)
+- NEAR → NEAR (NEARUSDT)
+- Aptos → APT (APTUSDT)
+- Arbitrum → ARB (ARBUSDT)
+- Optimism → OP (OPUSDT)
+- SUI → SUI (SUIUSDT)
+- PEPE → PEPE (PEPEUSDT)
+
+**价格方向判断规则**：
+- 看涨关键词：reach, hit, break, above, 突破, 达到, 涨到, 超过 → direction = "above"
+- 看跌关键词：drop, fall, below, under, 跌破, 跌到, 低于 → direction = "below"
+- 默认（无明确方向）→ direction = "above"
+
+**注意**：
+- target_price 应为纯数字，$150k = 150000，$1m = 1000000
+- binance_symbol 统一加 USDT 后缀
+
+**输出格式**（严格JSON）：
+{
+    "symbol": "BTC",
+    "binance_symbol": "BTCUSDT",
+    "target_price": 150000,
+    "direction": "above",
+    "time_condition": "by December 31, 2026"
 }
 
-def _extract_crypto_symbol(text: str) -> Optional[str]:
-    """从文本中提取加密货币符号"""
-    text_upper = text.upper()
-    
-    # 按长度排序，优先匹配长的（如 BITCOIN 优先于 BTC）
-    sorted_aliases = sorted(CRYPTO_ALIASES.keys(), key=len, reverse=True)
-    
-    for alias in sorted_aliases:
-        # 使用单词边界匹配
-        pattern = r'\b' + re.escape(alias) + r'\b'
-        if re.search(pattern, text_upper):
-            return CRYPTO_ALIASES[alias]
-    
-    return None
+如果无法识别加密货币，返回：
+{
+    "symbol": null,
+    "binance_symbol": null,
+    "target_price": null,
+    "direction": null,
+    "time_condition": null,
+    "error": "无法识别加密货币"
+}
 
-def _extract_target_price(text: str) -> Optional[float]:
-    """从文本中提取目标价格"""
-    patterns = [
-        # $120,000 or $120000 (带逗号或不带)
-        r'\$\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?)',
-        r'\$\s*(\d+(?:\.\d+)?)',
-        # 100,000 USD/USDT
-        r'([\d]{1,3}(?:,\d{3})*)\s*(?:USD|USDT|美元)',
-        r'(\d+)\s*(?:USD|USDT|美元)',
-        # reach/hit/break $100000 or 100000
-        r'(?:reach|hit|break|突破|达到|超过|涨到)\s*\$?\s*([\d]{1,3}(?:,\d{3})*(?:\.\d+)?)',
-        r'(?:reach|hit|break|突破|达到|超过|涨到)\s*\$?\s*(\d+(?:\.\d+)?)',
-        # 100000 目标
-        r'([\d,]+(?:\.\d+)?)\s*(?:目标|target)',
-        # 10万/12万 (中文数字)
-        r'(\d+)\s*万',
-        # above/below 100000
-        r'(?:above|below|高于|低于)\s*\$?\s*([\d,]+(?:\.\d+)?)',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            price_str = match.group(1).replace(',', '')
-            try:
-                price = float(price_str)
-                # 处理中文"万"
-                if '万' in text[match.start():match.end() + 5]:
-                    price = price * 10000
-                # 基本校验：加密货币价格通常不会小于0.0001或大于10M
-                if price >= 0.0001 and price <= 10000000:
-                    return price
-            except:
-                continue
-    
-    return None
+只输出JSON，不要任何解释。"""
 
-def _extract_direction(text: str) -> str:
-    """提取预测方向"""
-    text_lower = text.lower()
-    
-    bullish_keywords = ['reach', 'hit', 'break', 'above', 'over', 'exceed', 
-                        '突破', '达到', '超过', '涨到', '上涨', 'bullish', 'pump']
-    bearish_keywords = ['fall', 'drop', 'below', 'under', 'crash',
-                        '跌破', '下跌', '跌到', 'bearish', 'dump']
-    
-    for kw in bullish_keywords:
-        if kw in text_lower:
-            return "bullish"
-    
-    for kw in bearish_keywords:
-        if kw in text_lower:
-            return "bearish"
-    
-    return "unknown"
+    user_prompt = f"请解析以下问题：\n{question}"
 
-def _extract_time_condition(text: str) -> Optional[str]:
-    """提取时间条件"""
-    patterns = [
-        # by March 2026
-        r'by\s+(january|february|march|april|may|june|july|august|september|october|november|december)\s*(\d{4})?',
-        # 2月底/3月
-        r'(\d{1,2})月(?:底|末|前|中)?',
-        # end of Q1
-        r'(?:end of\s+)?Q([1-4])',
-        # 2026年
-        r'(\d{4})年',
-        # before/after date
-        r'(?:before|after)\s+(\w+\s+\d+)',
-    ]
-    
-    for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
-        if match:
-            return match.group(0)
-    
-    return None
+    try:
+        with httpx.Client(timeout=30.0) as client:
+            response = client.post(
+                f"{base_url}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "model": "qwen-turbo",
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt}
+                    ],
+                    "temperature": 0.1
+                }
+            )
+            response.raise_for_status()
+            result = response.json()
+            content = result["choices"][0]["message"]["content"].strip()
 
-def run_node(node):
-    question = node['Inputs'][0].get('Context') or ""
-    keywords = node['Inputs'][1].get('Context') or ""
-    
-    # 合并question和keywords
-    full_text = f"{question} {keywords}".strip()
-    
-    if not full_text:
-        result = {
-            "ok": False,
-            "error": "No question provided",
+            if content.startswith("```"):
+                lines = content.split("\n")
+                content = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
+
+            return json.loads(content)
+
+    except Exception as e:
+        return {
             "symbol": None,
             "binance_symbol": None,
+            "target_price": None,
+            "direction": None,
+            "time_condition": None,
+            "error": f"LLM解析失败: {str(e)}"
         }
-        Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
-        return Outputs
-    
-    # 提取信息
-    crypto_symbol = _extract_crypto_symbol(full_text)
-    target_price = _extract_target_price(full_text)
-    direction = _extract_direction(full_text)
-    time_condition = _extract_time_condition(full_text)
-    
-    # 构造Binance交易对
-    binance_symbol = None
-    if crypto_symbol and crypto_symbol not in ["USDT", "USDC", "BUSD"]:
-        binance_symbol = f"{crypto_symbol}USDT"
-    
-    result = {
-        "ok": True,
-        "original_question": question,
-        "symbol": crypto_symbol,
-        "binance_symbol": binance_symbol,
-        "target_price": target_price,
-        "direction": direction,
-        "time_condition": time_condition,
-        "is_crypto_question": crypto_symbol is not None,
-        "analysis_type": "price_prediction" if target_price else "general",
-    }
-    
-    Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
+
+
+def main(question: Any) -> tuple:
+    if isinstance(question, dict):
+        question = question.get("content", question.get("question", str(question)))
+    question = str(question).strip()
+
+    if not question:
+        error_result = {
+            "symbol": None,
+            "binance_symbol": None,
+            "target_price": None,
+            "direction": None,
+            "time_condition": None,
+            "error": "问题为空"
+        }
+        return json.dumps(error_result, ensure_ascii=False), ""
+
+    parsed = _llm_parse_question(question)
+    binance_symbol = parsed.get("binance_symbol") or ""
+
+    return json.dumps(parsed, ensure_ascii=False, indent=2), binance_symbol
+
+
+def run_node(node):
+    Outputs.clear()
+    for i in range(len(node['Outputs'])):
+        Outputs.append(node['Outputs'][i])
+
+    question = ""
+    if node.get('Inputs') and len(node['Inputs']) > 0:
+        question = node['Inputs'][0].get('Context', '') or ''
+
+    parsed_json, binance_symbol = main(question)
+
+    if len(Outputs) > 0:
+        Outputs[0]['Context'] = parsed_json
+    if len(Outputs) > 1:
+        Outputs[1]['Context'] = binance_symbol
+
     return Outputs
