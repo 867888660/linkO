@@ -38,7 +38,7 @@ Outputs = [{
     "Context": None,
     "name": "Result",
     "Link": 0,
-    "Description": "K线数据JSON，包含OHLCV和技术指标"
+    "Description": "加密货币K线数据JSON，包含OHLCV和技术指标"
 } for _ in range(OutPutNum)]
 
 Inputs = [
@@ -149,6 +149,25 @@ def _extract_json_text_field(text: str, field_names: List[str]) -> Optional[str]
     return None
 
 
+def _parse_llm_output(raw_input) -> Optional[dict]:
+    """Parse the LLM JSON output to extract can_analyze, interval, limit, etc."""
+    if not raw_input:
+        return None
+    text = str(raw_input).strip()
+    if not text:
+        return None
+    # Strip markdown code fences (```json ... ```)
+    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s*```$', '', text)
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return {k.lower(): v for k, v in parsed.items()}
+    except (TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+
 def _extract_symbol_from_input(symbol_input) -> Optional[str]:
     if symbol_input is None:
         return None
@@ -178,6 +197,7 @@ def _extract_symbol_from_input(symbol_input) -> Optional[str]:
 
     return None
 
+
 # =========================
 # Main
 # =========================
@@ -187,14 +207,32 @@ def run_node(node):
 
     # 解析输入
     symbol_raw = node['Inputs'][0].get('Context')
+
+    # Check can_analyze from LLM output
+    llm_parsed = _parse_llm_output(symbol_raw)
+    if llm_parsed and llm_parsed.get("can_analyze") is False:
+        result = {"ok": False, "error": "Question not suitable for technical analysis", "debug": ["LLM determined can_analyze=false"]}
+        Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
+        return Outputs
+
     symbol = _extract_symbol_from_input(symbol_raw)
     if not symbol:
         result = {"ok": False, "error": "Symbol is required (e.g., BTCUSDT)", "debug": ["Missing valid symbol. Prefer binance_symbol, fallback to symbol."]}
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
         return Outputs
 
+    # Use LLM-suggested interval/limit if available, otherwise use node defaults
     interval = (node['Inputs'][1].get('Context') or "1d").strip().lower()
     limit = node['Inputs'][2].get('Num') or 60
+
+    if llm_parsed:
+        suggested_interval = llm_parsed.get("suggested_interval")
+        suggested_limit = llm_parsed.get("suggested_limit")
+        if suggested_interval and isinstance(suggested_interval, str):
+            interval = suggested_interval.strip().lower()
+        if suggested_limit and isinstance(suggested_limit, (int, float)):
+            limit = int(suggested_limit)
+
     try:
         limit = int(limit)
     except (ValueError, TypeError):

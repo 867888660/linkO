@@ -4618,11 +4618,15 @@ class WorkflowEngine:
         def execute_single_node(node):
             """执行单个节点的同步函数"""
             node_id = node["id"]
-            
+
             # 检查执行条件 (参考前端prepareAndExecuteNode)
-            if (not node.get("firstRun", True) or 
+            # 🔥 修复：如果节点被 IfNode 触发（TriggerLink>0）且 RecursionBehavior=Run，
+            # 即使 firstRun=False 也应该允许执行（因为之前可能是被 STOP 跳过的）
+            is_triggered_run = (node.get("TriggerLink", 0) > 0 and node.get("RecursionBehavior", "STOP") == "Run")
+            if (not node.get("firstRun", True) or
                 "trigger" in node.get("NodeKind", "").lower()):
-                return None
+                if not is_triggered_run:
+                    return None
             
             # 额外检查：如果TriggerLink=0或RecursionBehavior!='STOP'才执行(参考前端prepareAndExecuteNode)
             if node.get("TriggerLink", 0) > 0 and node.get("RecursionBehavior", "STOP") == "STOP":
@@ -4842,7 +4846,10 @@ class WorkflowEngine:
                 node["debug"] = self._cap_node_debug(result.get("debug", ""))
                 
                 # 标记节点已执行
-                node["firstRun"] = False
+                # 🔥 修复：被 IfNode STOP 的空输出不标记为已执行，
+                # 以便后续正确触发时（RecursionBehavior=Run）还能再次执行
+                if not exec_result.get("_ifnode_stopped"):
+                    node["firstRun"] = False
                 
                 # 添加历史记录（与前端executeNode中的addHistory调用对齐）
                 workflow_id = workflow_state.get("id") if isinstance(workflow_state, dict) else None
