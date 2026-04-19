@@ -16,7 +16,7 @@ Outputs = [{
     "Context": None,
     "name": "QuantReport",
     "Link": 0,
-    "Description": "量化分析报告，供LLM判定员参考"
+    "Description": "加密货币量化分析报告，供LLM判定员参考"
 } for _ in range(OutPutNum)]
 
 Inputs = [
@@ -33,7 +33,7 @@ for o in Outputs:
 
 FunctionIntroduction = (
     "组件功能\n"
-    "量化分析报告生成节点：将K线数据和技术指标转换为自然语言报告，"
+    "加密货币量化分析报告生成节点：将K线数据和技术指标转换为自然语言报告，"
     "供下游LLM判定员作为概率评估的量化依据。\n\n"
     "参数\n```yaml\n"
     "inputs:\n"
@@ -41,7 +41,7 @@ FunctionIntroduction = (
     "  - name: QuestionParsed\n    type: string\n    required: false\n    description: Crypto_ParseQuestion节点的输出JSON\n"
     "  - name: question\n    type: string\n    required: false\n    description: 原始问题（备用）\n"
     "outputs:\n"
-    "  - name: QuantReport\n    type: string\n    description: 结构化的量化分析报告文本\n```"
+    "  - name: QuantReport\n    type: string\n    description: 结构化的加密货币量化分析报告文本\n```"
 )
 
 def _parse_json_safe(text: str) -> Optional[Dict]:
@@ -83,7 +83,7 @@ def run_node(node):
     question_parsed = _parse_json_safe(question_parsed_json)
 
     if not kline_data or not kline_data.get("ok"):
-        Outputs[0]['Context'] = "【量化分析报告】\n\n无法获取K线数据，技术分析不可用。\n"
+        Outputs[0]['Context'] = ""
         return Outputs
 
     symbol = kline_data.get("symbol", "UNKNOWN")
@@ -99,7 +99,7 @@ def run_node(node):
     now_utc = datetime.now(timezone.utc)
     lines = []
     lines.append("=" * 50)
-    lines.append(f"【{symbol} 量化技术分析报告】")
+    lines.append(f"【{symbol} 加密货币量化技术分析报告】")
     lines.append(f"分析时间: {now_utc.strftime('%Y-%m-%d %H:%M:%S')} UTC")
     lines.append(f"数据周期: {interval}  |  K线数量: {kline_data.get('kline_count', 'N/A')}")
     lines.append("=" * 50)
@@ -152,7 +152,7 @@ def run_node(node):
     if ema9 is not None and ema21 is not None:
         trend_alignment = details.get("trend_alignment", "neutral")
         lines.append(f"  EMA排列: {_signal_to_chinese(trend_alignment)}")
-        lines.append(f"    EMA9: ${_format_number(ema9, 2)}  EMA21: ${_format_number(ema21, 2)}")
+        lines.append(f"    短期EMA: ${_format_number(ema9, 2)}  长期EMA: ${_format_number(ema21, 2)}")
 
     # MACD
     macd = indicators.get("macd")
@@ -168,7 +168,7 @@ def run_node(node):
     rsi = indicators.get("rsi")
     if rsi is not None:
         rsi_zone = details.get("rsi_zone", "neutral")
-        lines.append(f"  RSI(14): {rsi:.2f} -> {_signal_to_chinese(rsi_zone)}")
+        lines.append(f"  RSI: {rsi:.2f} -> {_signal_to_chinese(rsi_zone)}")
 
     # ADX
     adx = indicators.get("adx")
@@ -189,7 +189,7 @@ def run_node(node):
     # ATR
     atr_val = indicators.get("atr")
     if atr_val is not None:
-        lines.append(f"  ATR(14): {_format_number(atr_val, 4)}")
+        lines.append(f"  ATR: {_format_number(atr_val, 4)}")
 
     # 5. 综合信号
     lines.append("\n【综合信号】")
@@ -220,40 +220,15 @@ def run_node(node):
         for warn in warnings[:3]:
             lines.append(f"    - {warn}")
 
-    # 6. 量化概率建议（v2: 逻辑回归模型，参数经回测优化）
-    lines.append("\n【量化参考建议】")
-
-    try:
-        from crypto_klines_config import PROBABILITY_CONFIG as _prob_cfg
-    except ImportError:
-        _prob_cfg = {"logit_bias": -2.4091, "logit_score": 0.9690,
-                     "logit_conf": -1.7754, "logit_dist": -4.3409, "logit_interact": 1.1382}
-
-    import math as _math
-
-    # 计算目标距离（标准化）
-    if target_price and current_price and current_price > 0:
-        target_dist = (target_price - current_price) / current_price
-    else:
-        target_dist = 0.0
-
-    # 逻辑回归
-    logit = (_prob_cfg["logit_bias"]
-             + _prob_cfg["logit_score"] * (signal_score / 100.0)
-             + _prob_cfg["logit_conf"] * confidence
-             + _prob_cfg["logit_dist"] * target_dist
-             + _prob_cfg["logit_interact"] * (signal_score / 100.0) * confidence)
-    suggested_prob = 1.0 / (1.0 + _math.exp(-max(-20, min(20, logit))))
-    suggested_prob = max(0.05, min(0.95, suggested_prob))
-
-    # 展示关键因子
-    lines.append(f"  - 信号分数: {signal_score:.1f}")
-    lines.append(f"  - 置信度: {confidence:.2f}")
-    if target_dist != 0:
-        lines.append(f"  - 目标距离: {target_dist*100:+.1f}%")
-
-    lines.append(f"\n  量化建议概率: {suggested_prob:.2f} ({suggested_prob*100:.0f}%)")
-    lines.append(f"  （注：此为技术面参考，需结合基本面和消息面综合判断）")
+    # 6. 技术面总结（供判定员参考，不输出概率数字）
+    lines.append("\n【技术面总结】")
+    lines.append(f"  方向判断: {_signal_to_chinese(overall)}")
+    lines.append(f"  信号强度: {abs(signal_score):.0f}/100 ({'偏多' if signal_score > 0 else '偏空' if signal_score < 0 else '中性'})")
+    lines.append(f"  分析置信度: {confidence:.2f}")
+    if target_price and current_price:
+        target_dist_pct = (target_price - current_price) / current_price * 100
+        lines.append(f"  目标距离: {target_dist_pct:+.1f}%")
+    lines.append(f"  （注：以上为技术面方向性参考，不代表事件发生概率，需结合基本面和消息面综合判断）")
     lines.append("\n" + "=" * 50)
 
     report = "\n".join(lines)

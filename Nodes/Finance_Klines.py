@@ -152,6 +152,26 @@ def _extract_symbol_from_input(symbol_input) -> Optional[str]:
 
     return None
 
+
+def _parse_llm_output(raw_input) -> Optional[dict]:
+    """Parse the LLM JSON output to extract can_analyze, interval, period, etc."""
+    if not raw_input:
+        return None
+    text = str(raw_input).strip()
+    if not text:
+        return None
+    # Strip markdown code fences (```json ... ```)
+    text = re.sub(r'^```(?:json)?\s*', '', text, flags=re.IGNORECASE)
+    text = re.sub(r'\s*```$', '', text)
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return {k.lower(): v for k, v in parsed.items()}
+    except (TypeError, json.JSONDecodeError):
+        pass
+    return None
+
+
 # =========================
 # Main
 # =========================
@@ -160,14 +180,62 @@ def run_node(node):
     t0 = time.time()
 
     symbol_raw = node['Inputs'][0].get('Context')
+
+    # Check can_analyze from LLM output
+    llm_parsed = _parse_llm_output(symbol_raw)
+    if llm_parsed and llm_parsed.get("can_analyze") is False:
+        result = {"ok": False, "error": "Question not suitable for technical analysis", "debug": ["LLM determined can_analyze=false"]}
+        Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
+        return Outputs
+
     symbol = _extract_symbol_from_input(symbol_raw)
     if not symbol:
         result = {"ok": False, "error": "Symbol is required (e.g., AAPL)", "debug": ["Missing valid symbol. Prefer yfinance_symbol, fallback to symbol."]}
         Outputs[0]['Context'] = json.dumps(result, ensure_ascii=False, indent=2)
         return Outputs
 
+    # Use LLM-suggested interval/limit if available, otherwise use node defaults
     interval = (node['Inputs'][1].get('Context') or "1d").strip().lower()
     period = (node['Inputs'][2].get('Context') or "3mo").strip().lower()
+
+    if llm_parsed:
+        suggested_interval = llm_parsed.get("suggested_interval")
+        suggested_limit = llm_parsed.get("suggested_limit")
+        if suggested_interval and isinstance(suggested_interval, str):
+            interval = suggested_interval.strip().lower()
+        # Convert suggested_limit (number of bars) to yfinance period
+        if suggested_limit and isinstance(suggested_limit, (int, float)):
+            limit_val = int(suggested_limit)
+            if interval in ("1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h"):
+                period = "1mo"
+            elif interval in ("4h",):
+                # yfinance doesn't support 4h; fall back to 1h with more history
+                interval = "1h"
+                period = "1mo"
+            elif interval in ("1d",):
+                if limit_val <= 30:
+                    period = "1mo"
+                elif limit_val <= 90:
+                    period = "3mo"
+                elif limit_val <= 180:
+                    period = "6mo"
+                elif limit_val <= 365:
+                    period = "1y"
+                else:
+                    period = "2y"
+            elif interval in ("1w", "1wk"):
+                interval = "1wk"  # normalize to yfinance format
+                if limit_val <= 52:
+                    period = "1y"
+                else:
+                    period = "2y"
+            elif interval in ("1mo", "1M"):
+                interval = "1mo"
+                period = "5y"
+
+    # Normalize interval: convert universal format to yfinance format
+    interval_map = {"4h": "1h", "1w": "1wk", "1M": "1mo"}
+    interval = interval_map.get(interval, interval)
 
     valid_intervals = ["1m", "2m", "5m", "15m", "30m", "60m", "90m", "1h", "1d", "5d", "1wk", "1mo"]
     if interval not in valid_intervals:
@@ -198,9 +266,10 @@ def run_node(node):
     adx, plus_di, minus_di = _adx(highs, lows, closes, INDICATOR_CONFIG["adx"]["period"])
     atr = _atr(highs, lows, closes, INDICATOR_CONFIG["atr"]["period"])
 
-    # 布林带和SMA50仅用于市场状态检测（不再作为可调参数）
+    # 布林带和SMA50
     sma50 = _sma(closes, 50)
-    bb_upper, bb_mid, bb_lower = _bollinger_bands(closes, period=20, std_dev=2.0)
+    bb_period = SIGNAL_CONFIG.get("bb_period", 20)
+    bb_upper, bb_mid, bb_lower = _bollinger_bands(closes, period=bb_period, std_dev=2.0)
 
     # 短周期 RSI（Finance 新特征）
     rsi2 = _rsi(closes, _RSI2_PERIOD)

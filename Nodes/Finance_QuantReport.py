@@ -83,7 +83,7 @@ def run_node(node):
     question_parsed = _parse_json_safe(question_parsed_json)
 
     if not kline_data or not kline_data.get("ok"):
-        Outputs[0]['Context'] = "【股票量化分析报告】\n\n无法获取K线数据，技术分析不可用。\n"
+        Outputs[0]['Context'] = ""
         return Outputs
 
     symbol = kline_data.get("symbol", "UNKNOWN")
@@ -151,7 +151,7 @@ def run_node(node):
     if ema9 is not None and ema21 is not None:
         trend_alignment = details.get("trend_alignment", "neutral")
         lines.append(f"  EMA排列: {_signal_to_chinese(trend_alignment)}")
-        lines.append(f"    EMA9: ${_format_number(ema9, 2)}  EMA21: ${_format_number(ema21, 2)}")
+        lines.append(f"    短期EMA: ${_format_number(ema9, 2)}  长期EMA: ${_format_number(ema21, 2)}")
 
     macd = indicators.get("macd")
     macd_signal = indicators.get("macd_signal")
@@ -165,7 +165,7 @@ def run_node(node):
     rsi = indicators.get("rsi")
     if rsi is not None:
         rsi_zone = details.get("rsi_zone", "neutral")
-        lines.append(f"  RSI(14): {rsi:.2f} -> {_signal_to_chinese(rsi_zone)}")
+        lines.append(f"  RSI: {rsi:.2f} -> {_signal_to_chinese(rsi_zone)}")
 
     adx = indicators.get("adx")
     plus_di = indicators.get("plus_di")
@@ -183,7 +183,7 @@ def run_node(node):
 
     atr_val = indicators.get("atr")
     if atr_val is not None:
-        lines.append(f"  ATR(14): {_format_number(atr_val, 4)}")
+        lines.append(f"  ATR: {_format_number(atr_val, 4)}")
 
     # 5. 综合信号
     lines.append("\n【综合信号】")
@@ -214,40 +214,15 @@ def run_node(node):
         for warn in warnings[:3]:
             lines.append(f"    - {warn}")
 
-    # 6. 量化概率建议
-    lines.append("\n【量化参考建议】")
-
-    # 6. 量化概率建议（v2: 逻辑回归模型，参数经回测优化）
-    lines.append("\n【量化参考建议】")
-
-    try:
-        from finance_klines_config import PROBABILITY_CONFIG as _prob_cfg
-    except ImportError:
-        _prob_cfg = {"logit_bias": -2.5410, "logit_score": 1.4157,
-                     "logit_conf": 0.3641, "logit_dist": -1.5565, "logit_interact": 1.5834}
-
-    import math as _math
-
-    if target_price and current_price and current_price > 0:
-        target_dist = (target_price - current_price) / current_price
-    else:
-        target_dist = 0.0
-
-    logit = (_prob_cfg["logit_bias"]
-             + _prob_cfg["logit_score"] * (signal_score / 100.0)
-             + _prob_cfg["logit_conf"] * confidence
-             + _prob_cfg["logit_dist"] * target_dist
-             + _prob_cfg["logit_interact"] * (signal_score / 100.0) * confidence)
-    suggested_prob = 1.0 / (1.0 + _math.exp(-max(-20, min(20, logit))))
-    suggested_prob = max(0.05, min(0.95, suggested_prob))
-
-    lines.append(f"  - 信号分数: {signal_score:.1f}")
-    lines.append(f"  - 置信度: {confidence:.2f}")
-    if target_dist != 0:
-        lines.append(f"  - 目标距离: {target_dist*100:+.1f}%")
-
-    lines.append(f"\n  量化建议概率: {suggested_prob:.2f} ({suggested_prob*100:.0f}%)")
-    lines.append(f"  （注：此为技术面参考，需结合基本面和消息面综合判断）")
+    # 6. 技术面总结（供判定员参考，不输出概率数字）
+    lines.append("\n【技术面总结】")
+    lines.append(f"  方向判断: {_signal_to_chinese(overall)}")
+    lines.append(f"  信号强度: {abs(signal_score):.0f}/100 ({'偏多' if signal_score > 0 else '偏空' if signal_score < 0 else '中性'})")
+    lines.append(f"  分析置信度: {confidence:.2f}")
+    if target_price and current_price:
+        target_dist_pct = (target_price - current_price) / current_price * 100
+        lines.append(f"  目标距离: {target_dist_pct:+.1f}%")
+    lines.append(f"  （注：以上为技术面方向性参考，不代表事件发生概率，需结合基本面和消息面综合判断）")
     lines.append("\n" + "=" * 50)
 
     report = "\n".join(lines)

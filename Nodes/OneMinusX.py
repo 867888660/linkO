@@ -22,9 +22,16 @@ for input in Inputs:
 
 # **Function definition
 def run_node(node):
-    x = node['Inputs'][0]['Num']
+    x = node['Inputs'][0].get('Num')
+    if x is None or x == 0:
+        ctx = node['Inputs'][0].get('Context', '')
+        try:
+            x = float(str(ctx).strip())
+        except (ValueError, TypeError):
+            x = 0.5
     result = 1 - x
     Outputs[0]['Num'] = result
+    Outputs[0]['Context'] = str(result)
     return Outputs
 # **Function definition
 
